@@ -37,6 +37,7 @@ function sap_focus_hydrate( $row ) {
 	$row['weight']       = (float) $row['weight'];
 	$row['kpi_baseline'] = (float) $row['kpi_baseline'];
 	$row['kpi_target']   = (float) $row['kpi_target'];
+	$row['ai_meta']      = json_decode( (string) ( $row['ai_meta'] ?? '' ), true ) ?: array();
 	return $row;
 }
 
@@ -81,6 +82,11 @@ function sap_focus_save( $project_id, $data, $id = 0 ) {
 		'weight'       => min( 3, max( 1, (float) ( $data['weight'] ?? 1.5 ) ) ),
 		'status'       => in_array( $data['status'] ?? '', array( 'active', 'paused', 'done' ), true ) ? $data['status'] : 'active',
 	);
+	if ( isset( $data['ai_meta'] ) && is_array( $data['ai_meta'] ) ) {
+		$fields['ai_meta'] = wp_json_encode( $data['ai_meta'], JSON_UNESCAPED_UNICODE );
+	} elseif ( $id ) {
+		unset( $fields['ai_meta'] );
+	}
 	if ( $id ) {
 		$wpdb->update( sap_table( 'focuses' ), $fields, array( 'id' => (int) $id, 'project_id' => (int) $project_id ) );
 		return (int) $id;

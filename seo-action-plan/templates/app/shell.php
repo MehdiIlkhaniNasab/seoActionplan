@@ -33,15 +33,15 @@ $link     = function ( $key, $url, $icon, $label, $badge = 0 ) use ( $nav ) {
 	<meta charset="<?php bloginfo( 'charset' ); ?>">
 	<meta name="viewport" content="width=device-width, initial-scale=1">
 	<meta name="robots" content="noindex, nofollow">
-	<title><?php echo esc_html( $title . ' · اکشن پلن سئو' ); ?></title>
+	<title><?php echo esc_html( $title . ' · سُکان' ); ?></title>
 	<?php sap_app_assets(); ?>
 </head>
 <body class="sap-app view-<?php echo esc_attr( $view ); ?>">
 <div class="sap-shell">
 	<aside class="sap-side" id="sap-side">
 		<a class="sap-brand" href="<?php echo esc_url( sap_url() ); ?>">
-			<span class="sap-brand-mark"><?php echo sap_icon( 'target', 22 ); // phpcs:ignore ?></span>
-			<span><b>اکشن پلن سئو</b><small>SEO Action Plan</small></span>
+			<span class="sap-brand-mark"><?php echo sap_icon( 'helm', 24 ); // phpcs:ignore ?></span>
+			<span><b>سُکان</b><small>هدایت هوشمند سئو · رونق</small></span>
 		</a>
 		<nav class="sap-nav">
 			<?php
@@ -81,7 +81,7 @@ $link     = function ( $key, $url, $icon, $label, $badge = 0 ) use ( $nav ) {
 	<main class="sap-main">
 		<div class="sap-topbar">
 			<button type="button" class="sap-menu-btn" data-sap-open-nav aria-label="منو"><?php echo sap_icon( 'list', 22 ); // phpcs:ignore ?></button>
-			<a class="sap-topbar-brand" href="<?php echo esc_url( sap_url() ); ?>">اکشن پلن سئو</a>
+			<a class="sap-topbar-brand" href="<?php echo esc_url( sap_url() ); ?>">سُکان</a>
 		</div>
 		<div class="sap-wrap">
 			<?php

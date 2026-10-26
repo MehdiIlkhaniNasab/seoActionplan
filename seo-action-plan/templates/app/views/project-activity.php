@@ -94,7 +94,7 @@ $sources = sap_activity_sources();
 									<span class="sap-chip is-focus"><?php echo esc_html( $fnames[ $e['focus_id'] ] ); ?></span>
 								<?php endif; ?>
 								<?php if ( $e['url'] ) : ?>
-									<br><a href="<?php echo esc_url( $e['url'] ); ?>" target="_blank" rel="noopener" dir="ltr" class="sap-small"><?php echo esc_html( sap_short_url( $e['url'], 70 ) ); ?></a>
+									<br><span class="sap-small"><?php echo sap_page_link( $e['url'], sap_page_title( $project['id'], $e['url'] ) ); // phpcs:ignore ?></span>
 								<?php endif; ?>
 							</td>
 							<td class="sap-small">

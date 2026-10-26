@@ -55,7 +55,8 @@ endif;
 	<?php endif; ?>
 	<?php foreach ( (array) ( $con['payload']['pages'] ?? array() ) as $p ) : ?>
 		<div class="sap-insight-card">
-			<h4 dir="auto"><?php echo esc_html( $p['url'] ); ?></h4>
+			<h4><?php echo sap_page_ref( $project, $p['url'] ); // phpcs:ignore ?>
+				<a class="sap-btn is-small is-ai" href="<?php echo esc_url( sap_project_url( $project['id'], 'content', array( 'url' => sap_full_url( $project, $p['url'] ) ) ) ); ?>"><?php echo sap_icon( 'spark', 13 ); // phpcs:ignore ?>بازنویسی محتوا</a></h4>
 			<p><?php echo esc_html( $p['diagnosis'] ); ?></p>
 			<?php if ( $p['title'] || $p['meta'] ) : ?>
 				<div class="sap-ai-output"><div class="sap-ai-output-head"><span>تایتل و متای پیشنهادی</span><?php echo $copy; // phpcs:ignore ?></div><pre><?php echo esc_html( trim( ( $p['title'] ? 'تایتل: ' . $p['title'] : '' ) . "\n" . ( $p['meta'] ? 'متا: ' . $p['meta'] : '' ) ) ); ?></pre></div>
@@ -84,8 +85,8 @@ endif;
 				<tbody>
 					<?php foreach ( $links as $l ) : ?>
 						<tr>
-							<td dir="auto" class="sap-small"><?php echo esc_html( $l['source_url'] ); ?></td>
-							<td dir="auto" class="sap-small"><?php echo esc_html( $l['target_url'] ); ?></td>
+							<td class="sap-small"><?php echo sap_page_ref( $project, $l['source_url'] ); // phpcs:ignore ?></td>
+							<td class="sap-small"><?php echo sap_page_ref( $project, $l['target_url'] ); // phpcs:ignore ?></td>
 							<td><b><?php echo esc_html( $l['anchor'] ); ?></b></td>
 							<td class="sap-small"><?php echo esc_html( $l['placement'] ); ?><br><span class="sap-muted"><?php echo esc_html( $l['reason'] ); ?></span></td>
 						</tr>
@@ -116,7 +117,7 @@ endif;
 			<h4><span class="sap-verdict is-<?php echo esc_attr( $i['verdict'] ); ?>"><?php echo esc_html( $labels[ $i['verdict'] ] ?? $i['verdict'] ); ?></span>«<?php echo esc_html( $i['query'] ); ?>»</h4>
 			<p><?php echo esc_html( $i['reason'] ); ?></p>
 			<?php if ( 'not_cannibal' !== $i['verdict'] && $i['action'] ) : ?>
-				<div class="sap-kv-mini"><span>اقدام</span><b><?php echo esc_html( $i['action'] ); ?></b><?php if ( $i['primary_url'] ) : ?><span>صفحه اصلی</span><span dir="auto"><?php echo esc_html( $i['primary_url'] ); ?></span><?php endif; ?></div>
+				<div class="sap-kv-mini"><span>اقدام</span><b><?php echo esc_html( $i['action'] ); ?></b><?php if ( $i['primary_url'] ) : ?><span>صفحه اصلی</span><span><?php echo sap_page_ref( $project, $i['primary_url'] ); // phpcs:ignore ?></span><?php endif; ?></div>
 			<?php endif; ?>
 		</div>
 	<?php endforeach; ?>
@@ -155,7 +156,7 @@ endif;
 						};
 						?>
 						<tr>
-							<td dir="auto" class="sap-small"><?php echo esc_html( sap_short_url( $c['url'], 60 ) ); ?></td>
+							<td class="sap-small"><?php echo sap_page_link( $c['url'], sap_page_title( $project['id'], $c['url'] ) ); // phpcs:ignore ?></td>
 							<td><?php echo null === $c['score'] ? '—' : esc_html( sap_num( $c['score'] ) ); ?></td>
 							<td><?php echo esc_html( $f ? $fmt( $f['lcp'] ?? null ) : ( $c['lab']['lcp'] ? sap_num( $c['lab']['lcp'] ) . 'ms' : '—' ) ); ?></td>
 							<td><?php echo esc_html( $f ? $fmt( $f['inp'] ?? null ) : '—' ); ?></td>

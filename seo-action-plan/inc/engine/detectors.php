@@ -22,6 +22,8 @@ function sap_detectors() {
 		'striking'       => array( 'کلمات نزدیک صفحه اول (Striking Distance)', array( 'gsc_qp' ) ),
 		'low_ctr'        => array( 'CTR پایین در صفحه اول', array( 'gsc_qp' ) ),
 		'cannibal'       => array( 'کنیبالیزیشن', array( 'gsc_qp' ) ),
+		'kw_conflict'    => array( 'دو صفحه با کلمه اصلی یکسان (نقشه کلمات)', array( 'keymap' ) ),
+		'kw_unowned'     => array( 'کلمه پرنمایش بدون صفحه اختصاصی', array( 'gsc_qp', 'keymap' ) ),
 		'decay'          => array( 'افت ترافیک صفحات', array( 'gsc_pages' ) ),
 		'sitemaps'       => array( 'سلامت سایت‌مپ‌ها', array( 'gsc_sitemaps' ) ),
 		'cal_todo'       => array( 'محتوای منتشرنشده تقویم', array( 'sheet_calendar' ) ),
@@ -105,6 +107,12 @@ function sap_analysis_context( $project ) {
 	$ctx['crawl_by_url'] = array();
 	foreach ( (array) ( $ctx['crawl']['rows'] ?? array() ) as $r ) {
 		$ctx['crawl_by_url'][ sap_norm_url( $r['url'] ) ] = $r;
+	}
+	// Keyword map: what each page is meant to rank for.
+	$ctx['keymap']    = sap_keymap( $pid );
+	$ctx['kw_index']  = sap_keymap_index( $ctx['keymap'] );
+	if ( $ctx['keymap'] ) {
+		$ctx['have']['keymap'] = true;
 	}
 	$ctx['has_focus'] = ! empty( $ctx['focuses'] );
 	return $ctx;
@@ -266,7 +274,7 @@ function sap_detect_striking( $ctx ) {
 		$out[] = array(
 			'key'        => $p,
 			'context'    => 'content_update',
-			'title'      => sprintf( 'بهینه‌سازی %s برای %s کلمه نزدیک صفحه اول', sap_short_url( $url, 50 ), sap_num( count( $rows ) ) ),
+			'title'      => sprintf( 'بهینه‌سازی %s برای %s کلمه نزدیک صفحه اول', '«' . sap_ctx_title( $ctx, $url ) . '»', sap_num( count( $rows ) ) ),
 			'detail'     => 'این کلمات در جایگاه ۴ تا ۲۰ هستند و نمایش واقعی دارند. با افزودن کلمه به H2 و متن، پاسخ کامل‌تر به نیت جستجو، FAQ مرتبط و چند لینک داخلی با انکر همین کلمات، می‌توانند به رتبه‌های ۱ تا ۳ برسند.',
 			'url'        => $url,
 			'keyword'    => $rows[0]['query'],
@@ -315,7 +323,7 @@ function sap_detect_low_ctr( $ctx ) {
 		$out[] = array(
 			'key'        => $p,
 			'context'    => 'onpage',
-			'title'      => sprintf( 'بازنویسی تایتل و متای %s (CTR پایین)', sap_short_url( $url, 50 ) ),
+			'title'      => sprintf( 'بازنویسی تایتل و متای %s (CTR پایین)', '«' . sap_ctx_title( $ctx, $url ) . '»' ),
 			'detail'     => $detail,
 			'url'        => $url,
 			'keyword'    => $rows[0]['query'],
@@ -333,8 +341,15 @@ function sap_detect_low_ctr( $ctx ) {
  */
 function sap_detect_cannibal( $ctx ) {
 	$min = (int) $ctx['settings']['min_impressions'] * 2;
+	$map = $ctx['keymap'];
+	$idx = $ctx['kw_index'];
 	$out = array();
-	foreach ( $ctx['by_query'] as $rows ) {
+	$seen_core = array();
+	$queries   = array_values( $ctx['by_query'] );
+	usort( $queries, function ( $a, $b ) {
+		return array_sum( array_column( $b, 'impressions' ) ) <=> array_sum( array_column( $a, 'impressions' ) );
+	} );
+	foreach ( $queries as $rows ) {
 		if ( count( $rows ) < 2 ) {
 			continue;
 		}
@@ -359,26 +374,251 @@ function sap_detect_cannibal( $ctx ) {
 		if ( $home_top ) {
 			continue;
 		}
-		$comp  = sap_sort( array_values( $comp ), 'impressions' );
+		$q    = $rows[0]['query'];
+		$core = sap_kw_core( $q );
+		$comp = sap_sort( array_values( $comp ), 'impressions' );
+
+		// Role of each competing page for this query, from the keyword map:
+		// its primary keyword (100), a secondary keyword (50), or a long-tail of
+		// its primary keyword (number of words). The most specific page owns it.
+		$qw    = explode( ' ', $core );
+		$spec  = array();
+		$mapped = 0;
 		$items = array();
-		foreach ( $comp as $r ) {
-			$items[] = array( 'url' => $r['page'], 'page' => sap_short_url( $r['page'], 60 ), 'pos' => round( $r['position'], 1 ), 'impr' => $r['impressions'], 'clicks' => $r['clicks'] );
+		$roles = array();
+		foreach ( $comp as $i => $r ) {
+			$k    = sap_norm_url( $r['page'] );
+			$role = 'side';
+			$sc   = 0;
+			if ( isset( $map[ $k ] ) && '' !== $map[ $k ]['core'] ) {
+				++$mapped;
+				$pw = explode( ' ', $map[ $k ]['core'] );
+				if ( $map[ $k ]['core'] === $core ) {
+					$role = 'primary';
+					$sc   = 100;
+				} elseif ( in_array( $k, (array) ( $idx['secondary'][ $core ] ?? array() ), true ) ) {
+					$role = 'secondary';
+					$sc   = 50;
+				} elseif ( ! array_diff( $pw, $qw ) ) {
+					$role = 'variant';
+					$sc   = count( $pw );
+				}
+			}
+			$spec[ $i ]  = $sc;
+			$roles[ $i ] = $role;
+			$items[]     = array(
+				'url'    => $r['page'],
+				'page'   => sap_ctx_title( $ctx, $r['page'] ),
+				'kw'     => isset( $map[ $k ] ) ? $map[ $k ]['primary_kw'] : '—',
+				'role'   => array( 'primary' => 'کلمه اصلی همین صفحه', 'secondary' => 'کلمه فرعی همین صفحه', 'variant' => 'نسخه بلندتر کلمه اصلی صفحه', 'side' => 'نمایش جانبی' )[ $role ],
+				'pos'    => round( $r['position'], 1 ),
+				'impr'   => $r['impressions'],
+				'clicks' => $r['clicks'],
+			);
 		}
-		$q     = $rows[0]['query'];
+		$cols = array( 'page' => 'صفحه', 'kw' => 'کلمه اصلی صفحه', 'role' => 'نقش این کوئری', 'pos' => 'جایگاه', 'impr' => 'نمایش', 'clicks' => 'کلیک' );
+		$prim = array();
+		foreach ( $roles as $i => $role ) {
+			if ( 'primary' === $role ) {
+				$prim[] = $comp[ $i ];
+			}
+		}
+		$owners = array();
+		if ( max( $spec ) > 0 ) {
+			$owners[] = $comp[ array_search( max( $spec ), $spec, true ) ];
+		}
+
+		if ( count( $prim ) >= 2 ) {
+			// Two pages are built for the same keyword: real cannibalization (once per topic).
+			if ( isset( $seen_core[ $core ] ) ) {
+				continue;
+			}
+			$seen_core[ $core ] = true;
+			$out[] = array(
+				'key'        => sap_kw_key( $q ),
+				'context'    => 'content_update',
+				'title'      => sprintf( 'کنیبالیزیشن واقعی: «%s» کلمه اصلی %s صفحه است', $q, sap_num( count( $prim ) ) ),
+				'detail'     => sprintf( 'طبق نقشه کلمات، «%s» کلمه اصلی بیش از یک صفحه است و گوگل نمایش را بینشان تقسیم کرده. یک صفحه را صاحب این کلمه نگه دارید (معمولاً «%s»)، صفحه دیگر را روی کلمه متفاوتی (مثلاً یک زیرموضوع) متمایز کنید یا ادغام و ریدایرکت 301 کنید، و از صفحه دیگر با انکر همین کلمه به صفحه اصلی لینک بدهید.', $q, sap_ctx_title( $ctx, $prim[0]['page'] ) ),
+				'url'        => $prim[0]['page'],
+				'keyword'    => $q,
+				'evidence'   => array( 'cols' => $cols, 'items' => $items, 'kind' => 'same_primary' ),
+				'impact'     => $total * 0.04,
+				'confidence' => 0.85,
+				'effort'     => 2,
+			);
+			continue;
+		}
+		if ( $owners ) {
+			// One page owns the keyword; the others are double / side results.
+			// It is a problem only when another page outranks the owner.
+			$own   = $owners[0];
+			$rival = null;
+			foreach ( $comp as $r ) {
+				if ( sap_norm_url( $r['page'] ) !== sap_norm_url( $own['page'] ) && $r['position'] + 1 < $own['position'] && $r['impressions'] >= 0.3 * $total ) {
+					$rival = $r;
+					break;
+				}
+			}
+			if ( ! $rival || ( $own['position'] <= 10 && $rival['position'] <= 10 ) ) {
+				continue; // Double result (both on page one) or the owner leads: fine.
+			}
+			$out[] = array(
+				'key'        => sap_kw_key( $q ),
+				'context'    => 'content_update',
+				'title'      => sprintf( '«%s»: صفحه «%s» جای صفحه اصلی این کلمه رتبه گرفته', $q, sap_ctx_title( $ctx, $rival['page'] ) ),
+				'detail'     => sprintf( 'صاحب این کلمه در نقشه کلمات «%s» است (جایگاه %s)، ولی گوگل «%s» را بالاتر (جایگاه %s) نشان می‌دهد. سیگنال صفحه اصلی را قوی کنید: کلمه در تایتل و H1، پوشش کامل موضوع، و لینک از صفحه رقیب با انکر «%s» به صفحه اصلی. در صفحه رقیب تمرکز را روی کلمه اصلی خودش نگه دارید.', sap_ctx_title( $ctx, $own['page'] ), sap_num( $own['position'], 1 ), sap_ctx_title( $ctx, $rival['page'] ), sap_num( $rival['position'], 1 ), $q ),
+				'url'        => $own['page'],
+				'keyword'    => $q,
+				'evidence'   => array( 'cols' => $cols, 'items' => $items, 'kind' => 'wrong_page' ),
+				'impact'     => $total * 0.02,
+				'confidence' => 0.7,
+				'effort'     => 1.5,
+			);
+			continue;
+		}
+		if ( $mapped >= count( $comp ) ) {
+			continue; // Every page has a different primary keyword: side impressions, reported by kw_unowned.
+		}
+		// Pages without a known primary keyword: the old heuristic, with low confidence.
 		$out[] = array(
 			'key'        => sap_kw_key( $q ),
 			'context'    => 'content_update',
-			'title'      => sprintf( 'کنیبالیزیشن: «%s» بین %s صفحه تقسیم شده', $q, sap_num( count( $comp ) ) ),
-			'detail'     => 'چند صفحه برای یک کوئری با هم رقابت می‌کنند. یک صفحه را صفحه اصلی این کلمه کنید (معمولاً پربازدیدترین)، محتوای تکراری را ادغام یا متمایز کنید، از صفحه‌های دیگر با انکر همین کلمه به صفحه اصلی لینک بدهید و در صورت ادغام، ریدایرکت 301 بگذارید.',
+			'title'      => sprintf( 'کنیبالیزیشن احتمالی: «%s» بین %s صفحه تقسیم شده', $q, sap_num( count( $comp ) ) ),
+			'detail'     => 'چند صفحه برای این کوئری نمایش می‌گیرند ولی کلمه اصلی همه آن‌ها در نقشه کلمات مشخص نیست. اول در تب «نقشه کلمات» کلمه اصلی این صفحات را تأیید کنید تا مشخص شود کنیبال واقعی است یا نمایش جانبی (دابل ریزالت).',
 			'url'        => $comp[0]['page'],
 			'keyword'    => $q,
-			'evidence'   => array( 'cols' => array( 'page' => 'صفحه', 'pos' => 'جایگاه', 'impr' => 'نمایش', 'clicks' => 'کلیک' ), 'items' => $items ),
-			'impact'     => $total * 0.02,
-			'confidence' => 0.55,
+			'evidence'   => array( 'cols' => $cols, 'items' => $items, 'kind' => 'unknown' ),
+			'impact'     => $total * 0.01,
+			'confidence' => 0.4,
 			'effort'     => 2,
 		);
 	}
 	return array_slice( sap_sort( $out, 'impact' ), 0, 40 );
+}
+
+/**
+ * Keyword map conflicts: two pages assigned the same primary keyword
+ * (even before Search Console shows them competing).
+ */
+function sap_detect_kw_conflict( $ctx ) {
+	$out = array();
+	foreach ( $ctx['kw_index']['primary'] as $core => $keys ) {
+		$keys = array_values( array_filter( $keys, function ( $k ) use ( $ctx ) {
+			return 'home' !== $ctx['keymap'][ $k ]['page_type'];
+		} ) );
+		if ( count( $keys ) < 2 ) {
+			continue;
+		}
+		$items = array();
+		foreach ( $keys as $k ) {
+			$m       = $ctx['keymap'][ $k ];
+			$items[] = array( 'url' => $m['url'], 'page' => sap_ctx_title( $ctx, $m['url'] ), 'kw' => $m['primary_kw'], 'src' => sap_keymap_sources()[ $m['source'] ] ?? $m['source'], 'impr' => (int) ( $ctx['page_impr'][ $k ] ?? 0 ) );
+		}
+		$items = sap_sort( $items, 'impr' );
+		$kw    = $ctx['keymap'][ $keys[0] ]['primary_kw'];
+		$out[] = array(
+			'key'        => $core,
+			'context'    => 'research',
+			'title'      => sprintf( 'نقشه کلمات: «%s» کلمه اصلی %s صفحه است', $kw, sap_num( count( $keys ) ) ),
+			'detail'     => 'هر کلمه باید فقط یک صفحه صاحب داشته باشد. در تب «نقشه کلمات» برای صفحه‌های دیگر کلمه اصلی متمایز (زیرموضوع، مدل، کاربرد) انتخاب کنید؛ اگر محتوای آن‌ها واقعاً یکی است، ادغام و ریدایرکت را در نظر بگیرید.',
+			'url'        => $items[0]['url'],
+			'keyword'    => $kw,
+			'evidence'   => array( 'cols' => array( 'page' => 'صفحه', 'kw' => 'کلمه اصلی', 'src' => 'منبع', 'impr' => 'نمایش' ), 'items' => $items ),
+			'severity'   => 45,
+			'confidence' => 0.75,
+			'effort'     => 0.5,
+		);
+	}
+	return $out;
+}
+
+/**
+ * Queries with real impressions that no page owns: pages show up for them only
+ * as a side effect (e.g. «کفی» on the «کفی ورزشی» category). Not cannibalization
+ * but an opportunity: give the keyword an owner (an existing parent page or a new one).
+ */
+function sap_detect_kw_unowned( $ctx ) {
+	$min = (int) $ctx['settings']['min_impressions'] * 3;
+	$out = array();
+	foreach ( $ctx['by_query'] as $rows ) {
+		$q     = $rows[0]['query'];
+		$total = array_sum( array_column( $rows, 'impressions' ) );
+		if ( $total < $min || sap_is_brand( $q, $ctx['project'] ) ) {
+			continue;
+		}
+		$core = sap_kw_core( $q );
+		if ( isset( $ctx['kw_index']['primary'][ $core ] ) || isset( $ctx['kw_index']['secondary'][ $core ] ) ) {
+			continue;
+		}
+		$best = min( array_column( $rows, 'position' ) );
+		if ( $best <= 3 ) {
+			continue; // Already ranking well without an owner.
+		}
+		$rows  = sap_sort( $rows, 'impressions' );
+		$items = array();
+		foreach ( array_slice( $rows, 0, 4 ) as $r ) {
+			$k       = sap_norm_url( $r['page'] );
+			$items[] = array( 'url' => $r['page'], 'page' => sap_ctx_title( $ctx, $r['page'] ), 'kw' => $ctx['keymap'][ $k ]['primary_kw'] ?? '—', 'pos' => round( $r['position'], 1 ), 'impr' => $r['impressions'] );
+		}
+		$broader = false;
+		$variant = false;
+		$qw      = explode( ' ', $core );
+		foreach ( $rows as $r ) {
+			$m = $ctx['keymap'][ sap_norm_url( $r['page'] ) ] ?? null;
+			if ( ! $m || '' === $m['core'] ) {
+				continue;
+			}
+			$pw = explode( ' ', $m['core'] );
+			if ( ! array_diff( $pw, $qw ) ) {
+				$variant = true; // «کفی ورزشی نایک» is a long-tail of «کفی ورزشی»: that page owns it.
+			} elseif ( ! array_diff( $qw, $pw ) ) {
+				$broader = true; // «کفی» is part of «کفی ورزشی»: a broader, parent keyword.
+			}
+		}
+		if ( $variant || ( ! $broader && count( $rows ) < 2 ) ) {
+			continue;
+		}
+		$out[] = array(
+			'key'        => sap_kw_key( $q ),
+			'context'    => 'research',
+			'title'      => sprintf( '«%s» (%s نمایش) صفحه اختصاصی ندارد', $q, sap_num( $total ) ),
+			'detail'     => ( $broader
+				? sprintf( '«%s» کلمه‌ای کلی‌تر از کلمه اصلی صفحاتی است که برایش نمایش می‌گیرند؛ این کنیبال نیست، نمایش جانبی است. اگر این کلمه برای کسب‌وکار ارزش دارد، صاحب مناسبش را مشخص کنید: دسته والد (اگر هست) یا یک صفحه/مقاله جامع جدید، و آن را در نقشه کلمات ثبت کنید.', $q )
+				: sprintf( 'هیچ صفحه‌ای در نقشه کلمات صاحب «%s» نیست و صفحات فعلی فقط به‌صورت جانبی نمایش می‌گیرند (بهترین جایگاه %s). آن را به‌عنوان کلمه فرعی به مرتبط‌ترین صفحه بدهید و در متن پوشش دهید، یا اگر نیت جداگانه‌ای دارد، صفحه جدید بسازید.', $q, sap_num( $best, 1 ) ) ),
+			'url'        => '',
+			'keyword'    => $q,
+			'evidence'   => array( 'cols' => array( 'page' => 'صفحه نمایش‌گرفته', 'kw' => 'کلمه اصلی آن صفحه', 'pos' => 'جایگاه', 'impr' => 'نمایش' ), 'items' => $items ),
+			'impact'     => $total * sap_ctr_expected( 5 ) * 0.5,
+			'confidence' => 0.55,
+			'effort'     => 2,
+		);
+	}
+	return array_slice( sap_sort( $out, 'impact' ), 0, 25 );
+}
+
+/**
+ * Human title of a page (keyword map → page reader → crawl → short URL).
+ */
+function sap_ctx_title( $ctx, $url ) {
+	$k = sap_norm_url( $url );
+	if ( '' !== ( $ctx['keymap'][ $k ]['title'] ?? '' ) ) {
+		return $ctx['keymap'][ $k ]['title'];
+	}
+	$p = $ctx['pages']['pages'][ $k ] ?? ( $ctx['pages'][ $k ] ?? null );
+	if ( is_array( $p ) && isset( $p['title'] ) ) {
+		$t = sap_clean_title( $p['title'], $p['h1'][0] ?? '' );
+		if ( '' !== $t ) {
+			return $t;
+		}
+	}
+	$c = $ctx['crawl_by_url'][ $k ] ?? null;
+	if ( $c ) {
+		$t = sap_clean_title( $c['title'] ?? '', $c['h1'] ?? '' );
+		if ( '' !== $t ) {
+			return $t;
+		}
+	}
+	return sap_short_url( $url, 60 );
 }
 
 /**
@@ -405,7 +645,7 @@ function sap_detect_decay( $ctx ) {
 		$out[] = array(
 			'key'        => $p,
 			'context'    => 'content_update',
-			'title'      => sprintf( 'افت %s٪ کلیک صفحه %s', sap_num( $chg * 100 ), sap_short_url( $r['page'], 50 ) ),
+			'title'      => sprintf( 'افت %s٪ کلیک صفحه %s', sap_num( $chg * 100 ), '«' . sap_ctx_title( $ctx, $r['page'] ) . '»' ),
 			'detail'     => 'کلیک این صفحه نسبت به ۲۸ روز قبل به‌شدت افت کرده است. نتایج گوگل برای کلمه اصلی را بررسی کنید (رقیب جدید، تغییر نیت جستجو، AI Overview)، تاریخ و اطلاعات محتوا را بروز کنید، ایندکس بودن و تغییرات اخیر تایتل/کنونیکال را چک کنید.',
 			'url'        => $r['page'],
 			'evidence'   => array(
@@ -735,7 +975,7 @@ function sap_detect_cl_wrong_page( $ctx ) {
 		$out[]  = array(
 			'key'        => $t,
 			'context'    => 'internal_links',
-			'title'      => sprintf( 'تقویت صفحه هدف %s: %s کلمه با صفحه دیگری رتبه گرفته', sap_short_url( $target, 45 ), sap_num( count( $items ) ) ),
+			'title'      => sprintf( 'تقویت صفحه هدف %s: %s کلمه با صفحه دیگری رتبه گرفته', '«' . sap_ctx_title( $ctx, $target ) . '»', sap_num( count( $items ) ) ),
 			'detail'     => 'برای این کلمات صفحه هدف در شیت کلاسترینگ تعیین شده، ولی گوگل صفحه دیگری را نشان می‌دهد. از صفحه‌ای که الان رتبه دارد با انکر همان کلمه به صفحه هدف لینک بدهید، کلمه را در تایتل/H1 صفحه هدف تقویت کنید و اگر صفحه دیگر بهتر است، صفحه هدف شیت را اصلاح کنید.',
 			'url'        => $target,
 			'keyword'    => $items[0]['kw'],
@@ -769,7 +1009,7 @@ function sap_detect_cl_target_none( $ctx ) {
 		$out[]  = array(
 			'key'        => $t,
 			'context'    => 'onpage',
-			'title'      => sprintf( 'صفحه هدف %s برای %s کلمه کلاستر هیچ رتبه‌ای ندارد', sap_short_url( $target, 45 ), sap_num( count( $items ) ) ),
+			'title'      => sprintf( 'صفحه هدف %s برای %s کلمه کلاستر هیچ رتبه‌ای ندارد', '«' . sap_ctx_title( $ctx, $target ) . '»', sap_num( count( $items ) ) ),
 			'detail'     => 'این کلمات به این صفحه اختصاص داده شده‌اند ولی صفحه برای هیچ‌کدام نمایش ندارد. ایندکس بودن صفحه، استفاده از کلمات در تایتل، H1، H2 و متن، و لینک داخلی ورودی با این انکرها را بررسی کنید.',
 			'url'        => $target,
 			'keyword'    => $items[0]['kw'],
@@ -1167,7 +1407,7 @@ function sap_detect_crawl_meta( $ctx ) {
 	);
 	$lists  = array_fill_keys( array_keys( $checks ), array() );
 	foreach ( $pages as $r ) {
-		$base = array( 'url' => $r['url'], 'page' => sap_short_url( $r['url'], 60 ), 'title' => mb_substr( $r['title'], 0, 70 ), 'impr' => sap_ctx_impr( $ctx, $r['url'] ) );
+		$base = array( 'url' => $r['url'], 'page' => sap_ctx_title( $ctx, $r['url'] ), 'title' => mb_substr( $r['title'], 0, 70 ), 'impr' => sap_ctx_impr( $ctx, $r['url'] ) );
 		if ( '' === $r['title'] ) {
 			$lists['no_title'][] = $base;
 		} elseif ( count( $titles[ sap_norm_text( $r['title'] ) ] ) > 1 ) {
@@ -1242,7 +1482,7 @@ function sap_detect_kw_title( $ctx ) {
 		$out[] = array(
 			'key'        => $p,
 			'context'    => 'onpage',
-			'title'      => sprintf( 'افزودن کلمه «%s» به تایتل %s', $top['query'], sap_short_url( $r['url'], 45 ) ),
+			'title'      => sprintf( 'افزودن کلمه «%s» به تایتل سئوی صفحه %s', $top['query'], '«' . sap_ctx_title( $ctx, $r['url'] ) . '»' ),
 			'detail'     => sprintf( "پرنمایش‌ترین کوئری این صفحه در تایتل آن نیامده است.\nتایتل فعلی: %s\nکلمات غایب: %s", $r['title'], implode( '، ', $missing ) ),
 			'url'        => $r['url'],
 			'keyword'    => $top['query'],
@@ -1479,7 +1719,7 @@ function sap_detect_cwv( $ctx ) {
 		$out[] = array(
 			'key'      => sap_norm_url( $c['url'] ),
 			'context'  => 'technical',
-			'title'    => sprintf( 'بهبود Core Web Vitals موبایل %s (%s)', sap_short_url( $c['url'], 45 ), implode( '، ', array_column( $bad, 'm' ) ) ),
+			'title'    => sprintf( 'بهبود Core Web Vitals موبایل %s (%s)', '«' . sap_ctx_title( $ctx, $c['url'] ) . '»', implode( '، ', array_column( $bad, 'm' ) ) ),
 			'detail'   => 'بر اساس PageSpeed Insights (داده واقعی کاربران کروم در صورت وجود). برای LCP: بهینه‌سازی و preload تصویر اصلی و کش صفحه؛ برای INP: کاهش جاوااسکریپت سنگین افزونه‌ها؛ برای CLS: ابعاد مشخص برای تصاویر و بنرها.',
 			'url'      => $c['url'],
 			'evidence' => array( 'cols' => array( 'm' => 'شاخص', 'v' => 'مقدار (p75)', 'cat' => 'وضعیت' ), 'items' => $bad ),

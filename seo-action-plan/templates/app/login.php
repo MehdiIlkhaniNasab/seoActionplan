@@ -16,13 +16,14 @@ $to  = remove_query_arg( 'sap_login', $redirect );
 	<meta charset="<?php bloginfo( 'charset' ); ?>">
 	<meta name="viewport" content="width=device-width, initial-scale=1">
 	<meta name="robots" content="noindex, nofollow">
-	<title>ورود · اکشن پلن سئو</title>
+	<title>ورود · سُکان</title>
 	<?php sap_app_assets(); ?>
 </head>
 <body class="sap-app sap-auth">
 	<form class="sap-login" method="post" action="<?php echo esc_url( site_url( 'wp-login.php', 'login_post' ) ); ?>">
-		<span class="sap-brand-mark is-lg"><?php echo sap_icon( 'target', 28 ); // phpcs:ignore ?></span>
-		<h1>اکشن پلن سئو</h1>
+		<span class="sap-brand-mark is-lg"><?php echo sap_icon( 'helm', 30 ); // phpcs:ignore ?></span>
+		<h1>سُکان</h1>
+		<p class="sap-login-tag">هدایت هوشمند رشد ارگانیک — ساخته‌شده برای آژانس رونق</p>
 		<p class="sap-muted">برای ورود به داشبورد، با حساب وردپرس خود وارد شوید.</p>
 		<?php if ( 'failed' === $err ) : ?>
 			<div class="sap-flash is-err">نام کاربری یا رمز عبور اشتباه است.</div>

@@ -46,6 +46,50 @@ $fields = function ( $f ) use ( $clusters ) {
 	<?php
 };
 ?>
+<?php
+$ai_focus = sap_dataset( $pid, 'ai_focus' );
+$metrics  = sap_kpi_metrics();
+?>
+<section class="sap-panel sap-focus-ai">
+	<div class="sap-panel-head">
+		<h2><?php echo sap_icon( 'spark' ); // phpcs:ignore ?>هدف‌گذاری هوشمند</h2>
+		<button type="button" class="sap-btn is-primary is-small" data-sap-step="ai_focus" data-force="1" data-project="<?php echo esc_attr( $pid ); ?>" <?php disabled( ! sap_ai_connected() ); ?>><?php echo sap_icon( 'spark', 14 ); // phpcs:ignore ?><?php echo $ai_focus ? 'تحلیل دوباره' : 'پیشنهاد Focus و هدف'; ?></button>
+	</div>
+	<p class="sap-muted">هوش مصنوعی بخش‌های سایت و Focusهای فعلی را با داده واقعی (کلیک، نمایش، کلمات نزدیک صفحه اول، حجم جستجو، ایرادها) می‌سنجد و برای هر کدام نام فارسی، هدف عددی، بهترین شاخص شروع، مهلت و وزن اولویت را با دلیل پیشنهاد می‌دهد. شما فقط تأیید می‌کنید.</p>
+	<?php if ( $ai_focus ) : ?>
+		<div class="sap-focus-recs">
+			<?php foreach ( (array) ( $ai_focus['payload']['focuses'] ?? array() ) as $r ) : ?>
+				<article class="sap-focus-rec">
+					<header>
+						<h3><?php echo esc_html( $r['name'] ); ?></h3>
+						<span class="sap-chip <?php echo $r['existing'] ? '' : 'is-ai'; ?>"><?php echo $r['existing'] ? 'Focus فعلی' : 'پیشنهاد جدید'; ?></span>
+						<span class="sap-weight" title="وزن اولویت"><?php echo esc_html( sap_num( $r['weight'], 1 ) ); ?>×</span>
+					</header>
+					<p class="sap-focus-goal"><?php echo esc_html( $r['goal'] ); ?></p>
+					<div class="sap-scores">
+						<?php foreach ( array( 'potential' => 'ظرفیت رشد', 'value' => 'ارزش کسب‌وکار', 'urgency' => 'فوریت' ) as $k => $label ) : ?>
+							<div><span><?php echo esc_html( $label ); ?></span><i style="--v:<?php echo esc_attr( min( 10, max( 0, (int) $r[ $k ] ) ) * 10 ); ?>%"></i><b><?php echo esc_html( sap_num( $r[ $k ] ) ); ?></b></div>
+						<?php endforeach; ?>
+					</div>
+					<dl class="sap-kv-mini">
+						<dt>شاخص شروع</dt><dd><b><?php echo esc_html( $metrics[ $r['metric'] ] ?? $r['metric'] ); ?></b> — <?php echo esc_html( $r['metric_reason'] ); ?></dd>
+						<dt>از ← تا</dt><dd><?php echo esc_html( ( null !== $r['current'] ? sap_num( $r['current'] ) : '—' ) . ' ← ' . sap_num( $r['target'] ) . ' در ' . sap_num( $r['months'] ) . ' ماه' ); ?></dd>
+						<dt>چرا</dt><dd><?php echo esc_html( $r['rationale'] ); ?></dd>
+					</dl>
+					<?php if ( $r['first_steps'] ) : ?>
+						<ol class="sap-small"><?php foreach ( $r['first_steps'] as $st ) : ?><li><?php echo esc_html( $st ); ?></li><?php endforeach; ?></ol>
+					<?php endif; ?>
+					<form method="post" action="<?php echo $post; // phpcs:ignore ?>">
+						<?php sap_form_fields( 'sap_ai_focus_apply', array( 'project_id' => $pid, 'ref' => $r['ref'] ) ); ?>
+						<button class="sap-btn is-small is-primary" type="submit"><?php echo sap_icon( 'check', 14 ); // phpcs:ignore ?><?php echo $r['existing'] ? 'اعمال هدف و وزن' : 'ساخت این Focus'; ?></button>
+					</form>
+				</article>
+			<?php endforeach; ?>
+		</div>
+		<small class="sap-muted"><?php echo esc_html( sap_jdate( $ai_focus['fetched_at'] ) . ( isset( $ai_focus['meta']['cost'] ) ? ' · ' . sap_num( $ai_focus['meta']['cost'], 3 ) . ' دلار' : '' ) ); ?></small>
+	<?php endif; ?>
+</section>
+
 <section class="sap-panel">
 	<h2><?php echo sap_icon( 'plus' ); // phpcs:ignore ?>Focus جدید</h2>
 	<p class="sap-muted">Focus بخشی از سایت است که الان روی آن کار می‌کنید (مثلاً یک دسته محصول). یافته‌ها و اکشن پلن در راستای آن اولویت می‌گیرند؛ ایرادهای حیاتی کل سایت هم دیده می‌شوند.</p>
@@ -64,6 +108,9 @@ foreach ( $focuses as $f ) :
 				<span class="sap-muted"><?php echo esc_html( sprintf( '%s: %s', sap_kpi_metrics()[ $f['kpi_metric'] ], sap_num( $k[ $f['kpi_metric'] ] ) ) ); ?></span>
 			<?php endif; ?>
 		</summary>
+		<?php if ( ! empty( $f['ai_meta']['rationale'] ) ) : ?>
+			<div class="sap-ai-note"><?php echo sap_icon( 'spark', 14 ); // phpcs:ignore ?><div><b>دلیل هدف و اولویت:</b> <?php echo esc_html( $f['ai_meta']['rationale'] ); ?><?php if ( ! empty( $f['ai_meta']['metric_reason'] ) ) : ?><br><b>شاخص:</b> <?php echo esc_html( $f['ai_meta']['metric_reason'] ); ?><?php endif; ?></div></div>
+		<?php endif; ?>
 		<form method="post" action="<?php echo $post; // phpcs:ignore ?>" class="sap-form">
 			<?php sap_form_fields( 'sap_save_focus', array( 'project_id' => $pid, 'focus_id' => $f['id'] ) ); ?>
 			<?php $fields( $f ); ?>

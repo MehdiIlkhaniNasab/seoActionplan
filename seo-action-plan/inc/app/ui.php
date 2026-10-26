@@ -30,6 +30,8 @@ function sap_project_tabs() {
 		'overview' => array( 'نمای کلی', 'grid' ),
 		'insights' => array( 'تحلیل هوشمند', 'spark' ),
 		'findings' => array( 'ایرادها و فرصت‌ها', 'inbox' ),
+		'keywords' => array( 'نقشه کلمات', 'research' ),
+		'content'  => array( 'بازنویسی محتوا', 'log' ),
 		'plan'     => array( 'اکشن پلن ماهانه', 'list' ),
 		'activity' => array( 'لاگ اقدامات', 'log' ),
 		'focuses'  => array( 'Focus و اهداف', 'target' ),
@@ -67,7 +69,7 @@ function sap_context_chip( $ctx ) {
 /**
  * Render a finding's evidence table.
  */
-function sap_evidence_table( $evidence ) {
+function sap_evidence_table( $evidence, $project_id = 0 ) {
 	$cols  = (array) ( $evidence['cols'] ?? array() );
 	$items = (array) ( $evidence['items'] ?? array() );
 	if ( ! $cols || ! $items ) {
@@ -83,7 +85,9 @@ function sap_evidence_table( $evidence ) {
 		foreach ( array_keys( $cols ) as $k ) {
 			$v = $it[ $k ] ?? '';
 			if ( 'page' === $k && ! empty( $it['url'] ) ) {
-				printf( '<td><a href="%s" target="_blank" rel="noopener">%s</a></td>', esc_url( $it['url'] ), esc_html( $v ) );
+				// Older findings stored a short URL here: show the page title instead.
+				$label = $project_id && ( '' === (string) $v || preg_match( '#^(/|https?:|[\w.-]+\.[a-z]{2,}/)#i', (string) $v ) ) ? sap_page_title( $project_id, $it['url'] ) : (string) $v;
+				echo '<td>' . sap_page_link( $it['url'], $label ) . '</td>'; // phpcs:ignore
 			} else {
 				echo '<td>' . esc_html( is_numeric( $v ) ? sap_num( $v, floor( (float) $v ) != $v ? 1 : 0 ) : (string) $v ) . '</td>';
 			}
@@ -198,4 +202,81 @@ function sap_health_areas() {
 		'authority' => 'اعتبار و لینک',
 		'focus'     => 'Focus',
 	);
+}
+
+/**
+ * Human title of a page: keyword map → page reader → crawl → short URL.
+ */
+function sap_page_title( $project_id, $url ) {
+	static $idx = array();
+	if ( '' === (string) $url ) {
+		return '';
+	}
+	if ( ! isset( $idx[ $project_id ] ) ) {
+		$t = array();
+		foreach ( (array) ( sap_dataset_payload( $project_id, 'crawl' )['rows'] ?? array() ) as $r ) {
+			$v = sap_clean_title( $r['title'] ?? '', $r['h1'] ?? '' );
+			if ( '' !== $v ) {
+				$t[ sap_norm_url( $r['url'] ) ] = $v;
+			}
+		}
+		foreach ( (array) ( sap_dataset_payload( $project_id, 'pages' )['pages'] ?? array() ) as $k => $p ) {
+			$v = sap_clean_title( $p['title'] ?? '', $p['h1'][0] ?? '' );
+			if ( '' !== $v ) {
+				$t[ $k ] = $v;
+			}
+		}
+		foreach ( sap_keymap( $project_id ) as $k => $m ) {
+			if ( '' !== $m['title'] ) {
+				$t[ $k ] = $m['title'];
+			}
+		}
+		$idx[ $project_id ] = $t;
+	}
+	$k = sap_norm_url( $url );
+	if ( isset( $idx[ $project_id ][ $k ] ) ) {
+		return $idx[ $project_id ][ $k ];
+	}
+	return '' === trim( (string) wp_parse_url( $url, PHP_URL_PATH ), '/' ) ? 'صفحه اصلی' : sap_short_url( $url, 60 );
+}
+
+/**
+ * Page title with a "view page" button (opens in a new tab).
+ *
+ * @param string $url   Page URL.
+ * @param string $label Title (use sap_page_title()).
+ */
+function sap_page_link( $url, $label ) {
+	if ( '' === (string) $url ) {
+		return esc_html( $label );
+	}
+	return sprintf(
+		'<span class="sap-pagelink"><span class="sap-pagelink-t" title="%1$s">%2$s</span><a class="sap-view" href="%1$s" target="_blank" rel="noopener" title="مشاهده صفحه" aria-label="مشاهده صفحه">%3$s</a></span>',
+		esc_url( $url ),
+		esc_html( $label ),
+		sap_icon( 'link', 14 )
+	);
+}
+
+/**
+ * Absolute URL of a page the AI wrote as a path ("/product-category/x/").
+ */
+function sap_full_url( $project, $url ) {
+	$url = trim( (string) $url );
+	if ( '' === $url || preg_match( '#^https?://#i', $url ) ) {
+		return $url;
+	}
+	if ( 'صفحه اصلی' === $url ) {
+		$url = '/';
+	}
+	$base = $project['site_url'] ? untrailingslashit( $project['site_url'] ) : 'https://' . sap_project_domain( $project );
+	return '/' === $url[0] ? preg_replace( '#^(https?://[^/]+).*$#i', '$1', $base ) . $url : $url;
+}
+
+/**
+ * Page link (title + view button) for a URL or path written by the AI.
+ */
+function sap_page_ref( $project, $url ) {
+	$full = sap_full_url( $project, $url );
+	return preg_match( '#^https?://#i', $full ) ? sap_page_link( $full, sap_page_title( $project['id'], $full ) ) : esc_html( $url );
 }

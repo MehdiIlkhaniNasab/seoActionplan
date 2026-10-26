@@ -55,7 +55,11 @@ $post    = esc_url( admin_url( 'admin-post.php' ) );
 			<div class="sap-notes"><?php echo nl2br( esc_html( $t['notes'] ) ); ?></div>
 		<?php endif; ?>
 		<?php if ( $t['url'] ) : ?>
-			<p><a href="<?php echo esc_url( $t['url'] ); ?>" target="_blank" rel="noopener" dir="ltr"><?php echo esc_html( rawurldecode( $t['url'] ) ); ?></a></p>
+			<p class="sap-task-page">صفحه: <?php echo sap_page_link( $t['url'], sap_page_title( $t['project_id'], $t['url'] ) ); // phpcs:ignore ?>
+				<?php if ( $manager && in_array( $t['context'], array( 'content_update', 'onpage', 'content_new', 'internal_links' ), true ) ) : ?>
+					<a class="sap-btn is-small is-ai" href="<?php echo esc_url( sap_project_url( $t['project_id'], 'content', array( 'url' => $t['url'], 'task' => $t['id'] ) ) ); ?>"><?php echo sap_icon( 'spark', 14 ); // phpcs:ignore ?>تحلیل و بازنویسی محتوا</a>
+				<?php endif; ?>
+			</p>
 		<?php endif; ?>
 		<div class="sap-ai-output" data-sap-ai-box <?php echo '' === trim( $t['ai_output'] ) ? 'hidden' : ''; ?>>
 			<div class="sap-ai-output-head"><span><?php echo sap_icon( 'spark', 13 ); // phpcs:ignore ?>خروجی آماده</span><button type="button" class="sap-icon-btn" data-sap-copy-target title="کپی"><?php echo sap_icon( 'log', 14 ); // phpcs:ignore ?></button></div>

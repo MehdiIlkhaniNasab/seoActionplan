@@ -420,3 +420,48 @@ add_action( 'admin_post_sap_activity_csv', function () {
 	fclose( $out ); // phpcs:ignore WordPress.WP.AlternativeFunctions
 	exit;
 } );
+
+/**
+ * Apply an AI focus recommendation: create the suggested focus, or update the
+ * goal, metric, target, deadline and weight of an existing one.
+ */
+add_action( 'admin_post_sap_ai_focus_apply', function () {
+	sap_guard( 'sap_ai_focus_apply' );
+	$pid  = absint( sap_post( 'project_id' ) );
+	$ref  = sanitize_key( (string) sap_post( 'ref' ) );
+	$back = sap_project_url( $pid, 'focuses' );
+	$rec  = null;
+	foreach ( (array) ( sap_dataset_payload( $pid, 'ai_focus' )['focuses'] ?? array() ) as $f ) {
+		if ( $f['ref'] === $ref ) {
+			$rec = $f;
+		}
+	}
+	if ( ! $rec ) {
+		sap_back( $back, 'پیشنهاد پیدا نشد؛ تحلیل Focus را دوباره اجرا کنید.', false );
+	}
+	$old  = 'f' === $ref[0] ? sap_focus( (int) substr( $ref, 1 ) ) : null;
+	$data = array(
+		'name'         => $rec['name'],
+		'goal'         => $rec['goal'],
+		'kpi_metric'   => $rec['metric'],
+		'kpi_baseline' => null !== $rec['current'] ? $rec['current'] : 0,
+		'kpi_target'   => $rec['target'],
+		'deadline'     => gmdate( 'Y-m-d', strtotime( '+' . (int) $rec['months'] . ' months' ) ),
+		'weight'       => $rec['weight'],
+		'status'       => 'active',
+		'ai_meta'      => array(
+			'scores'        => array( 'potential' => (int) $rec['potential'], 'value' => (int) $rec['value'], 'urgency' => (int) $rec['urgency'] ),
+			'metric_reason' => $rec['metric_reason'],
+			'rationale'     => $rec['rationale'],
+			'first_steps'   => $rec['first_steps'],
+			'at'            => sap_now(),
+		),
+	);
+	if ( $old ) {
+		$data += array( 'url_patterns' => implode( "\n", $old['url_patterns'] ), 'clusters' => implode( "\n", $old['clusters'] ), 'keywords' => implode( "\n", $old['keywords'] ) );
+		sap_focus_save( $pid, $data, $old['id'] );
+		sap_back( $back, sprintf( 'هدف و اولویت «%s» بروز شد.', $rec['name'] ) );
+	}
+	sap_focus_save( $pid, $data + (array) ( $rec['def'] ?? array() ) );
+	sap_back( $back, sprintf( 'Focus «%s» با هدف و شاخص پیشنهادی ساخته شد. برای اعمال روی یافته‌ها، تحلیل را دوباره اجرا کنید.', $rec['name'] ) );
+} );

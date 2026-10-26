@@ -14,7 +14,7 @@ $auth  = sap_google_auth_url();
 ?>
 <header class="sap-head">
 	<div>
-		<p class="sap-eyebrow">اکشن پلن سئو</p>
+		<p class="sap-eyebrow">سُکان</p>
 		<h1>تنظیمات و اتصال‌ها</h1>
 		<p class="sap-muted">کلیدها و توکن‌ها رمزنگاری‌شده در دیتابیس ذخیره می‌شوند و هرگز به مرورگر ارسال نمی‌شوند.</p>
 	</div>
@@ -63,7 +63,7 @@ $auth  = sap_google_auth_url();
 		?>
 		<div class="sap-status-row">
 			<span class="sap-conn <?php echo sap_ai_connected() ? 'is-on' : ''; ?>"><i></i><?php echo sap_ai_connected() ? 'متصل' : 'کلید وارد نشده'; ?></span>
-			<span class="sap-muted">این ماه: <?php echo esc_html( sap_num( $ai_usage['requests'] ) ); ?> درخواست · <b><?php echo esc_html( sap_num( $ai_usage['cost'], 3 ) ); ?> دلار</b><?php echo $ai_usage['budget'] > 0 ? ' از سقف ' . esc_html( sap_num( $ai_usage['budget'], 2 ) ) . ' دلار' : ''; ?></span>
+			<span class="sap-muted">این ماه: <?php echo esc_html( sap_num( $ai_usage['requests'] ) ); ?> درخواست · <b><?php echo esc_html( sap_num( $ai_usage['cost'], 3 ) ); ?> دلار</b><?php echo $ai_usage['budget'] > 0 ? ' از سقف ' . esc_html( sap_num( $ai_usage['budget'], 2 ) ) . ' دلار' : ''; ?><?php echo ! empty( $ai_usage['failed'] ) ? ' · <span class="sap-bad">' . esc_html( sprintf( '%s پاسخ ناقص بی‌نتیجه (%s دلار)', sap_num( $ai_usage['failed'] ), sap_num( $ai_usage['wasted'] ?? 0, 3 ) ) ) . '</span>' : ''; ?></span>
 		</div>
 		<?php if ( $ai_usage['budget'] > 0 ) : ?>
 			<div class="sap-progress sap-budget <?php echo $pct >= 90 ? 'is-bad' : ''; ?>"><i style="width:<?php echo esc_attr( $pct ); ?>%"></i></div>

@@ -26,12 +26,14 @@ function sap_sync_steps() {
 		'ss_questions' => 'سئو سیگنال: سوالات کاربران',
 		'pages'        => 'خواندن محتوای صفحات کلیدی',
 		'cwv'          => 'Core Web Vitals (PageSpeed)',
+		'keymap'       => 'نقشه کلمات: کلمه اصلی هر صفحه (شیت و سرچ کنسول)',
+		'ai_keymap'    => 'هوش مصنوعی ۱/۶: تشخیص کلمه اصلی صفحات',
 		'analyze'      => 'قوانین تحلیل: کشف ایرادها و فرصت‌ها',
-		'ai_cannibal'  => 'هوش مصنوعی ۱/۵: کنیبالیزیشن هوشمند',
-		'ai_content'   => 'هوش مصنوعی ۲/۵: تحلیل صفحات و محتوا',
-		'ai_links'     => 'هوش مصنوعی ۳/۵: لینک‌سازی داخلی',
-		'ai_technical' => 'هوش مصنوعی ۴/۵: تکنیکال، سایت‌مپ، اسکیما و سرعت',
-		'ai_plan'      => 'هوش مصنوعی ۵/۵: جمع‌بندی و اکشن پلن',
+		'ai_cannibal'  => 'هوش مصنوعی ۲/۶: کنیبالیزیشن هوشمند',
+		'ai_content'   => 'هوش مصنوعی ۳/۶: تحلیل صفحات و محتوا',
+		'ai_links'     => 'هوش مصنوعی ۴/۶: لینک‌سازی داخلی',
+		'ai_technical' => 'هوش مصنوعی ۵/۶: تکنیکال، سایت‌مپ، اسکیما و سرعت',
+		'ai_plan'      => 'هوش مصنوعی ۶/۶: جمع‌بندی و اکشن پلن',
 		'writeback'    => 'نوشتن ستون‌های خودکار در گوگل شیت',
 	);
 }
@@ -43,7 +45,7 @@ function sap_sync_steps() {
  */
 function sap_sync_step( $project, $step, $force = false ) {
 	$fn = 'sap_step_' . $step;
-	if ( ! array_key_exists( $step, sap_sync_steps() ) || ! function_exists( $fn ) ) {
+	if ( ( ! array_key_exists( $step, sap_sync_steps() ) && ! in_array( $step, array( 'ai_focus' ), true ) ) || ! function_exists( $fn ) ) {
 		return array( 'ok' => false, 'skipped' => false, 'msg' => 'مرحله نامعتبر.' );
 	}
 	if ( function_exists( 'set_time_limit' ) ) {
@@ -503,6 +505,23 @@ function sap_step_cwv( $project, $force = false ) {
 
 /* ---- AI stages --------------------------------------------------------- */
 
+function sap_step_keymap( $project ) {
+	$st = sap_keymap_build( $project );
+	if ( ! $st['pages'] ) {
+		return sap_skip( 'هنوز صفحه‌ای برای نقشه کلمات نیست (اول سرچ کنسول را همگام کنید).' );
+	}
+	$map  = sap_keymap( $project['id'] );
+	$conf = count( array_filter( $map, function ( $m ) {
+		return $m['confirmed'] || in_array( $m['source'], array( 'manual', 'sheet' ), true );
+	} ) );
+	return array( 'msg' => sprintf( 'کلمه اصلی %s صفحه مشخص شد (%s از شیت یا تأیید شما، بقیه تشخیص خودکار).', sap_num( $st['pages'] ), sap_num( $conf ) ) );
+}
+function sap_step_ai_keymap( $project, $force = false ) {
+	return sap_ai_stage_step( $project, 'keymap', $force );
+}
+function sap_step_ai_focus( $project, $force = false ) {
+	return sap_ai_stage_step( $project, 'focus', $force );
+}
 function sap_step_ai_cannibal( $project, $force = false ) {
 	return sap_ai_stage_step( $project, 'cannibal', $force );
 }
@@ -532,6 +551,9 @@ function sap_ai_stage_step( $project, $stage, $force ) {
 	}
 	if ( ! empty( $res['skipped'] ) ) {
 		return sap_skip( $res['skipped'] );
+	}
+	if ( ! empty( $res['more'] ) ) {
+		return array( 'more' => true, 'msg' => $res['summary_line'] );
 	}
 	$u = sap_ai_usage();
 	return array( 'msg' => $res['summary_line'] . sprintf( ' · هزینه حدود %s دلار (این ماه %s از %s دلار).', sap_num( $u['last_cost'], 3 ), sap_num( $u['cost'], 2 ), sap_num( $u['budget'], 2 ) ) );

@@ -16,7 +16,7 @@ foreach ( $tasks as $t ) {
 ?>
 <header class="sap-head">
 	<div>
-		<p class="sap-eyebrow">اکشن پلن سئو</p>
+		<p class="sap-eyebrow">سُکان</p>
 		<h1>کارهای من</h1>
 		<p class="sap-muted">کارهای باز که به شما سپرده شده‌اند. با «انجام شد»، کار در لاگ اقدامات و گزارش ماهانه ثبت می‌شود.</p>
 	</div>

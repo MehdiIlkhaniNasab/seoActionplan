@@ -91,10 +91,13 @@ $here     = sap_project_url( $pid, 'findings', array_filter( array( 'fstatus' =>
 				</summary>
 				<div class="sap-finding-body">
 					<p><?php echo nl2br( esc_html( $f['detail'] ) ); ?></p>
-					<?php if ( $f['url'] ) : ?>
-						<p><a href="<?php echo esc_url( $f['url'] ); ?>" target="_blank" rel="noopener" dir="ltr"><?php echo esc_html( rawurldecode( $f['url'] ) ); ?></a></p>
+					<?php if ( ! empty( $f['evidence']['ai']['reason'] ) ) : ?>
+						<p class="sap-ai-note"><?php echo sap_icon( 'spark', 14 ); // phpcs:ignore ?><b>قضاوت هوش مصنوعی:</b> <?php echo esc_html( $f['evidence']['ai']['reason'] . ( $f['evidence']['ai']['action'] ? ' — ' . $f['evidence']['ai']['action'] : '' ) ); ?></p>
 					<?php endif; ?>
-					<?php sap_evidence_table( $f['evidence'] ); ?>
+					<?php if ( $f['url'] ) : ?>
+						<p class="sap-finding-page">صفحه: <?php echo sap_page_link( $f['url'], sap_page_title( $pid, $f['url'] ) ); // phpcs:ignore ?></p>
+					<?php endif; ?>
+					<?php sap_evidence_table( $f['evidence'], $project['id'] ); ?>
 					<div class="sap-finding-actions">
 						<?php if ( 'open' === $f['status'] || 'dismissed' === $f['status'] || 'resolved' === $f['status'] ) : ?>
 							<button class="sap-btn is-small is-primary" name="quick" value="plan:<?php echo esc_attr( $f['id'] ); ?>">افزودن به اکشن پلن <?php echo esc_html( sap_period_label( $period ) ); ?></button>

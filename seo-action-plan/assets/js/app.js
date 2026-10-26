@@ -1,4 +1,4 @@
-/* SEO Action Plan — app interactions (no build step). */
+/* Sokan (سُکان) — app interactions (no build step). */
 (function () {
 	'use strict';
 	if (!window.SAP) { return; }
@@ -388,6 +388,168 @@
 	if (location.hash && location.hash.indexOf('#task-') === 0) {
 		var target = document.querySelector(location.hash);
 		if (target && target.classList.contains('sap-task')) { target.open = false; openDrawer(target); target.scrollIntoView({ block: 'center' }); }
+	}
+
+	/* ---- Run one or more sync steps from a button (data-sap-step="a,b"), then reload ---- */
+	document.addEventListener('click', function (ev) {
+		var btn = ev.target.closest('[data-sap-step]');
+		if (!btn) { return; }
+		ev.preventDefault();
+		var steps = btn.getAttribute('data-sap-step').split(',');
+		var project = btn.getAttribute('data-project');
+		var label = btn.innerHTML;
+		btn.disabled = true;
+		btn.classList.add('is-loading');
+		function run(i) {
+			if (i >= steps.length) { toast('انجام شد؛ صفحه بروز می‌شود.'); setTimeout(function () { location.reload(); }, 700); return; }
+			api('sync/' + project + '/' + steps[i] + '?force=' + (btn.hasAttribute('data-force') ? 1 : 0), { method: 'POST' }).then(function (res) {
+				btn.textContent = res.msg || '…';
+				if (res.more) { return run(i); }
+				if (!res.ok) { throw new Error(res.msg || 'خطا'); }
+				run(i + 1);
+			}).catch(function (e) {
+				toast(e.message, true);
+				btn.disabled = false;
+				btn.classList.remove('is-loading');
+				btn.innerHTML = label;
+			});
+		}
+		run(0);
+	});
+
+	/* ---- Keyword map: save / confirm rows in place ---- */
+	document.addEventListener('submit', function (ev) {
+		var form = ev.target.closest('.sap-km-row');
+		if (!form) { return; }
+		ev.preventDefault();
+		var box = form.closest('[data-sap-keymap]');
+		var pid = box ? box.getAttribute('data-sap-keymap') : form.getAttribute('data-sap-keymap-new');
+		var data = {};
+		new FormData(form).forEach(function (v, k) { data[k] = v; });
+		var btn = form.querySelector('[type="submit"]');
+		btn.disabled = true;
+		post('keymap/' + pid, data).then(function (res) {
+			toast(res.msg);
+			if (!box) { location.reload(); return; }
+			form.classList.add('is-confirmed');
+			var chip = form.querySelector('.sap-km-meta .sap-chip');
+			if (chip) { chip.textContent = 'تأیید شده'; chip.className = 'sap-chip is-src-manual'; }
+		}).catch(function (e) { toast(e.message, true); }).then(function () { btn.disabled = false; });
+	});
+	document.addEventListener('click', function (ev) {
+		var btn = ev.target.closest('[data-sap-keymap-confirm-all]');
+		if (!btn) { return; }
+		if (!window.confirm('همه کلمه‌های پیشنهادی (خودکار و هوش مصنوعی) به‌عنوان کلمه اصلی صفحه تأیید شوند؟')) { return; }
+		post('keymap/' + btn.getAttribute('data-sap-keymap-confirm-all'), { confirm_all: 1 }).then(function (res) {
+			toast(res.msg);
+			setTimeout(function () { location.reload(); }, 600);
+		}).catch(function (e) { toast(e.message, true); });
+	});
+
+	/* ---- Content audit & rewrite ---- */
+	function contentStart(pid, url, task, btn) {
+		if (btn) { btn.disabled = true; btn.classList.add('is-loading'); btn.textContent = 'خواندن محتوای صفحه…'; }
+		post('content/' + pid + '/start', { url: url, task_id: task || 0 }).then(function (res) {
+			location.href = res.url;
+		}).catch(function (e) {
+			toast(e.message, true);
+			if (btn) { btn.disabled = false; btn.classList.remove('is-loading'); btn.textContent = 'دوباره امتحان کنید'; }
+		});
+	}
+	document.addEventListener('click', function (ev) {
+		var btn = ev.target.closest('[data-sap-content-start]');
+		if (!btn) { return; }
+		ev.preventDefault();
+		contentStart(btn.getAttribute('data-sap-content-start'), btn.getAttribute('data-url'), btn.getAttribute('data-task'), btn);
+	});
+	document.addEventListener('submit', function (ev) {
+		var f = ev.target.closest('[data-sap-content-form]');
+		if (!f) { return; }
+		ev.preventDefault();
+		contentStart(f.getAttribute('data-sap-content-form'), f.querySelector('[name="url"]').value, 0, f.querySelector('button'));
+	});
+	var runBox = document.querySelector('[data-sap-rev-run]');
+	if (runBox) {
+		var revId = runBox.getAttribute('data-sap-rev-run');
+		var bar = runBox.querySelector('[data-bar]');
+		var msgEl = runBox.querySelector('[data-msg]');
+		(function step() {
+			post('revision/' + revId + '/step').then(function (res) {
+				msgEl.textContent = res.msg;
+				bar.style.width = (res.pct || 50) + '%';
+				if (res.more) { step(); } else { setTimeout(function () { location.reload(); }, 500); }
+			}).catch(function (e) {
+				msgEl.textContent = e.message;
+				runBox.classList.add('is-err');
+				var again = document.createElement('button');
+				again.type = 'button';
+				again.className = 'sap-btn is-small is-primary';
+				again.textContent = 'ادامه از همین مرحله';
+				again.addEventListener('click', function () { again.remove(); runBox.classList.remove('is-err'); step(); });
+				runBox.appendChild(again);
+			});
+		})();
+	}
+	var rev = document.querySelector('[data-sap-rev]');
+	if (rev) {
+		var edits = JSON.parse(rev.querySelector('[data-sap-rev-edits]').textContent || '[]');
+		var blocks = JSON.parse(rev.querySelector('[data-sap-rev-blocks]').textContent || '[]');
+		var accepted = function () {
+			return Array.prototype.map.call(rev.querySelectorAll('input[name="accepted[]"]:checked'), function (c) { return parseInt(c.value, 10); });
+		};
+		var finalHtml = function () {
+			var on = accepted(), out = [];
+			blocks.forEach(function (b) {
+				var html = b.html, add = [];
+				edits.forEach(function (e) {
+					if (e.block !== b.id || on.indexOf(e.id) === -1) { return; }
+					if (e.op === 'replace') { html = e.html; } else if (e.op === 'delete') { html = ''; } else { add.push(e.html); }
+				});
+				if (html) { out.push(html); }
+				out = out.concat(add);
+			});
+			return out.join('\n\n');
+		};
+		var setMode = function (mode) {
+			rev.querySelectorAll('[data-sap-rev-mode] a').forEach(function (a) { a.classList.toggle('is-active', a.getAttribute('data-mode') === mode); });
+			rev.querySelectorAll('.sap-edit [data-v]').forEach(function (v) { v.hidden = v.getAttribute('data-v').split(' ').indexOf(mode) === -1; });
+			rev.querySelectorAll('.sap-blk.is-insert').forEach(function (b) { b.hidden = mode === 'old'; });
+			rev.className = rev.className.replace(/\bis-mode-\w+/g, '') + ' is-mode-' + mode;
+		};
+		rev.querySelectorAll('[data-sap-rev-mode] a').forEach(function (a) {
+			a.addEventListener('click', function (ev) { ev.preventDefault(); setMode(a.getAttribute('data-mode')); });
+		});
+		rev.addEventListener('change', function (ev) {
+			if (ev.target.name !== 'accepted[]') { return; }
+			ev.target.closest('.sap-edit').classList.toggle('is-off', !ev.target.checked);
+			rev.querySelector('[data-sap-rev-count]').textContent = accepted().length.toLocaleString('fa-IR');
+		});
+		rev.addEventListener('submit', function (ev) {
+			ev.preventDefault();
+			var btn = rev.querySelector('[type="submit"]');
+			btn.disabled = true;
+			post('revision/' + rev.getAttribute('data-sap-rev') + '/approve', { accepted: accepted() }).then(function (res) {
+				toast(res.msg);
+				setTimeout(function () { location.reload(); }, 900);
+			}).catch(function (e) { toast(e.message, true); btn.disabled = false; });
+		});
+		var rej = rev.querySelector('[data-sap-rev-reject]');
+		if (rej) {
+			rej.addEventListener('click', function () {
+				if (!window.confirm('کل این پیشنهاد رد شود؟')) { return; }
+				post('revision/' + rev.getAttribute('data-sap-rev') + '/reject').then(function () { location.reload(); });
+			});
+		}
+		rev.querySelector('[data-sap-copy-html]').addEventListener('click', function () {
+			var html = finalHtml();
+			(navigator.clipboard ? navigator.clipboard.writeText(html) : Promise.reject()).then(function () {
+				toast('HTML نهایی (با تغییرات انتخاب‌شده) کپی شد.');
+			}).catch(function () {
+				var ta = rev.querySelector('[data-sap-final-html]');
+				ta.value = html; ta.hidden = false; ta.select(); document.execCommand('copy'); ta.hidden = true;
+				toast('HTML نهایی کپی شد.');
+			});
+		});
 	}
 
 })();

@@ -130,9 +130,117 @@ function sap_ai_request( $system, $user, $schema, $args = array() ) {
 		@set_time_limit( (int) $args['timeout'] + 30 ); // phpcs:ignore WordPress.PHP.NoSilencedErrors
 	}
 	$model = sap_ai_model_for( $args['purpose'] );
-	return 'anthropic' === sap_setting( 'ai_provider', 'gateway' )
-		? sap_ai_request_anthropic( $model, $system, $user, $schema, $args )
-		: sap_ai_request_gateway( $model, $system, $user, $schema, $args );
+	$call  = function ( $args ) use ( $model, $system, $user, $schema ) {
+		return 'anthropic' === sap_setting( 'ai_provider', 'gateway' )
+			? sap_ai_request_anthropic( $model, $system, $user, $schema, $args )
+			: sap_ai_request_gateway( $model, $system, $user, $schema, $args );
+	};
+	$res = $call( $args );
+	// Cut off before even one item was complete: one retry with more room and a request to be brief.
+	if ( is_wp_error( $res ) && 'sap_ai_truncated' === $res->get_error_code() && empty( $args['no_retry'] ) ) {
+		sap_ai_mark_wasted();
+		$args['max_tokens'] = (int) ceil( $args['max_tokens'] * 1.6 );
+		$args['no_retry']   = true;
+		$user              .= "\n\nمهم: پاسخ قبلی طولانی شد و قطع شد. این بار موارد را کوتاه‌تر و فشرده‌تر بنویس و فقط مهم‌ترین‌ها را بیاور.";
+		$res                = $call( $args );
+	}
+	if ( is_wp_error( $res ) && in_array( $res->get_error_code(), array( 'sap_ai_truncated', 'sap_ai_parse' ), true ) ) {
+		sap_ai_mark_wasted();
+	}
+	return $res;
+}
+
+/**
+ * The last call was paid but produced nothing usable: count it separately, so the
+ * usage panel shows how much was lost to failed answers.
+ */
+function sap_ai_mark_wasted() {
+	$u = sap_ai_usage();
+	unset( $u['budget'] );
+	$u['wasted']      = round( (float) ( $u['wasted'] ?? 0 ) + (float) $u['last_cost'], 5 );
+	$u['failed']      = (int) ( $u['failed'] ?? 0 ) + 1;
+	$u['last_cost']   = 0;
+	update_option( 'sap_ai_usage', $u, false );
+}
+
+/**
+ * Decode a model answer; when the answer was cut off at the token limit, keep
+ * every item that was complete instead of throwing the whole (paid) answer away.
+ *
+ * @return array|WP_Error JSON (with '_partial' => true when salvaged).
+ */
+function sap_ai_decode_answer( $text, $truncated ) {
+	$json = $truncated ? null : sap_ai_extract_json( $text );
+	if ( null === $json ) {
+		$json = sap_ai_salvage_json( $text );
+		if ( null !== $json && $truncated ) {
+			// The item that was being written when the answer stopped is incomplete: drop it.
+			foreach ( $json as $k => $v ) {
+				if ( is_array( $v ) && count( $v ) > 1 && array_is_list( $v ) && is_array( end( $v ) ) && is_array( $v[0] ) && count( end( $v ) ) < count( $v[0] ) ) {
+					array_pop( $json[ $k ] );
+				}
+			}
+			$json['_partial'] = true;
+		}
+	}
+	if ( null === $json ) {
+		return $truncated
+			? new WP_Error( 'sap_ai_truncated', 'پاسخ هوش مصنوعی به سقف طول رسید و ناقص ماند. دوباره امتحان کنید.' )
+			: new WP_Error( 'sap_ai_parse', 'پاسخ هوش مصنوعی قابل خواندن نبود؛ دوباره امتحان کنید یا مدل دیگری انتخاب کنید.' );
+	}
+	return $json;
+}
+
+/**
+ * Repair a JSON object that stops mid-way: cut back to the last complete value
+ * and close the open brackets. Returns null when nothing complete is left.
+ */
+function sap_ai_salvage_json( $text ) {
+	$text  = preg_replace( '/^\s*```(?:json)?\s*/i', '', (string) $text );
+	$start = strpos( $text, '{' );
+	if ( false === $start ) {
+		return null;
+	}
+	$text  = substr( $text, $start );
+	$len   = strlen( $text );
+	$stack = array();
+	$cuts  = array();
+	$in    = false;
+	$esc   = false;
+	for ( $i = 0; $i < $len; $i++ ) {
+		$ch = $text[ $i ];
+		if ( $in ) {
+			if ( $esc ) {
+				$esc = false;
+			} elseif ( '\\' === $ch ) {
+				$esc = true;
+			} elseif ( '"' === $ch ) {
+				$in = false;
+			}
+			continue;
+		}
+		if ( '"' === $ch ) {
+			$in = true;
+		} elseif ( '{' === $ch || '[' === $ch ) {
+			$stack[] = '{' === $ch ? '}' : ']';
+		} elseif ( '}' === $ch || ']' === $ch ) {
+			array_pop( $stack );
+			$cuts[] = array( $i + 1, $stack );
+			if ( ! $stack ) {
+				break;
+			}
+		} elseif ( ',' === $ch ) {
+			$cuts[] = array( $i, $stack );
+		}
+	}
+	for ( $n = count( $cuts ) - 1, $tries = 0; $n >= 0 && $tries < 80; $n--, $tries++ ) {
+		$cand = rtrim( rtrim( substr( $text, 0, $cuts[ $n ][0] ) ), ',' ) . implode( '', array_reverse( $cuts[ $n ][1] ) );
+		$json = json_decode( $cand, true );
+		if ( is_array( $json ) ) {
+			return $json;
+		}
+	}
+	return null;
 }
 
 /**
@@ -206,14 +314,7 @@ function sap_ai_request_gateway( $model, $system, $user, $schema, $args ) {
 	}
 	$parsed = sap_ai_parse_stream( $raw );
 	sap_ai_track_usage( $model, $parsed['in'], $parsed['out'] );
-	$json = sap_ai_extract_json( $parsed['text'] );
-	if ( null === $json ) {
-		if ( 'length' === $parsed['finish'] ) {
-			return new WP_Error( 'sap_ai_truncated', 'پاسخ هوش مصنوعی به سقف طول رسید و ناقص ماند. دوباره امتحان کنید.' );
-		}
-		return new WP_Error( 'sap_ai_parse', 'پاسخ هوش مصنوعی قابل خواندن نبود؛ دوباره امتحان کنید یا مدل دیگری انتخاب کنید.' );
-	}
-	return $json;
+	return sap_ai_decode_answer( $parsed['text'], 'length' === $parsed['finish'] );
 }
 
 /**
@@ -312,17 +413,13 @@ function sap_ai_request_anthropic( $model, $system, $user, $schema, $args ) {
 	if ( 'refusal' === $stop ) {
 		return new WP_Error( 'sap_ai_refusal', 'سرویس هوش مصنوعی به این درخواست پاسخ نداد.' );
 	}
-	if ( 'max_tokens' === $stop ) {
-		return new WP_Error( 'sap_ai_truncated', 'پاسخ هوش مصنوعی ناقص ماند (طولانی‌تر از سقف). دوباره امتحان کنید.' );
-	}
 	$text = '';
 	foreach ( (array) ( $data['content'] ?? array() ) as $block ) {
 		if ( 'text' === ( $block['type'] ?? '' ) ) {
 			$text .= (string) $block['text'];
 		}
 	}
-	$json = sap_ai_extract_json( $text );
-	return null === $json ? new WP_Error( 'sap_ai_parse', 'پاسخ هوش مصنوعی قابل خواندن نبود.' ) : $json;
+	return sap_ai_decode_answer( $text, 'max_tokens' === $stop );
 }
 
 /**

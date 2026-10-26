@@ -183,3 +183,163 @@ function sap_pages_to_read( $project, $limit = 30 ) {
 	}
 	return array_slice( array_values( $urls ), 0, $limit );
 }
+
+/* ---------------------------------------------------------------------------
+ * Main content as editable blocks (for the content audit & rewrite).
+ * Only the article / description itself: header, menus, sidebar, footer,
+ * related posts and comments are left out.
+ * ------------------------------------------------------------------------- */
+
+/**
+ * Tags allowed in content blocks (and in AI edits).
+ */
+function sap_content_allowed_html() {
+	$a = array();
+	foreach ( array( 'p', 'h2', 'h3', 'h4', 'h5', 'h6', 'ul', 'ol', 'li', 'strong', 'b', 'em', 'i', 'blockquote', 'br', 'table', 'thead', 'tbody', 'tr', 'td', 'th', 'figure', 'figcaption', 'span', 'sup', 'sub' ) as $t ) {
+		$a[ $t ] = array();
+	}
+	$a['a']   = array( 'href' => true, 'title' => true, 'rel' => true, 'target' => true );
+	$a['img'] = array( 'src' => true, 'alt' => true, 'width' => true, 'height' => true );
+	$a['td']  = array( 'colspan' => true, 'rowspan' => true );
+	$a['th']  = array( 'colspan' => true, 'rowspan' => true );
+	return $a;
+}
+
+/**
+ * Main content of a page as blocks.
+ *
+ * The source can be replaced (filter sap_content_source), e.g. by the raw
+ * post_content from the client-site connector, which is the most exact source.
+ *
+ * @return array|WP_Error {title, h1, meta, source, blocks: [{id, tag, html, text}]}
+ */
+function sap_page_content_blocks( $url, $project = null ) {
+	$pre = apply_filters( 'sap_content_source', null, $url, $project );
+	if ( is_array( $pre ) || is_wp_error( $pre ) ) {
+		return $pre;
+	}
+	$res = wp_remote_get( $url, array(
+		'timeout'     => 20,
+		'redirection' => 3,
+		'user-agent'  => 'Mozilla/5.0 (compatible; SokanSEO/1.0; +' . home_url( '/' ) . ')',
+		'headers'     => array( 'Accept' => 'text/html' ),
+	) );
+	if ( is_wp_error( $res ) ) {
+		return $res;
+	}
+	$code = (int) wp_remote_retrieve_response_code( $res );
+	$html = (string) wp_remote_retrieve_body( $res );
+	if ( $code >= 400 || '' === $html ) {
+		return new WP_Error( 'sap_page_http', 'صفحه باز نشد (HTTP ' . $code . ').' );
+	}
+	return sap_content_blocks_from_html( $html, $url );
+}
+
+/**
+ * Split the main content of an HTML document into blocks.
+ */
+function sap_content_blocks_from_html( $html, $url = '' ) {
+	$facts = sap_page_parse( $html, $url ?: 'https://example.com/' );
+	$out   = array( 'title' => $facts['title'], 'h1' => $facts['h1'][0] ?? '', 'meta' => $facts['meta'], 'source' => 'html', 'blocks' => array() );
+	if ( ! class_exists( 'DOMDocument' ) ) {
+		return $out;
+	}
+	$prev = libxml_use_internal_errors( true );
+	$dom  = new DOMDocument();
+	$dom->loadHTML( '<?xml encoding="UTF-8">' . $html, LIBXML_NOWARNING | LIBXML_NOERROR );
+	libxml_clear_errors();
+	libxml_use_internal_errors( $prev );
+	$xp = new DOMXPath( $dom );
+	foreach ( $xp->query( '//script|//style|//noscript|//svg|//form|//iframe|//nav|//aside|//footer' ) as $n ) {
+		$n->parentNode && $n->parentNode->removeChild( $n );
+	}
+	$len  = function ( $node ) {
+		return mb_strlen( trim( preg_replace( '/\s+/u', ' ', (string) $node->textContent ) ) );
+	};
+	$main = null;
+	// Known content containers of WordPress themes, page builders and WooCommerce.
+	foreach ( array(
+		'//*[@itemprop="articleBody"]',
+		'//*[contains(concat(" ",normalize-space(@class)," ")," entry-content ")]',
+		'//*[contains(@class,"post-content") or contains(@class,"article-content") or contains(@class,"single-content") or contains(@class,"content-inner")]',
+		'//*[@id="tab-description"]',
+		'//*[contains(@class,"woocommerce-Tabs-panel--description")]',
+		'//*[contains(@class,"term-description")]',
+		'//*[contains(@class,"elementor-widget-theme-post-content")]',
+		'//article',
+		'//main',
+	) as $q ) {
+		foreach ( $xp->query( $q ) as $n ) {
+			if ( $len( $n ) > 300 ) {
+				$main = $n;
+				break 2;
+			}
+		}
+	}
+	if ( ! $main ) {
+		// Fallback: the element holding most paragraph text.
+		$best = 0;
+		foreach ( $xp->query( '//p' ) as $p ) {
+			$parent = $p->parentNode;
+			$score  = 0;
+			foreach ( $parent->childNodes as $c ) {
+				if ( XML_ELEMENT_NODE === $c->nodeType && 'p' === strtolower( $c->nodeName ) ) {
+					$score += $len( $c );
+				}
+			}
+			if ( $score > $best ) {
+				$best = $score;
+				$main = $parent;
+			}
+		}
+	}
+	if ( ! $main ) {
+		return $out;
+	}
+	// Remove chrome that lives inside the content area.
+	foreach ( $xp->query( './/*[contains(@class,"related") or contains(@class,"share") or contains(@class,"comment") or contains(@class,"breadcrumb") or contains(@class,"author-box") or contains(@class,"toc") or contains(@id,"toc") or contains(@class,"ez-toc")]', $main ) as $n ) {
+		$n->parentNode && $n->parentNode->removeChild( $n );
+	}
+	$blocks = array();
+	$block  = array( 'p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'ul', 'ol', 'table', 'blockquote', 'figure', 'img', 'pre', 'dl' );
+	$walk   = function ( $node ) use ( &$walk, &$blocks, $block, $dom, $len ) {
+		foreach ( iterator_to_array( $node->childNodes ) as $c ) {
+			if ( count( $blocks ) >= 160 ) {
+				return;
+			}
+			if ( XML_TEXT_NODE === $c->nodeType ) {
+				$t = trim( $c->textContent );
+				if ( mb_strlen( $t ) > 40 ) {
+					$blocks[] = array( 'tag' => 'p', 'html' => '<p>' . esc_html( $t ) . '</p>' );
+				}
+				continue;
+			}
+			if ( XML_ELEMENT_NODE !== $c->nodeType ) {
+				continue;
+			}
+			$tag = strtolower( $c->nodeName );
+			if ( 'h1' === $tag ) {
+				continue; // The page title is edited separately.
+			}
+			if ( in_array( $tag, $block, true ) ) {
+				if ( 'img' !== $tag && 'figure' !== $tag && 0 === $len( $c ) ) {
+					continue;
+				}
+				$blocks[] = array( 'tag' => $tag, 'html' => $dom->saveHTML( $c ) );
+			} else {
+				$walk( $c ); // Wrapper (div, section, span…): look inside.
+			}
+		}
+	};
+	$walk( $main );
+	$allowed = sap_content_allowed_html();
+	foreach ( $blocks as $i => $b ) {
+		$html = trim( wp_kses( $b['html'], $allowed ) );
+		$text = trim( preg_replace( '/\s+/u', ' ', wp_strip_all_tags( str_replace( '<', ' <', $html ) ) ) );
+		if ( '' === $html ) {
+			continue;
+		}
+		$out['blocks'][] = array( 'id' => count( $out['blocks'] ) + 1, 'tag' => $b['tag'], 'html' => $html, 'text' => $text );
+	}
+	return $out;
+}

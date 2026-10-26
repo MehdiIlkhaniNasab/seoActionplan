@@ -60,6 +60,7 @@ function sap_install() {
 		kpi_target decimal(14,2) NOT NULL DEFAULT 0,
 		deadline date NULL,
 		weight decimal(4,2) NOT NULL DEFAULT 1.5,
+		ai_meta longtext NULL,
 		status varchar(20) NOT NULL DEFAULT 'active',
 		created_at datetime NOT NULL DEFAULT '0000-00-00 00:00:00',
 		PRIMARY KEY  (id),
@@ -151,6 +152,45 @@ function sap_install() {
 		PRIMARY KEY  (id),
 		KEY project_time (project_id,happened_at),
 		KEY ref (project_id,ref)
+	) $c;" );
+
+	dbDelta( 'CREATE TABLE ' . sap_table( 'keymap' ) . " (
+		id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+		project_id bigint(20) unsigned NOT NULL DEFAULT 0,
+		url_key varchar(190) NOT NULL DEFAULT '',
+		url text NULL,
+		title varchar(255) NOT NULL DEFAULT '',
+		primary_kw varchar(190) NOT NULL DEFAULT '',
+		secondary text NULL,
+		intent varchar(20) NOT NULL DEFAULT '',
+		page_type varchar(20) NOT NULL DEFAULT '',
+		focus_id bigint(20) unsigned NOT NULL DEFAULT 0,
+		source varchar(10) NOT NULL DEFAULT 'auto',
+		confirmed tinyint(1) NOT NULL DEFAULT 0,
+		reason text NULL,
+		updated_at datetime NOT NULL DEFAULT '0000-00-00 00:00:00',
+		PRIMARY KEY  (id),
+		UNIQUE KEY project_url (project_id,url_key)
+	) $c;" );
+
+	dbDelta( 'CREATE TABLE ' . sap_table( 'revisions' ) . " (
+		id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+		project_id bigint(20) unsigned NOT NULL DEFAULT 0,
+		task_id bigint(20) unsigned NOT NULL DEFAULT 0,
+		url text NULL,
+		title varchar(255) NOT NULL DEFAULT '',
+		kind varchar(20) NOT NULL DEFAULT 'content',
+		status varchar(20) NOT NULL DEFAULT 'analyzing',
+		original longtext NULL,
+		audit longtext NULL,
+		edits longtext NULL,
+		progress text NULL,
+		cost decimal(10,5) NOT NULL DEFAULT 0,
+		user_id bigint(20) unsigned NOT NULL DEFAULT 0,
+		created_at datetime NOT NULL DEFAULT '0000-00-00 00:00:00',
+		updated_at datetime NOT NULL DEFAULT '0000-00-00 00:00:00',
+		PRIMARY KEY  (id),
+		KEY project_id (project_id)
 	) $c;" );
 
 	foreach ( array( 'administrator' ) as $role_name ) {

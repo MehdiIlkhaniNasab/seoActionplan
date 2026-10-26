@@ -119,6 +119,81 @@ add_action( 'rest_api_init', function () {
 		},
 	) );
 
+	// Content audit & rewrite: start, run the next step, approve.
+	register_rest_route( $ns, '/content/(?P<project>\d+)/start', array(
+		'methods'             => 'POST',
+		'permission_callback' => 'sap_can',
+		'callback'            => function ( WP_REST_Request $req ) {
+			$project = sap_project( (int) $req['project'] );
+			$url     = esc_url_raw( (string) $req->get_param( 'url' ) );
+			if ( ! $project || '' === $url ) {
+				return new WP_Error( 'sap_content', 'پروژه یا آدرس صفحه نامعتبر است.', array( 'status' => 400 ) );
+			}
+			$id = sap_content_start( $project, $url, absint( $req->get_param( 'task_id' ) ) );
+			return is_wp_error( $id ) ? $id : array( 'ok' => true, 'id' => $id, 'url' => sap_project_url( $project['id'], 'content', array( 'rev' => $id ) ) );
+		},
+	) );
+	register_rest_route( $ns, '/revision/(?P<id>\d+)/(?P<do>step|approve|reject)', array(
+		'methods'             => 'POST',
+		'permission_callback' => 'sap_can',
+		'callback'            => function ( WP_REST_Request $req ) {
+			$rev = sap_revision( (int) $req['id'] );
+			if ( ! $rev ) {
+				return new WP_Error( 'sap_rev', 'نسخه پیدا نشد.', array( 'status' => 404 ) );
+			}
+			if ( 'step' === $req['do'] ) {
+				$res = sap_content_step( $rev );
+				if ( is_wp_error( $res ) ) {
+					return $res;
+				}
+				return $res + array( 'ok' => true );
+			}
+			if ( 'reject' === $req['do'] ) {
+				sap_revision_save( array( 'status' => 'rejected' ), $rev['id'] );
+				return array( 'ok' => true, 'msg' => 'رد شد' );
+			}
+			$n = sap_content_approve( $rev, (array) $req->get_param( 'accepted' ) );
+			return array( 'ok' => true, 'msg' => sprintf( '%s تغییر تأیید شد و در لاگ اقدامات ثبت شد.', sap_num( $n ) ) );
+		},
+	) );
+
+	// Keyword map: save / confirm / delete one page's keywords.
+	register_rest_route( $ns, '/keymap/(?P<project>\d+)', array(
+		'methods'             => 'POST',
+		'permission_callback' => 'sap_can',
+		'callback'            => function ( WP_REST_Request $req ) {
+			$pid = (int) $req['project'];
+			if ( ! sap_project( $pid ) ) {
+				return new WP_Error( 'sap_project', 'پروژه یافت نشد.', array( 'status' => 404 ) );
+			}
+			if ( $req->get_param( 'delete' ) ) {
+				sap_keymap_delete( $pid, (int) $req->get_param( 'id' ) );
+				return array( 'ok' => true, 'msg' => 'حذف شد' );
+			}
+			if ( $req->get_param( 'confirm_all' ) ) {
+				global $wpdb;
+				$n = $wpdb->query( $wpdb->prepare( 'UPDATE ' . sap_table( 'keymap' ) . " SET confirmed = 1, source = 'manual' WHERE project_id = %d AND confirmed = 0 AND primary_kw <> ''", $pid ) ); // phpcs:ignore
+				sap_keymap( $pid, true );
+				return array( 'ok' => true, 'msg' => sprintf( '%s صفحه تأیید شد', sap_num( (int) $n ) ) );
+			}
+			$url = esc_url_raw( (string) $req->get_param( 'url' ) );
+			if ( '' === $url ) {
+				return new WP_Error( 'sap_url', 'آدرس صفحه لازم است.', array( 'status' => 400 ) );
+			}
+			$id = sap_keymap_save( $pid, array(
+				'url'        => $url,
+				'title'      => (string) $req->get_param( 'title' ),
+				'primary_kw' => (string) $req->get_param( 'primary_kw' ),
+				'secondary'  => (string) $req->get_param( 'secondary' ),
+				'intent'     => sanitize_key( (string) $req->get_param( 'intent' ) ),
+				'page_type'  => sanitize_key( (string) $req->get_param( 'page_type' ) ),
+				'source'     => 'manual',
+				'confirmed'  => 1,
+			), true );
+			return array( 'ok' => true, 'id' => $id, 'msg' => 'ذخیره و تأیید شد؛ در تحلیل بعدی اعمال می‌شود' );
+		},
+	) );
+
 	// Quick finding action (plan / someday / dismiss / reopen) without page reload.
 	register_rest_route( $ns, '/finding/(?P<id>\d+)', array(
 		'methods'             => 'POST',
@@ -233,7 +308,7 @@ function sap_rest_crawl_ingest( WP_REST_Request $req ) {
 		'ok'      => true,
 		'urls'    => count( $rows ),
 		'kept'    => $kept,
-		'message' => sprintf( 'Crawl received by SEO Action Plan: %d URLs', count( $rows ) ),
+		'message' => sprintf( 'Crawl received by Sokan: %d URLs', count( $rows ) ),
 	);
 }
 

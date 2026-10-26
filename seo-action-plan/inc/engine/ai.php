@@ -395,6 +395,30 @@ function sap_ai_task_assist( $task ) {
 }
 
 /**
+ * Persian name of a site section: the H1 / title of its own page, else its
+ * keyword map entry, else its top Search Console query, else the slug.
+ */
+function sap_focus_section_name( $project, $folder ) {
+	$pid  = $project['id'];
+	$url  = sap_full_url( $project, $folder );
+	$name = sap_page_title( $pid, $url );
+	if ( '' !== $name && ! preg_match( '#^(/|صفحه اصلی$)#u', $name ) ) {
+		return $name;
+	}
+	$km = sap_keymap( $pid )[ sap_norm_url( $url ) ] ?? null;
+	if ( $km && '' !== $km['primary_kw'] ) {
+		return $km['primary_kw'];
+	}
+	$best = null;
+	foreach ( (array) ( sap_dataset_payload( $pid, 'gsc_qp' )['rows'] ?? array() ) as $r ) {
+		if ( sap_url_matches( $r['page'], array( $folder ) ) && ! sap_is_brand( $r['query'], $project ) && ( ! $best || $r['impressions'] > $best['impressions'] ) ) {
+			$best = $r;
+		}
+	}
+	return $best ? $best['query'] : str_replace( array( '-', '_' ), ' ', rawurldecode( basename( $folder ) ) );
+}
+
+/**
  * One-click focus suggestions from the data (no AI call needed):
  * clusters of the clustering sheet and the site sections with most clicks.
  *
@@ -438,7 +462,7 @@ function sap_focus_suggestions( $project ) {
 		if ( $clicks < 1 || ( ! in_array( strtolower( $first ), $taxonomy, true ) && empty( $children[ $folder ] ) ) ) {
 			continue;
 		}
-		$label = str_replace( array( '-', '_' ), ' ', basename( $folder ) );
+		$label = sap_focus_section_name( $project, $folder );
 		if ( in_array( sap_kw_key( $label ), $existing, true ) ) {
 			continue;
 		}
@@ -501,9 +525,59 @@ function sap_ai_stages() {
 	$str = array( 'type' => 'string' );
 	$arr = array( 'type' => 'array', 'items' => array( 'type' => 'string' ) );
 	return array(
+		'keymap'    => array(
+			'label'  => 'کلمه اصلی صفحات',
+			'tokens' => 3000,
+			'batch'  => array( 'in' => 'pages', 'out' => 'pages', 'size' => 8 ),
+			'schema' => sap_ai_obj( array( 'pages' => array( 'type' => 'array', 'items' => sap_ai_obj( array(
+				'id'        => array( 'type' => 'integer' ),
+				'primary'   => array( 'type' => 'string', 'description' => 'کلمه کلیدی اصلی صفحه' ),
+				'secondary' => array( 'type' => 'array', 'items' => $str, 'description' => 'تا ۸ کلمه فرعی/هم‌کانسپت' ),
+				'intent'    => array( 'type' => 'string', 'enum' => array_keys( sap_keymap_intents() ) ),
+				'page_type' => array( 'type' => 'string', 'enum' => array_keys( sap_keymap_page_types() ) ),
+				'reason'    => array( 'type' => 'string', 'description' => 'یک جمله کوتاه' ),
+			) ) ) ) ),
+			'task'   => implode( "\n", array(
+				'برای هر صفحه سایت (با تایتل، H1، تیترها و کوئری‌های واقعی سرچ کنسول: کوئری، نمایش، جایگاه) مشخص کن این صفحه برای چه «کلمه کلیدی اصلی» ساخته شده است.',
+				'- کلمه اصلی باید با موضوع و نیت خود صفحه (تایتل و H1) بخواند، نه صرفاً پرنمایش‌ترین کوئری. مثال: صفحه دسته «کفی ورزشی» کلمه اصلی‌اش «کفی ورزشی» است حتی اگر برای «کفی» نمایش بیشتری بگیرد؛ «کفی» کلمه کلی‌تر است و نباید کلمه اصلی این صفحه باشد.',
+				'- برای صفحه محصول، نام محصول/مدل؛ برای مقاله، موضوع اصلی مقاله؛ برای دسته، نام دسته به شکلی که کاربر جستجو می‌کند.',
+				'- secondary: کلمات فرعی و هم‌کانسپتی که همین صفحه باید پوشش دهد (هم‌معنی، نسخه‌های خرید/قیمت، زیرموضوع‌ها) — نه کلمات کلی‌تر یا موضوعات صفحات دیگر.',
+				'- id هر صفحه را عیناً برگردان.',
+			) ),
+		),
+		'focus'     => array(
+			'label'  => 'Focus و هدف‌گذاری هوشمند',
+			'tokens' => 4000,
+			'schema' => sap_ai_obj( array( 'focuses' => array( 'type' => 'array', 'items' => sap_ai_obj( array(
+				'ref'           => array( 'type' => 'string', 'description' => 'ref ورودی را عیناً برگردان' ),
+				'name'          => array( 'type' => 'string', 'description' => 'نام فارسی کوتاه و گویا، مثل «کفی طبی ورزشی»' ),
+				'goal'          => array( 'type' => 'string', 'description' => 'هدف مشخص و قابل اندازه‌گیری با عدد و مهلت' ),
+				'metric'        => array( 'type' => 'string', 'enum' => array_keys( sap_kpi_metrics() ) ),
+				'target'        => array( 'type' => 'number' ),
+				'months'        => array( 'type' => 'integer', 'description' => '۱ تا ۶ ماه' ),
+				'potential'     => array( 'type' => 'integer', 'description' => '۰ تا ۱۰: ظرفیت رشد (نمایش، حجم جستجو، کلمات نزدیک صفحه اول)' ),
+				'value'         => array( 'type' => 'integer', 'description' => '۰ تا ۱۰: ارزش کسب‌وکاری (نیت خرید، کلیک فعلی)' ),
+				'urgency'       => array( 'type' => 'integer', 'description' => '۰ تا ۱۰: بحرانی بودن (افت، ایرادها، رقبا)' ),
+				'weight'        => array( 'type' => 'number', 'description' => '۱ تا ۳' ),
+				'metric_reason' => array( 'type' => 'string', 'description' => 'چرا این شاخص برای شروع بهترین است' ),
+				'rationale'     => array( 'type' => 'string', 'description' => 'دلیل اولویت با استناد به عدد' ),
+				'first_steps'   => array( 'type' => 'array', 'items' => $str, 'description' => '۲ تا ۴ اقدام اول' ),
+			) ) ) ) ),
+			'task'   => implode( "\n", array(
+				'این‌ها بخش‌های سایت هستند که می‌توانند Focus (تمرکز) پروژه سئو باشند، با داده واقعی هر بخش: کلیک و نمایش ۲۸ روز و ۲۸ روز قبل، تعداد کلمات رتبه‌دار و صفحه اول و رتبه ۱ تا ۳، کوئری‌های اصلی، حجم جستجوی کلمات کلاستر و تعداد ایرادها. existing=true یعنی این Focus از قبل تعریف شده است.',
+				'برای هر بخش:',
+				'- name: نام فارسی کوتاه و گویا بر اساس عنوان صفحه و کوئری‌ها (هرگز نامک انگلیسی).',
+				'- metric: بهترین شاخص شروع. قاعده: اگر کلمات هدف هنوز صفحه اول نیستند (top10 کم ولی ranking زیاد)، top10؛ اگر صفحه اول هستند ولی کلیک کم است، clicks؛ اگر بخش تازه است و رتبه ندارد، impressions؛ اگر صفحه اول تثبیت شده، top3. دلیل را در metric_reason بنویس.',
+				'- target و months: هدف واقع‌بینانه نسبت به مقدار فعلی همان شاخص (current) و ظرفیت (کلمات نزدیک صفحه اول، حجم جستجو). goal را یک جمله با عدد فعلی، عدد هدف و مهلت بنویس.',
+				'- potential و value و urgency را صادقانه نمره بده و weight را بین ۱ (کم‌اهمیت) تا ۳ (حیاتی) از آن‌ها نتیجه بگیر. rationale را با عدد بنویس.',
+				'- first_steps: اولین اقدام‌های مشخص (با نام صفحه/کلمه).',
+				'بخش‌ها را به ترتیب اولویت (بیشترین weight اول) برگردان.',
+			) ),
+		),
 		'cannibal'  => array(
 			'label'  => 'کنیبالیزیشن هوشمند',
 			'tokens' => 3000,
+			'batch'  => array( 'in' => 'candidates', 'out' => 'items', 'size' => 10 ),
 			'schema' => sap_ai_obj( array( 'items' => array( 'type' => 'array', 'items' => sap_ai_obj( array(
 				'query'       => $str,
 				'verdict'     => array( 'type' => 'string', 'enum' => array( 'real', 'not_cannibal', 'check' ) ),
@@ -516,12 +590,14 @@ function sap_ai_stages() {
 				'- کوئری برند یا ناوبری (نام سایت/برند) که صفحه اصلی و فروشگاه/دسته را نشان می‌دهد، کنیبال نیست (not_cannibal).',
 				'- اگر نیت صفحات متفاوت است (مثلاً مقاله راهنما در برابر صفحه دسته فروش) و هر کدام نقش خود را دارند، معمولاً کنیبال نیست مگر جایگاه هر دو را پایین نگه داشته باشد.',
 				'- کنیبال واقعی (real): دو صفحه با نیت یکسان که نمایش و جایگاه را بین خود تقسیم کرده‌اند. صفحه اصلی را در primary_url و اقدام دقیق (ادغام، تمایز محتوا، کنونیکال، لینک داخلی با انکر، ریدایرکت) را در action بنویس.',
+				'- primary_keyword هر صفحه کلمه‌ای است که آن صفحه برایش ساخته شده (نقشه کلمات). اگر کوئری کلمه اصلی هیچ‌کدام نیست یا کلی‌تر از کلمه اصلی صفحه است (مثل «کفی» برای صفحه «کفی ورزشی»)، این نمایش جانبی/دابل ریزالت است، نه کنیبال (not_cannibal) — مگر اینکه صفحه اشتباه بالاتر از صاحب کلمه باشد.',
 				'- اگر مطمئن نیستی check بگذار و دلیل را بنویس.',
 			) ),
 		),
 		'content'   => array(
 			'label'  => 'صفحات و محتوا',
-			'tokens' => 6000,
+			'tokens' => 5000,
+			'batch'  => array( 'in' => 'pages', 'out' => 'pages', 'size' => 3 ),
 			'schema' => sap_ai_obj( array( 'pages' => array( 'type' => 'array', 'items' => sap_ai_obj( array(
 				'url'            => $str,
 				'diagnosis'      => $str,
@@ -585,6 +661,105 @@ function sap_ai_stages() {
 function sap_ai_stage_input( $project, $stage, $ctx ) {
 	$pid = $project['id'];
 	switch ( $stage ) {
+		case 'keymap':
+			$pages = array();
+			foreach ( sap_keymap( $pid ) as $k => $m ) {
+				if ( $m['confirmed'] || in_array( $m['source'], array( 'manual', 'sheet' ), true ) || ( $ctx['page_impr'][ $k ] ?? 0 ) < 1 ) {
+					continue;
+				}
+				$p = $ctx['pages'][ $k ] ?? null;
+				$q = array();
+				foreach ( array_slice( sap_sort( (array) ( $ctx['by_page'][ $k ] ?? array() ), 'impressions' ), 0, 10 ) as $r ) {
+					$q[] = array( $r['query'], $r['impressions'], round( $r['position'], 1 ) );
+				}
+				$pages[ $k ] = array(
+					'id'        => $m['id'],
+					'url'       => sap_short_url( $m['url'], 90 ),
+					'title'     => $p['title'] ?? $m['title'],
+					'h1'        => $p ? implode( ' | ', $p['h1'] ) : '',
+					'h2'        => $p ? array_slice( $p['h2'], 0, 5 ) : array(),
+					'type'      => $m['page_type'],
+					'queries'   => $q,
+				);
+			}
+			uksort( $pages, function ( $a, $b ) use ( $ctx ) {
+				return ( $ctx['page_impr'][ $b ] ?? 0 ) <=> ( $ctx['page_impr'][ $a ] ?? 0 );
+			} );
+			$pages = array_slice( array_values( $pages ), 0, 40 );
+			return $pages ? array( 'site' => sap_project_domain( $project ), 'brand_terms' => $project['brand_terms'], 'pages' => $pages ) : null;
+
+		case 'focus':
+			$cands = array();
+			foreach ( sap_focuses( $pid, true ) as $f ) {
+				$cands[ 'f' . $f['id'] ] = $f + array( 'existing' => true );
+			}
+			foreach ( sap_focus_suggestions( $project ) as $i => $sg ) {
+				$cands[ 's' . $i ] = array(
+					'name'         => $sg['name'],
+					'url_patterns' => sap_rows( $sg['url_patterns'] ),
+					'clusters'     => sap_list( $sg['clusters'] ),
+					'keywords'     => sap_list( $sg['keywords'] ),
+					'existing'     => false,
+				);
+			}
+			if ( ! $cands || empty( $ctx['gsc_qp']['rows'] ) ) {
+				return null;
+			}
+			$prev = array();
+			foreach ( (array) ( $ctx['gsc_pages']['prev'] ?? array() ) as $r ) {
+				$prev[] = $r;
+			}
+			$fcount = array();
+			foreach ( sap_findings_active( $pid ) as $f ) {
+				$fcount[ $f['focus_id'] ] = ( $fcount[ $f['focus_id'] ] ?? 0 ) + 1;
+			}
+			$out = array();
+			foreach ( $cands as $ref => $c ) {
+				$c['kw_set'] = sap_focus_keyword_set( $c, $ctx['sheet_clusters']['rows'] ?? array() );
+				$k           = sap_focus_kpis( $c, $pid );
+				$q           = array();
+				$near        = 0;
+				foreach ( $ctx['gsc_qp']['rows'] as $r ) {
+					if ( sap_url_matches( $r['page'], $c['url_patterns'] ) || isset( $c['kw_set'][ sap_kw_key( $r['query'] ) ] ) ) {
+						$q[] = $r;
+						if ( $r['position'] > 10 && $r['position'] <= 20 && $r['impressions'] >= 20 ) {
+							++$near;
+						}
+					}
+				}
+				$top = array();
+				foreach ( array_slice( sap_sort( $q, 'impressions' ), 0, 8 ) as $r ) {
+					$top[] = array( $r['query'], $r['impressions'], $r['clicks'], round( $r['position'], 1 ) );
+				}
+				$vol = 0;
+				foreach ( $c['kw_set'] as $kw ) {
+					$vol += sap_ctx_volume( $ctx, $kw );
+				}
+				$prev_clicks = 0;
+				foreach ( $prev as $r ) {
+					if ( $c['url_patterns'] && sap_url_matches( $r['page'], $c['url_patterns'] ) ) {
+						$prev_clicks += $r['clicks'];
+					}
+				}
+				$out[] = array(
+					'ref'            => $ref,
+					'existing'       => $c['existing'],
+					'name_now'       => $c['name'],
+					'section'        => implode( ' ', $c['url_patterns'] ),
+					'clusters'       => implode( '، ', $c['clusters'] ),
+					'keywords'       => implode( '، ', array_slice( $c['keywords'], 0, 5 ) ),
+					'current'        => $k ? array_intersect_key( $k, sap_kpi_metrics() ) : null,
+					'ranking_kws'    => $k['ranking'] ?? 0,
+					'near_page1'     => $near,
+					'clicks_prev28'  => $c['url_patterns'] ? $prev_clicks : null,
+					'cluster_volume' => $vol ?: null,
+					'issues'         => $c['existing'] ? ( $fcount[ $c['id'] ] ?? 0 ) : null,
+					'top_queries'    => $top,
+					'goal_now'       => $c['existing'] ? $c['goal'] : '',
+				);
+			}
+			return array( 'site' => sap_project_domain( $project ), 'columns_top_queries' => array( 'query', 'impressions', 'clicks', 'position' ), 'sections' => $out );
+
 		case 'cannibal':
 			$items = array();
 			foreach ( sap_findings_active( $pid, 500 ) as $f ) {
@@ -594,7 +769,8 @@ function sap_ai_stage_input( $project, $stage, $ctx ) {
 				$pages = array();
 				foreach ( (array) ( $f['evidence']['items'] ?? array() ) as $it ) {
 					$facts   = sap_ai_page_facts( $ctx, $it['url'] ?? '' );
-					$pages[] = array( 'url' => $facts['url'], 'title' => $facts['title'], 'position' => $it['pos'] ?? null, 'impressions' => $it['impr'] ?? null, 'clicks' => $it['clicks'] ?? null );
+					$km      = sap_keymap( $pid )[ sap_norm_url( $it['url'] ?? '' ) ] ?? null;
+					$pages[] = array( 'url' => $facts['url'], 'title' => $facts['title'], 'primary_keyword' => $km['primary_kw'] ?? '', 'intent' => $km['intent'] ?? '', 'position' => $it['pos'] ?? null, 'impressions' => $it['impr'] ?? null, 'clicks' => $it['clicks'] ?? null );
 				}
 				$items[] = array( 'query' => $f['keyword'], 'pages' => $pages );
 			}
@@ -612,10 +788,10 @@ function sap_ai_stage_input( $project, $stage, $ctx ) {
 			arsort( $urls );
 			$all = array_intersect_key( $ctx['page_impr'], $ctx['pages'] );
 			arsort( $all );
-			$pick = array_slice( array_keys( $urls + $all ), 0, 8 );
+			$pick = array_slice( array_keys( $urls + $all ), 0, 12 );
 			$out  = array();
 			foreach ( $pick as $k ) {
-				$out[] = sap_ai_page_facts( $ctx, $ctx['page_url'][ $k ] ?? $ctx['pages'][ $k ]['url'], 900 );
+				$out[] = sap_ai_page_facts( $ctx, $ctx['page_url'][ $k ] ?? $ctx['pages'][ $k ]['url'], 2500 );
 			}
 			return $out ? array( 'site' => sap_project_domain( $project ), 'focuses' => wp_list_pluck( $ctx['focuses'], 'name' ), 'pages' => $out ) : null;
 
@@ -742,17 +918,48 @@ function sap_ai_stage_run( $project, $stage, $force = false ) {
 			'داده‌های پروژه سئو در JSON زیر است: خلاصه سرچ کنسول، Focusها، یافته‌های قوانین (findings با id) و نتیجه تحلیل‌های تخصصی قبلی (stage_cannibal، stage_content، stage_links، stage_technical).',
 			'۱. وضعیت پروژه را تشخیص بده (summary)، سلامت هر حوزه را نمره ۰ تا ۱۰۰ بده (health) و برای هر Focus یک بینش کلیدی بنویس. نقاط قوت (wins) و ریسک‌ها (risks) را کوتاه فهرست کن.',
 			sprintf( '۲. اکشن پلن این ماه: ۸ تا ۱۵ کار مشخص در سقف %s ساعت، مرتب‌شده بر اساس اثر، با هفته پیشنهادی ۱ تا ۴. کارها را از نتایج تحلیل‌های تخصصی بساز و خروجی آماده آن‌ها را در deliverable بگذار: تایتل/متای پیشنهادی، FAQ، فهرست لینک‌های داخلی (مبدأ ← مقصد: انکر)، راه‌حل تکنیکال. کارهای هم‌نوع کوچک را در یک کار ادغام کن (مثلاً «۸ لینک داخلی به دسته X»). idهای finding مرتبط را در finding_ids بگذار. کارهای this_month را تکرار نکن.', sap_num( $project['capacity_hours'] ) ),
-			'',
-			wp_json_encode( $input, JSON_UNESCAPED_UNICODE ),
 		) );
 	} else {
-		$task = $def['task'] . "\n\n" . wp_json_encode( $input, JSON_UNESCAPED_UNICODE );
+		$task = $def['task'];
 	}
-	$res = sap_ai_request( sap_ai_system_prompt(), $task, $def['schema'], array( 'purpose' => 'analysis', 'max_tokens' => $def['tokens'], 'effort' => 'low' ) );
-	if ( is_wp_error( $res ) ) {
-		return $res;
+	// Big inputs go in small batches (one batch per call): no answer comes near the
+	// token limit, and each item gets the model's full attention.
+	$batch = $def['batch'] ?? null;
+	$opt   = 'sap_ai_prog_' . $project['id'] . '_' . $stage;
+	if ( $batch && count( (array) ( $input[ $batch['in'] ] ?? array() ) ) > $batch['size'] ) {
+		$prog = get_option( $opt );
+		if ( ! is_array( $prog ) || ( $prog['hash'] ?? '' ) !== $hash ) {
+			$prog = array( 'hash' => $hash, 'offset' => 0, 'out' => array(), 'partial' => 0 );
+		}
+		$all  = array_values( (array) $input[ $batch['in'] ] );
+		$part = $input;
+		$part[ $batch['in'] ] = array_slice( $all, $prog['offset'], $batch['size'] );
+		$res  = sap_ai_request( sap_ai_system_prompt(), $task . "\n\n" . wp_json_encode( $part, JSON_UNESCAPED_UNICODE ), $def['schema'], array( 'purpose' => 'analysis', 'max_tokens' => $def['tokens'], 'effort' => 'low' ) );
+		if ( is_wp_error( $res ) ) {
+			return $res;
+		}
+		$prog['out']      = array_merge( $prog['out'], array_values( array_filter( (array) ( $res[ $batch['out'] ] ?? array() ), 'is_array' ) ) );
+		$prog['partial'] += empty( $res['_partial'] ) ? 0 : 1;
+		$prog['cost']     = (float) ( $prog['cost'] ?? 0 ) + (float) ( sap_ai_usage()['last_cost'] ?? 0 );
+		$prog['offset']  += $batch['size'];
+		if ( $prog['offset'] < count( $all ) ) {
+			update_option( $opt, $prog, false );
+			return array( 'more' => true, 'summary_line' => sprintf( '%s از %s مورد تحلیل شد…', sap_num( $prog['offset'] ), sap_num( count( $all ) ) ) );
+		}
+		delete_option( $opt );
+		$res = array( $batch['out'] => $prog['out'], '_partial' => $prog['partial'] > 0 );
+	} else {
+		$res = sap_ai_request( sap_ai_system_prompt(), $task . "\n\n" . wp_json_encode( $input, JSON_UNESCAPED_UNICODE ), $def['schema'], array( 'purpose' => 'analysis', 'max_tokens' => $def['tokens'], 'effort' => 'low' ) );
+		if ( is_wp_error( $res ) ) {
+			return $res;
+		}
 	}
+	$partial = ! empty( $res['_partial'] );
+	unset( $res['_partial'] );
 	$res = sap_ai_stage_postprocess( $project, $stage, $res, $input );
+	if ( $partial ) {
+		$res['summary_line'] .= ' (بخشی از پاسخ به سقف طول رسید؛ موارد کامل نگه داشته شد.)';
+	}
 	sap_dataset_put( $project['id'], $key, $res, array(
 		'model' => sap_ai_model_for( 'analysis' ),
 		'hash'  => $hash,
@@ -773,6 +980,59 @@ function sap_ai_stage_postprocess( $project, $stage, $res, $input ) {
 		return array_values( array_map( 'strval', array_filter( (array) $v, 'is_scalar' ) ) );
 	};
 	switch ( $stage ) {
+		case 'keymap':
+			$by_id = array();
+			foreach ( sap_keymap( $project['id'] ) as $m ) {
+				$by_id[ $m['id'] ] = $m;
+			}
+			$n = 0;
+			foreach ( $list( $res['pages'] ?? array() ) as $p ) {
+				$m = $by_id[ (int) ( $p['id'] ?? 0 ) ] ?? null;
+				if ( ! $m || '' === trim( (string) ( $p['primary'] ?? '' ) ) ) {
+					continue;
+				}
+				sap_keymap_save( $project['id'], array(
+					'url'        => $m['url'],
+					'primary_kw' => (string) $p['primary'],
+					'secondary'  => $strs( $p['secondary'] ?? array() ),
+					'intent'     => array_key_exists( $p['intent'] ?? '', sap_keymap_intents() ) ? $p['intent'] : $m['intent'],
+					'page_type'  => array_key_exists( $p['page_type'] ?? '', sap_keymap_page_types() ) ? $p['page_type'] : $m['page_type'],
+					'reason'     => (string) ( $p['reason'] ?? '' ),
+					'source'     => 'ai',
+				) );
+				++$n;
+			}
+			// Re-run the rules so cannibalization is judged with the new keyword map.
+			$run = sap_run_detectors( $project );
+			sap_findings_sync( $project['id'], $run['findings'], $run['ran'] );
+			return array( 'pages' => array(), 'count' => $n, 'summary_line' => sprintf( 'کلمه اصلی %s صفحه تشخیص داده شد؛ در تب «نقشه کلمات» بررسی و تأیید کنید.', sap_num( $n ) ) );
+
+		case 'focus':
+			$by_ref = array();
+			foreach ( (array) ( $input['sections'] ?? array() ) as $sec ) {
+				$by_ref[ $sec['ref'] ] = $sec;
+			}
+			$out = array();
+			foreach ( $list( $res['focuses'] ?? array() ) as $f ) {
+				$f = wp_parse_args( $f, array( 'ref' => '', 'name' => '', 'goal' => '', 'metric' => 'clicks', 'target' => 0, 'months' => 3, 'potential' => 0, 'value' => 0, 'urgency' => 0, 'weight' => 1.5, 'metric_reason' => '', 'rationale' => '', 'first_steps' => array() ) );
+				if ( ! isset( $by_ref[ $f['ref'] ] ) || '' === trim( (string) $f['name'] ) ) {
+					continue;
+				}
+				$f['metric']      = array_key_exists( $f['metric'], sap_kpi_metrics() ) ? $f['metric'] : 'clicks';
+				$f['weight']      = min( 3, max( 1, (float) $f['weight'] ) );
+				$f['months']      = min( 12, max( 1, (int) $f['months'] ) );
+				$f['first_steps'] = $strs( $f['first_steps'] );
+				$f['existing']    = (bool) $by_ref[ $f['ref'] ]['existing'];
+				$f['current']     = $by_ref[ $f['ref'] ]['current'][ $f['metric'] ] ?? null;
+				$f['def']         = array(
+					'url_patterns' => str_replace( ' ', "\n", (string) $by_ref[ $f['ref'] ]['section'] ),
+					'clusters'     => str_replace( '، ', "\n", (string) $by_ref[ $f['ref'] ]['clusters'] ),
+					'keywords'     => str_replace( '، ', "\n", (string) $by_ref[ $f['ref'] ]['keywords'] ),
+				);
+				$out[]            = $f;
+			}
+			return array( 'focuses' => $out, 'summary_line' => sprintf( 'هدف‌گذاری و اولویت %s بخش سایت پیشنهاد شد.', sap_num( count( $out ) ) ) );
+
 		case 'cannibal':
 			$items = array();
 			$by_q  = array();

@@ -20,6 +20,7 @@ function sap_activity_sources() {
 		'system' => 'سیستم',
 		'agent'  => 'افزونه سایت',
 		'api'    => 'API',
+		'tool'   => 'سکان (هوش مصنوعی)',
 	);
 }
 

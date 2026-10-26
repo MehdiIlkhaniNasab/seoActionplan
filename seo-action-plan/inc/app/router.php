@@ -74,7 +74,7 @@ add_filter( 'query_vars', function ( $vars ) {
  * wp-admin keeps one menu item (and an admin-bar link) that opens the app.
  */
 add_action( 'admin_menu', function () {
-	add_menu_page( 'اکشن پلن سئو', 'اکشن پلن سئو', SAP_CAP_WORK, 'sap', '__return_null', 'dashicons-yes-alt', 3 );
+	add_menu_page( 'سُکان', 'سُکان (سئو)', SAP_CAP_WORK, 'sap', '__return_null', 'dashicons-yes-alt', 3 );
 } );
 add_action( 'load-toplevel_page_sap', function () {
 	wp_safe_redirect( sap_url() );
@@ -82,7 +82,7 @@ add_action( 'load-toplevel_page_sap', function () {
 } );
 add_action( 'admin_bar_menu', function ( $bar ) {
 	if ( sap_can_work() ) {
-		$bar->add_node( array( 'id' => 'sap', 'title' => 'اکشن پلن سئو', 'href' => sap_url() ) );
+		$bar->add_node( array( 'id' => 'sap', 'title' => 'سُکان', 'href' => sap_url() ) );
 	}
 }, 80 );
 
@@ -145,10 +145,11 @@ function sap_resolve_route( $route ) {
 			if ( $project ) {
 				$tabs = sap_project_tabs();
 				$tab  = sanitize_key( $parts[2] ?? 'overview' );
-				$tab  = array_key_exists( $tab, $tabs ) ? $tab : 'overview';
+				$all  = $tabs + array( 'content' => array( 'تحلیل و بازنویسی محتوا', 'log' ) ); // Pages reached from a task, not in the tab bar.
+				$tab  = array_key_exists( $tab, $all ) ? $tab : 'overview';
 				return array_merge( $out, array(
 					'view'    => 'project',
-					'title'   => $project['name'] . ' — ' . $tabs[ $tab ][0],
+					'title'   => $project['name'] . ' — ' . $all[ $tab ][0],
 					'nav'     => 'project',
 					'project' => $project,
 					'vars'    => array( 'project' => $project, 'tab' => $tab, 'tabs' => $tabs ),
