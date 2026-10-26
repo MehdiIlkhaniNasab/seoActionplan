@@ -116,6 +116,7 @@ foreach ( $tasks as $t ) {
 			<small class="sap-muted" dir="auto"><?php echo esc_html( sap_jdate( $ai_ds['fetched_at'] ) . ' · ' . ( $ai_ds['meta']['model'] ?? '' ) . ( isset( $ai_ds['meta']['cost'] ) ? ' · ' . sap_num( $ai_ds['meta']['cost'], 3 ) . ' دلار' : '' ) ); ?></small>
 		</div>
 		<p class="sap-ai-summary"><?php echo esc_html( $ai['summary'] ); ?></p>
+		<p><a href="<?php echo esc_url( sap_project_url( $pid, 'insights' ) ); ?>">جزئیات تحلیل: صفحات و محتوا، لینک داخلی، کنیبالیزیشن، تکنیکال و سرعت ←</a></p>
 		<?php if ( $ai['health'] ) : ?>
 			<div class="sap-health">
 				<?php

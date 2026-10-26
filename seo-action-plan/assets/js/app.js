@@ -77,6 +77,12 @@
 				var started = Date.now();
 				api('sync/' + project + '/' + li.getAttribute('data-step') + (force ? '?force=1' : ''), { method: 'POST' })
 					.then(function (res) {
+						if (res.more) {
+							// Resumable step: same step again until it reports done.
+							msg.textContent = res.msg || '…';
+							i--;
+							return;
+						}
 						li.className = res.ok ? (res.skipped ? 'is-skip' : 'is-ok') : 'is-err';
 						msg.textContent = (res.msg || '') + ' (' + Math.round((Date.now() - started) / 100) / 10 + ' ثانیه)';
 					})
@@ -114,7 +120,7 @@
 				fadeOut(form.closest('[data-sap-row]'));
 				return;
 			}
-			var card = form.closest('.sap-task');
+			var card = form.closest('.sap-task') || (document.querySelector('.sap-task.is-active'));
 			card.className = card.className.replace(/\bis-[a-z]+\b/g, '').trim() + ' is-' + status;
 			form.querySelectorAll('button[name="status"]').forEach(function (b) { b.hidden = b.value === status; });
 			var select = card.querySelector('select[name="status"]');
@@ -124,9 +130,10 @@
 				card.open = false;
 				col.insertBefore(card, col.querySelector('.sap-task'));
 				refreshCounts();
+				document.dispatchEvent(new Event('sap:task-moved'));
 			} else if (document.querySelector('.sap-board') || ['done', 'dropped', 'someday'].indexOf(status) !== -1) {
 				fadeOut(card);
-				setTimeout(refreshCounts, 300);
+				setTimeout(function () { refreshCounts(); document.dispatchEvent(new Event('sap:task-moved')); }, 300);
 			}
 		}).catch(function (e) { toast(e.message, true); }).then(function () { btn.disabled = false; });
 	});
@@ -214,10 +221,6 @@
 	/* ---- Flash messages fade; open the task named in the URL ---- */
 	var flash = document.querySelector('.sap-flash.is-ok');
 	if (flash) { setTimeout(function () { flash.classList.add('is-leaving'); }, 6000); }
-	if (location.hash && location.hash.indexOf('#task-') === 0) {
-		var t = document.querySelector(location.hash);
-		if (t && t.tagName === 'DETAILS') { t.open = true; t.scrollIntoView({ block: 'center' }); }
-	}
 
 	/* ---- Tag input: textarea[data-sap-tags] (one item per line) ---- */
 	document.querySelectorAll('textarea[data-sap-tags]').forEach(function (ta) {
@@ -298,8 +301,8 @@
 	document.addEventListener('click', function (ev) {
 		var btn = ev.target.closest('[data-sap-ai-task]');
 		if (!btn) { return; }
-		var card = btn.closest('.sap-task-body') || btn.parentNode;
-		var box = card.querySelector('[data-sap-ai-box]');
+		var scope = btn.closest('.sap-task-body') || btn.parentNode;
+		var box = scope.querySelector('[data-sap-ai-box]');
 		btn.classList.add('is-loading');
 		var label = btn.lastChild.textContent;
 		btn.lastChild.textContent = 'در حال نوشتن…';
@@ -339,5 +342,52 @@
 		form.querySelectorAll('input[name="' + parts[0] + '"]').forEach(function (r) { r.addEventListener('change', apply); });
 		apply();
 	});
+
+	/* ---- Task drawer: open a task beside the board instead of expanding it in place ---- */
+	var drawer = document.createElement('aside');
+	drawer.className = 'sap-drawer';
+	drawer.setAttribute('aria-hidden', 'true');
+	drawer.innerHTML = '<div class="sap-drawer-head"><span class="sap-drawer-title"></span><button type="button" class="sap-icon-btn" data-sap-drawer-close aria-label="بستن">✕</button></div><div class="sap-drawer-body"></div>';
+	var shade = document.createElement('div');
+	shade.className = 'sap-drawer-shade';
+	document.body.appendChild(shade);
+	document.body.appendChild(drawer);
+	var current = null;
+	function closeDrawer() {
+		if (!current) { return; }
+		current.card.appendChild(current.body);
+		current.card.classList.remove('is-active');
+		current = null;
+		document.body.classList.remove('drawer-open');
+		drawer.setAttribute('aria-hidden', 'true');
+	}
+	function openDrawer(card) {
+		closeDrawer();
+		var body = card.querySelector('.sap-task-body');
+		if (!body) { return; }
+		current = { card: card, body: body };
+		card.classList.add('is-active');
+		drawer.querySelector('.sap-drawer-title').textContent = card.querySelector('.sap-task-title').textContent;
+		drawer.querySelector('.sap-drawer-body').appendChild(body);
+		document.body.classList.add('drawer-open');
+		drawer.setAttribute('aria-hidden', 'false');
+		drawer.querySelector('.sap-drawer-body').scrollTop = 0;
+	}
+	document.addEventListener('click', function (ev) {
+		var sum = ev.target.closest('.sap-task > summary');
+		if (sum && !ev.target.closest('a, button, input')) {
+			ev.preventDefault();
+			openDrawer(sum.parentNode);
+			return;
+		}
+		if (ev.target.closest('[data-sap-drawer-close]') || ev.target === shade) { closeDrawer(); }
+	});
+	document.addEventListener('keydown', function (ev) { if (ev.key === 'Escape') { closeDrawer(); } });
+	// A status change moves the card: keep the drawer in sync, close when the card leaves the page.
+	document.addEventListener('sap:task-moved', function () { if (current && !document.body.contains(current.card)) { current = null; closeDrawer(); } });
+	if (location.hash && location.hash.indexOf('#task-') === 0) {
+		var target = document.querySelector(location.hash);
+		if (target && target.classList.contains('sap-task')) { target.open = false; openDrawer(target); target.scrollIntoView({ block: 'center' }); }
+	}
 
 })();

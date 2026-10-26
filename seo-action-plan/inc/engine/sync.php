@@ -24,8 +24,14 @@ function sap_sync_steps() {
 		'ss_rank'      => 'سئو سیگنال: ردیاب رتبه',
 		'ss_compare'   => 'سئو سیگنال: مقایسه با رقبا',
 		'ss_questions' => 'سئو سیگنال: سوالات کاربران',
-		'analyze'      => 'تحلیل و کشف ایرادها و فرصت‌ها',
-		'ai'           => 'تحلیل هوشمند و اکشن پلن پیشنهادی (هوش مصنوعی)',
+		'pages'        => 'خواندن محتوای صفحات کلیدی',
+		'cwv'          => 'Core Web Vitals (PageSpeed)',
+		'analyze'      => 'قوانین تحلیل: کشف ایرادها و فرصت‌ها',
+		'ai_cannibal'  => 'هوش مصنوعی ۱/۵: کنیبالیزیشن هوشمند',
+		'ai_content'   => 'هوش مصنوعی ۲/۵: تحلیل صفحات و محتوا',
+		'ai_links'     => 'هوش مصنوعی ۳/۵: لینک‌سازی داخلی',
+		'ai_technical' => 'هوش مصنوعی ۴/۵: تکنیکال، سایت‌مپ، اسکیما و سرعت',
+		'ai_plan'      => 'هوش مصنوعی ۵/۵: جمع‌بندی و اکشن پلن',
 		'writeback'    => 'نوشتن ستون‌های خودکار در گوگل شیت',
 	);
 }
@@ -63,11 +69,13 @@ function sap_sync_step( $project, $step, $force = false ) {
 function sap_sync_all( $project_id, $force = false, $scheduled = false ) {
 	$out = array();
 	foreach ( array_keys( sap_sync_steps() ) as $step ) {
-		if ( 'ai' === $step && $scheduled && ! sap_setting( 'ai_auto' ) ) {
-			continue; // The paid AI step runs on schedule only when enabled.
+		if ( 0 === strpos( $step, 'ai_' ) && $scheduled && ! sap_setting( 'ai_auto' ) ) {
+			continue; // The paid AI steps run on schedule only when enabled.
 		}
-		$project      = sap_project( $project_id ); // Fresh options each step.
-		$out[ $step ] = sap_sync_step( $project, $step, $force );
+		do {
+			$project      = sap_project( $project_id ); // Fresh options each step.
+			$out[ $step ] = sap_sync_step( $project, $step, $force );
+		} while ( ! empty( $out[ $step ]['more'] ) );
 	}
 	return $out;
 }
@@ -388,22 +396,145 @@ function sap_step_analyze( $project ) {
 	return array( 'msg' => sprintf( '%s قانون اجرا شد · %s یافته جدید، %s بروزرسانی، %s برطرف‌شده.', sap_num( count( $run['ran'] ) ), sap_num( $stats['new'] ), sap_num( $stats['updated'] ), sap_num( $stats['resolved'] ) ) );
 }
 
+/* ---- Page content & Core Web Vitals ------------------------------------ */
+
 /**
- * AI diagnosis + suggested plan.
+ * Read the key pages (resumable: continues on the next call while time runs out).
  */
-function sap_step_ai( $project, $force = false ) {
-	if ( ! sap_ai_connected() ) {
-		return sap_skip( 'کلید هوش مصنوعی وارد نشده؛ تحلیل هوشمند انجام نشد (تنظیمات › هوش مصنوعی).' );
+function sap_step_pages( $project, $force = false ) {
+	$ds    = sap_dataset( $project['id'], 'pages' );
+	$data  = $ds ? $ds['payload'] : array( 'pages' => array() );
+	$meta  = $ds ? $ds['meta'] : array();
+	$queue = (array) ( $meta['queue'] ?? array() );
+	if ( ! $queue ) {
+		$age = $ds ? ( current_time( 'timestamp' ) - strtotime( $ds['fetched_at'] ) ) / DAY_IN_SECONDS : 999; // phpcs:ignore
+		if ( ! $force && $age < 7 && ! empty( $data['pages'] ) ) {
+			return sap_skip( sprintf( '%s صفحه در %s روز اخیر خوانده شده؛ دوباره خوانده نمی‌شوند.', sap_num( count( $data['pages'] ) ), sap_num( floor( $age ) ) ) );
+		}
+		$queue = sap_pages_to_read( $project, 30 );
+		if ( ! $queue ) {
+			return sap_skip( 'هنوز صفحه‌ای برای خواندن نیست (اول سرچ کنسول را همگام کنید).' );
+		}
+		$data = array( 'pages' => array() );
+		$meta = array( 'errors' => array() );
 	}
-	$res = sap_ai_analyze( $project, $force );
+	$start = microtime( true );
+	while ( $queue && microtime( true ) - $start < 35 ) {
+		$url  = array_shift( $queue );
+		$page = sap_page_fetch( $url );
+		if ( is_wp_error( $page ) ) {
+			$meta['errors'][ $url ] = $page->get_error_message();
+			continue;
+		}
+		$data['pages'][ sap_norm_url( $url ) ] = $page;
+	}
+	$meta['queue'] = $queue;
+	$meta['count'] = count( $data['pages'] );
+	sap_dataset_put( $project['id'], 'pages', $data, $meta );
+	if ( $queue ) {
+		return array( 'more' => true, 'msg' => sprintf( '%s صفحه خوانده شد، %s صفحه باقی مانده…', sap_num( count( $data['pages'] ) ), sap_num( count( $queue ) ) ) );
+	}
+	$err = count( (array) $meta['errors'] );
+	return array( 'ok' => (bool) $data['pages'], 'msg' => sprintf( 'متن، تیترها، اسکیما و لینک‌های %s صفحه خوانده شد', sap_num( count( $data['pages'] ) ) ) . ( $err ? sprintf( ' (%s صفحه باز نشد)', sap_num( $err ) ) : '' ) . '.' );
+}
+
+/**
+ * URLs for Core Web Vitals: home, focus main pages, top pages.
+ */
+function sap_cwv_urls( $project ) {
+	$urls  = array();
+	$home  = $project['site_url'] ?: 'https://' . sap_project_domain( $project ) . '/';
+	$urls[ sap_norm_url( $home ) ] = $home;
+	$ctx = array( 'focuses' => sap_focus_context( $project['id'] ), 'sheet_clusters' => sap_dataset_payload( $project['id'], 'sheet_clusters' ), 'page_impr' => array(), 'page_url' => array() );
+	foreach ( (array) ( sap_dataset_payload( $project['id'], 'gsc_pages' )['cur'] ?? array() ) as $r ) {
+		$ctx['page_impr'][ sap_norm_url( $r['page'] ) ] = $r['impressions'];
+		$ctx['page_url'][ sap_norm_url( $r['page'] ) ]  = $r['page'];
+	}
+	foreach ( $ctx['focuses'] as $f ) {
+		$pillar = sap_focus_pillar( $ctx, $f['id'] );
+		if ( $pillar ) {
+			$urls[ sap_norm_url( $pillar ) ] = $pillar;
+		}
+	}
+	arsort( $ctx['page_impr'] );
+	foreach ( array_slice( array_keys( $ctx['page_impr'] ), 0, 3 ) as $k ) {
+		$urls[ $k ] = $ctx['page_url'][ $k ];
+	}
+	return array_slice( array_values( $urls ), 0, 4 );
+}
+
+/**
+ * Core Web Vitals of the key pages (mobile), resumable, refreshed weekly.
+ */
+function sap_step_cwv( $project, $force = false ) {
+	$ds    = sap_dataset( $project['id'], 'cwv' );
+	$data  = $ds ? $ds['payload'] : array( 'pages' => array() );
+	$meta  = $ds ? $ds['meta'] : array();
+	$queue = (array) ( $meta['queue'] ?? array() );
+	if ( ! $queue ) {
+		$age = $ds ? ( current_time( 'timestamp' ) - strtotime( $ds['fetched_at'] ) ) / DAY_IN_SECONDS : 999; // phpcs:ignore
+		if ( ! $force && $age < 7 && ! empty( $data['pages'] ) ) {
+			return sap_skip( 'Core Web Vitals در هفته اخیر گرفته شده.' );
+		}
+		$queue = sap_cwv_urls( $project );
+		$data  = array( 'pages' => array() );
+		$meta  = array( 'errors' => array() );
+	}
+	$start = microtime( true );
+	while ( $queue && microtime( true ) - $start < 20 ) {
+		$url = array_shift( $queue );
+		$psi = sap_psi_run( $url, 'mobile' );
+		if ( is_wp_error( $psi ) ) {
+			$meta['errors'][ $url ] = $psi->get_error_message();
+			continue;
+		}
+		$data['pages'][ sap_norm_url( $url ) ] = $psi;
+	}
+	$meta['queue'] = $queue;
+	sap_dataset_put( $project['id'], 'cwv', $data, $meta );
+	if ( $queue ) {
+		return array( 'more' => true, 'msg' => sprintf( '%s صفحه تست شد، %s صفحه باقی مانده…', sap_num( count( $data['pages'] ) ), sap_num( count( $queue ) ) ) );
+	}
+	if ( ! $data['pages'] ) {
+		return array( 'ok' => false, 'msg' => (string) ( array_values( (array) $meta['errors'] )[0] ?? 'PageSpeed پاسخی نداد.' ) );
+	}
+	return array( 'msg' => sprintf( 'Core Web Vitals موبایل برای %s صفحه کلیدی.', sap_num( count( $data['pages'] ) ) ) );
+}
+
+/* ---- AI stages --------------------------------------------------------- */
+
+function sap_step_ai_cannibal( $project, $force = false ) {
+	return sap_ai_stage_step( $project, 'cannibal', $force );
+}
+function sap_step_ai_content( $project, $force = false ) {
+	return sap_ai_stage_step( $project, 'content', $force );
+}
+function sap_step_ai_links( $project, $force = false ) {
+	return sap_ai_stage_step( $project, 'links', $force );
+}
+function sap_step_ai_technical( $project, $force = false ) {
+	return sap_ai_stage_step( $project, 'technical', $force );
+}
+function sap_step_ai_plan( $project, $force = false ) {
+	return sap_ai_stage_step( $project, 'plan', $force );
+}
+
+/**
+ * Run one AI stage as a sync step.
+ */
+function sap_ai_stage_step( $project, $stage, $force ) {
+	if ( ! sap_ai_connected() ) {
+		return sap_skip( 'کلید هوش مصنوعی وارد نشده (تنظیمات › هوش مصنوعی).' );
+	}
+	$res = sap_ai_stage_run( $project, $stage, $force );
 	if ( is_wp_error( $res ) ) {
 		return $res;
 	}
 	if ( ! empty( $res['skipped'] ) ) {
-		return sap_skip( 'داده‌ها از تحلیل هوشمند قبلی تغییری نکرده؛ همان تحلیل نگه داشته شد (بدون هزینه). برای تحلیل دوباره «بدون کش» را بزنید.' );
+		return sap_skip( $res['skipped'] );
 	}
 	$u = sap_ai_usage();
-	return array( 'msg' => sprintf( 'تشخیص وضعیت و %s کار پیشنهادی آماده شد · هزینه این تحلیل حدود %s دلار (این ماه %s از %s دلار).', sap_num( count( $res['plan'] ) ), sap_num( $u['last_cost'], 3 ), sap_num( $u['cost'], 2 ), sap_num( $u['budget'], 2 ) ) );
+	return array( 'msg' => $res['summary_line'] . sprintf( ' · هزینه حدود %s دلار (این ماه %s از %s دلار).', sap_num( $u['last_cost'], 3 ), sap_num( $u['cost'], 2 ), sap_num( $u['budget'], 2 ) ) );
 }
 
 /**

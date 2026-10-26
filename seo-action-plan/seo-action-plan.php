@@ -2,7 +2,7 @@
 /**
  * Plugin Name:       SEO Action Plan
  * Description:       مدیر سئو: تحلیل داده‌های سرچ کنسول، گوگل شیت، سئو سیگنال و اسکریمینگ فراگ، کشف ایرادها و فرصت‌ها، ساخت اکشن پلن ماهانه به روش GTD و ثبت صفر تا صد اقدامات برای گزارش سئو.
- * Version:           0.3.0
+ * Version:           0.4.0
  * Requires at least: 6.4
  * Requires PHP:      8.0
  * Author:            Mehdi Ilkhani Nasab
@@ -14,7 +14,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-const SAP_VERSION    = '0.3.0';
+const SAP_VERSION    = '0.4.0';
 const SAP_DB_VERSION = '2';
 const SAP_CAP        = 'sap_manage'; // Full access: projects, settings, plans.
 const SAP_CAP_WORK   = 'sap_work';   // Team members: their own tasks.
@@ -40,6 +40,8 @@ foreach ( array(
 	'connectors/seosignal',
 	'connectors/screaming-frog',
 	'connectors/llm',
+	'connectors/pages',
+	'connectors/pagespeed',
 	'engine/detectors',
 	'engine/kpi',
 	'engine/ai',

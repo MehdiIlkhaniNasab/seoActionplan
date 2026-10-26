@@ -23,7 +23,13 @@ function sap_dataset_labels() {
 		'ss_compare'     => 'سئو سیگنال: مقایسه با رقبا',
 		'ss_questions'   => 'سئو سیگنال: سوالات کاربران (Focusها)',
 		'crawl'          => 'Screaming Frog: آخرین خزش',
-		'ai_analysis'    => 'هوش مصنوعی: تحلیل و اکشن پلن',
+		'pages'          => 'محتوای صفحات کلیدی (متن، تیترها، اسکیما، لینک‌ها)',
+		'cwv'            => 'Core Web Vitals (PageSpeed Insights)',
+		'ai_cannibal'    => 'هوش مصنوعی: کنیبالیزیشن',
+		'ai_content'     => 'هوش مصنوعی: صفحات و محتوا',
+		'ai_links'       => 'هوش مصنوعی: لینک‌سازی داخلی',
+		'ai_technical'   => 'هوش مصنوعی: تکنیکال، اسکیما و سرعت',
+		'ai_analysis'    => 'هوش مصنوعی: جمع‌بندی و اکشن پلن',
 	);
 }
 

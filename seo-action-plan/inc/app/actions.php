@@ -63,7 +63,7 @@ add_action( 'admin_post_sap_save_settings', function () {
 		'ai_model_assist'      => preg_replace( '/[^a-zA-Z0-9._:\/-]/', '', (string) sap_post( 'ai_model_assist' ) ) ?: 'claude-haiku-5-5',
 		'ai_budget'            => max( 0, (float) sap_norm_text( sap_post( 'ai_budget', 10 ) ) ),
 	);
-	foreach ( array( 'google_client_secret', 'seosignal_key', 'anthropic_key', 'ai_gateway_key' ) as $k ) {
+	foreach ( array( 'google_client_secret', 'seosignal_key', 'anthropic_key', 'ai_gateway_key', 'psi_key' ) as $k ) {
 		$v = trim( (string) sap_post( $k ) );
 		if ( '' !== $v && false === strpos( $v, '•' ) ) {
 			$changes[ $k ] = sanitize_text_field( $v );

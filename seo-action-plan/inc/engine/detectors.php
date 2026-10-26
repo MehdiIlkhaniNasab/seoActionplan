@@ -44,6 +44,9 @@ function sap_detectors() {
 		'weak_links'     => array( 'لینک داخلی ضعیف', array( 'crawl', 'gsc_qp' ) ),
 		'noindex_impr'   => array( 'صفحات غیرقابل‌ایندکس با نمایش', array( 'crawl', 'gsc_qp' ) ),
 		'slow'           => array( 'پاسخ کند سرور', array( 'crawl', 'gsc_qp' ) ),
+		'schema'         => array( 'اسکیمای جاافتاده یا خراب', array( 'pages' ) ),
+		'img_alt'        => array( 'تصاویر بدون Alt', array( 'pages' ) ),
+		'cwv'            => array( 'Core Web Vitals ضعیف', array( 'cwv' ) ),
 	);
 }
 
@@ -343,6 +346,17 @@ function sap_detect_cannibal( $ctx ) {
 			return $r['impressions'] >= 0.1 * $total && $r['position'] <= 30;
 		} );
 		if ( count( $comp ) < 2 ) {
+			continue;
+		}
+		// Navigational: the home page already ranks top 3 (brand / site-name searches show home + shop).
+		$home_top = false;
+		foreach ( $comp as $r ) {
+			$path = trim( (string) wp_parse_url( $r['page'], PHP_URL_PATH ), '/' );
+			if ( '' === $path && $r['position'] <= 3 ) {
+				$home_top = true;
+			}
+		}
+		if ( $home_top ) {
 			continue;
 		}
 		$comp  = sap_sort( array_values( $comp ), 'impressions' );
@@ -1353,4 +1367,125 @@ function sap_detect_slow( $ctx ) {
 		'cols'     => array( 'page' => 'صفحه', 'rt' => 'زمان پاسخ (ثانیه)', 'impr' => 'نمایش' ),
 		'per_item' => 0.05,
 	) );
+}
+
+
+/* ---------------------------------------------------------------------------
+ * Page content detectors (page reader)
+ * ------------------------------------------------------------------------- */
+
+/**
+ * Expected schema types by page kind (from the URL).
+ */
+function sap_expected_schema( $url ) {
+	$path = strtolower( rawurldecode( (string) wp_parse_url( $url, PHP_URL_PATH ) ) );
+	if ( preg_match( '#/(product|shop/[^/]+/[^/]+|p)/[^/]+#', $path ) && false === strpos( $path, 'product-category' ) ) {
+		return array( 'Product', 'BreadcrumbList' );
+	}
+	if ( preg_match( '#/(blog|mag|article|news|\d{4}/\d{2})/#', $path ) ) {
+		return array( 'Article', 'BreadcrumbList' );
+	}
+	if ( false !== strpos( $path, 'product-category' ) || false !== strpos( $path, '/category/' ) ) {
+		return array( 'BreadcrumbList' );
+	}
+	return array();
+}
+
+/**
+ * Key pages missing the schema their page type needs, or with broken JSON-LD.
+ */
+function sap_detect_schema( $ctx ) {
+	$items = array();
+	foreach ( (array) ( $ctx['pages']['pages'] ?? array() ) as $p ) {
+		$have    = array_map( 'strtolower', $p['schema'] );
+		$missing = array();
+		foreach ( sap_expected_schema( $p['url'] ) as $type ) {
+			$found = false;
+			foreach ( $have as $h ) {
+				if ( false !== strpos( $h, strtolower( $type ) ) || ( 'Article' === $type && ( false !== strpos( $h, 'blogposting' ) || false !== strpos( $h, 'newsarticle' ) ) ) ) {
+					$found = true;
+				}
+			}
+			if ( ! $found ) {
+				$missing[] = $type;
+			}
+		}
+		if ( $missing || $p['schema_errors'] ) {
+			$items[] = array( 'url' => $p['url'], 'page' => sap_short_url( $p['url'], 60 ), 'missing' => implode( '، ', $missing ), 'errors' => $p['schema_errors'], 'have' => implode( '، ', array_slice( $p['schema'], 0, 5 ) ), 'impr' => sap_ctx_impr( $ctx, $p['url'] ) );
+		}
+	}
+	if ( ! $items ) {
+		return array();
+	}
+	return sap_crawl_list_findings( $ctx, $items, array(
+		'key'      => 'schema',
+		'context'  => 'onpage',
+		'title'    => 'اصلاح اسکیمای %s صفحه کلیدی',
+		'detail'   => 'این صفحات اسکیمای لازمِ نوع خودشان را ندارند یا JSON-LD خراب دارند (Product و Offer برای محصول، Article برای مقاله، BreadcrumbList برای همه). در Rank Math › Schema نوع مناسب را تنظیم کنید و با Rich Results Test بررسی کنید.',
+		'severity' => 40,
+		'cols'     => array( 'page' => 'صفحه', 'missing' => 'اسکیمای لازم', 'have' => 'اسکیمای فعلی', 'errors' => 'خطای JSON-LD' ),
+		'per_item' => 0.25,
+	) );
+}
+
+/**
+ * Images without alt text in the content of key pages.
+ */
+function sap_detect_img_alt( $ctx ) {
+	$items = array();
+	foreach ( (array) ( $ctx['pages']['pages'] ?? array() ) as $p ) {
+		if ( $p['no_alt'] >= 2 ) {
+			$items[] = array( 'url' => $p['url'], 'page' => sap_short_url( $p['url'], 60 ), 'no_alt' => $p['no_alt'], 'images' => $p['images'], 'impr' => sap_ctx_impr( $ctx, $p['url'] ) );
+		}
+	}
+	if ( ! $items ) {
+		return array();
+	}
+	return sap_crawl_list_findings( $ctx, $items, array(
+		'key'      => 'alt',
+		'context'  => 'onpage',
+		'title'    => 'افزودن متن Alt به تصاویر %s صفحه کلیدی',
+		'detail'   => 'Alt توصیفی با کلمه مرتبط هم برای دسترس‌پذیری و هم برای دیده شدن در جستجوی تصاویر لازم است.',
+		'severity' => 20,
+		'cols'     => array( 'page' => 'صفحه', 'no_alt' => 'بدون Alt', 'images' => 'کل تصاویر' ),
+		'per_item' => 0.25,
+	) );
+}
+
+/**
+ * Key pages whose Core Web Vitals (real users, else lab) are poor.
+ */
+function sap_detect_cwv( $ctx ) {
+	$out = array();
+	foreach ( (array) ( $ctx['cwv']['pages'] ?? array() ) as $c ) {
+		$field = $c['field'] ?: $c['origin'];
+		$bad   = array();
+		if ( $field ) {
+			foreach ( array( 'lcp' => 'LCP', 'inp' => 'INP', 'cls' => 'CLS' ) as $k => $label ) {
+				$m = $field[ $k ] ?? null;
+				if ( $m && in_array( $m['cat'], array( 'SLOW', 'AVERAGE' ), true ) ) {
+					$bad[] = array( 'm' => $label, 'v' => 'cls' === $k ? $m['p75'] : sap_num( $m['p75'] ) . ' ms', 'cat' => 'SLOW' === $m['cat'] ? 'ضعیف' : 'نیاز به بهبود' );
+				}
+			}
+		} elseif ( null !== $c['score'] && $c['score'] < 50 ) {
+			$bad[] = array( 'm' => 'امتیاز Lighthouse', 'v' => $c['score'], 'cat' => 'ضعیف' );
+		}
+		if ( ! $bad ) {
+			continue;
+		}
+		$poor  = count( array_filter( $bad, function ( $b ) {
+			return 'ضعیف' === $b['cat'];
+		} ) );
+		$out[] = array(
+			'key'      => sap_norm_url( $c['url'] ),
+			'context'  => 'technical',
+			'title'    => sprintf( 'بهبود Core Web Vitals موبایل %s (%s)', sap_short_url( $c['url'], 45 ), implode( '، ', array_column( $bad, 'm' ) ) ),
+			'detail'   => 'بر اساس PageSpeed Insights (داده واقعی کاربران کروم در صورت وجود). برای LCP: بهینه‌سازی و preload تصویر اصلی و کش صفحه؛ برای INP: کاهش جاوااسکریپت سنگین افزونه‌ها؛ برای CLS: ابعاد مشخص برای تصاویر و بنرها.',
+			'url'      => $c['url'],
+			'evidence' => array( 'cols' => array( 'm' => 'شاخص', 'v' => 'مقدار (p75)', 'cat' => 'وضعیت' ), 'items' => $bad ),
+			'severity' => $poor ? 55 : 35,
+			'effort'   => 3,
+		);
+	}
+	return $out;
 }

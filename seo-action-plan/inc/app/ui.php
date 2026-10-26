@@ -28,6 +28,7 @@ function sap_flash() {
 function sap_project_tabs() {
 	return array(
 		'overview' => array( 'نمای کلی', 'grid' ),
+		'insights' => array( 'تحلیل هوشمند', 'spark' ),
 		'findings' => array( 'ایرادها و فرصت‌ها', 'inbox' ),
 		'plan'     => array( 'اکشن پلن ماهانه', 'list' ),
 		'activity' => array( 'لاگ اقدامات', 'log' ),

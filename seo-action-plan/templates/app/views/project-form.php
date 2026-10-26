@@ -46,6 +46,10 @@ $new = ! $p['id'];
 		</label>
 	</div>
 
+	<label>نام برند (فارسی و انگلیسی)<textarea name="brand_terms" rows="1" data-sap-tags placeholder="مثلاً: شهر واکس"><?php echo esc_textarea( implode( "\n", $p['brand_terms'] ) ); ?></textarea>
+		<small>جستجوهای برند (مثل «شهر واکس» که صفحه اصلی و فروشگاه را نشان می‌دهد) فرصت یا کنیبالیزیشن حساب نمی‌شوند.</small>
+	</label>
+
 	<details class="sap-more" <?php echo $new ? '' : 'open'; ?>>
 		<summary>تنظیمات بیشتر <small>سئو سیگنال، رقبا، تب‌های شیت، ظرفیت ماه</small></summary>
 		<div class="sap-grid-3">
@@ -63,9 +67,7 @@ $new = ! $p['id'];
 			<label>رقبا (حداکثر ۳ دامنه)<textarea name="competitors" rows="2" dir="ltr" data-sap-tags placeholder="competitor.com"><?php echo esc_textarea( implode( "\n", $p['competitors'] ) ); ?></textarea>
 				<small>هر رقیب ماهی ۲ واحد سهمیه سئو سیگنال مصرف می‌کند.</small>
 			</label>
-			<label>کلمات برند<textarea name="brand_terms" rows="2" data-sap-tags placeholder="نام برند"><?php echo esc_textarea( implode( "\n", $p['brand_terms'] ) ); ?></textarea>
-				<small>کوئری‌های برند از تحلیل فرصت‌ها جدا می‌شوند.</small>
-			</label>
+
 		</div>
 		<div class="sap-grid-2">
 			<label>نام تب تقویم محتوا<input type="text" name="sheet_calendar_tab" value="<?php echo esc_attr( $p['sheet_calendar_tab'] ); ?>"></label>

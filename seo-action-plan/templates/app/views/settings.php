@@ -49,6 +49,9 @@ $auth  = sap_google_auth_url();
 		<label>JSON سرویس اکانت (روش جایگزین)<textarea name="google_service_account" rows="3" dir="ltr" placeholder="{ &quot;type&quot;: &quot;service_account&quot;, … }"><?php echo $s['google_service_account'] ? esc_textarea( '•••• ذخیره شده (' . sap_google_service_email() . ')' ) : ''; ?></textarea>
 			<small>ایمیل سرویس اکانت را در پراپرتی‌های سرچ کنسول (Restricted) اضافه کنید و گوگل شیت‌ها را با آن (Editor) به‌اشتراک بگذارید.</small>
 		</label>
+		<label>کلید API گوگل برای PageSpeed Insights (اختیاری)<input type="text" name="psi_key" dir="ltr" value="<?php echo esc_attr( sap_mask( $s['psi_key'] ) ); ?>" autocomplete="off">
+			<small>برای Core Web Vitals. بدون کلید هم کار می‌کند ولی سهمیه محدودتری دارد؛ PageSpeed Insights API را در Google Cloud فعال کنید.</small>
+		</label>
 		<p class="sap-muted">در Google Cloud Console دو API را فعال کنید: <b>Google Search Console API</b> و <b>Google Sheets API</b>. اگر از SeoReport استفاده می‌کنید می‌توانید از همان پروژه Google Cloud و همان OAuth Client استفاده کنید؛ فقط Redirect URI بالا را هم به Client اضافه کنید.</p>
 	</section>
 

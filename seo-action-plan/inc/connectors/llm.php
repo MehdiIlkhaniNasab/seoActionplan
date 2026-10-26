@@ -118,7 +118,7 @@ function sap_ai_track_usage( $model, $input, $output ) {
  * @return array|WP_Error
  */
 function sap_ai_request( $system, $user, $schema, $args = array() ) {
-	$args = wp_parse_args( $args, array( 'purpose' => 'analysis', 'max_tokens' => 12000, 'effort' => 'medium', 'timeout' => 240 ) );
+	$args = wp_parse_args( $args, array( 'purpose' => 'analysis', 'max_tokens' => 6000, 'effort' => 'low', 'timeout' => 300 ) );
 	if ( ! sap_ai_connected() ) {
 		return new WP_Error( 'sap_ai_key', 'کلید API هوش مصنوعی در تنظیمات وارد نشده است.' );
 	}
@@ -137,19 +137,26 @@ function sap_ai_request( $system, $user, $schema, $args = array() ) {
 
 /**
  * OpenAI-compatible Chat Completions (GapGPT and similar gateways).
+ *
+ * The answer is streamed (SSE): tokens keep flowing while the model writes, so
+ * proxies and gateways that cut idle connections after ~100 s do not drop long
+ * answers. The streamed text is assembled here once the response completes.
  */
 function sap_ai_request_gateway( $model, $system, $user, $schema, $args ) {
 	$base = untrailingslashit( esc_url_raw( sap_setting( 'ai_base_url', 'https://api.gapgpt.app/v1' ) ) );
 	// The schema is also stated in the prompt, so the answer is right even when response_format is ignored.
-	$system .= "\n\nپاسخ را فقط و فقط به صورت یک شیء JSON معتبر مطابق این JSON Schema بده، بدون هیچ متن یا توضیح اضافه و بدون ```:\n" . wp_json_encode( $schema, JSON_UNESCAPED_UNICODE );
+	$system .= "\n\nپاسخ را فقط و فقط به صورت یک شیء JSON معتبر مطابق این JSON Schema بده، بدون هیچ متن یا توضیح اضافه و بدون ```. کوتاه و دقیق بنویس:\n" . wp_json_encode( $schema, JSON_UNESCAPED_UNICODE );
 	$body = array(
-		'model'           => $model,
-		'max_tokens'      => (int) $args['max_tokens'],
-		'messages'        => array(
+		'model'            => $model,
+		'max_tokens'       => (int) $args['max_tokens'],
+		'stream'           => true,
+		'stream_options'   => array( 'include_usage' => true ),
+		'reasoning_effort' => 'low' === $args['effort'] ? 'low' : 'medium',
+		'messages'         => array(
 			array( 'role' => 'system', 'content' => $system ),
 			array( 'role' => 'user', 'content' => $user ),
 		),
-		'response_format' => array(
+		'response_format'  => array(
 			'type'        => 'json_schema',
 			'json_schema' => array( 'name' => 'seo_result', 'schema' => $schema, 'strict' => true ),
 		),
@@ -160,24 +167,32 @@ function sap_ai_request_gateway( $model, $system, $user, $schema, $args ) {
 			'headers' => array(
 				'Authorization' => 'Bearer ' . sap_setting( 'ai_gateway_key' ),
 				'Content-Type'  => 'application/json',
+				'Accept'        => 'text/event-stream, application/json',
 			),
 			'body'    => wp_json_encode( $body ),
 		) );
 	};
 	$res  = $send( $body );
 	$code = is_wp_error( $res ) ? 0 : (int) wp_remote_retrieve_response_code( $res );
-	// Some gateway/model pairs reject structured output: retry once in plain JSON mode.
+	// Some gateway/model pairs reject optional parameters: retry once with the plain request.
 	if ( in_array( $code, array( 400, 422 ), true ) ) {
-		unset( $body['response_format'] );
+		unset( $body['response_format'], $body['reasoning_effort'], $body['stream_options'] );
 		$res  = $send( $body );
 		$code = is_wp_error( $res ) ? 0 : (int) wp_remote_retrieve_response_code( $res );
 	}
 	if ( is_wp_error( $res ) ) {
-		return new WP_Error( 'sap_ai_http', 'اتصال به سرویس هوش مصنوعی ناموفق بود: ' . $res->get_error_message() );
+		$msg = $res->get_error_message();
+		if ( false !== strpos( $msg, 'cURL error 7' ) && defined( 'WP_PROXY_HOST' ) ) {
+			$msg = sprintf( 'پروکسی وردپرس (%s:%s) در دسترس نیست. پروکسی را روشن کنید یا برای GapGPT در wp-config.php بنویسید: define( \'WP_PROXY_BYPASS_HOSTS\', \'api.gapgpt.app\' );', WP_PROXY_HOST, defined( 'WP_PROXY_PORT' ) ? WP_PROXY_PORT : '' );
+		} elseif ( false !== strpos( $msg, 'cURL error 28' ) || false !== strpos( $msg, 'cURL error 56' ) ) {
+			$msg = 'اتصال وسط دریافت پاسخ قطع شد (پروکسی یا شبکه). دوباره امتحان کنید؛ اگر تکرار شد، GapGPT را از پروکسی معاف کنید: define( \'WP_PROXY_BYPASS_HOSTS\', \'api.gapgpt.app\' );';
+		}
+		return new WP_Error( 'sap_ai_http', 'اتصال به سرویس هوش مصنوعی ناموفق بود: ' . $msg );
 	}
-	$data = json_decode( wp_remote_retrieve_body( $res ), true );
+	$raw = (string) wp_remote_retrieve_body( $res );
 	if ( 200 !== $code ) {
-		$msg = (string) ( $data['error']['message'] ?? ( is_string( $data['error'] ?? null ) ? $data['error'] : 'HTTP ' . $code ) );
+		$data = json_decode( $raw, true );
+		$msg  = (string) ( $data['error']['message'] ?? ( is_string( $data['error'] ?? null ) ? $data['error'] : 'HTTP ' . $code ) );
 		if ( 401 === $code || 403 === $code ) {
 			return new WP_Error( 'sap_ai_auth', 'کلید API سرویس هوش مصنوعی نامعتبر است یا به این مدل دسترسی ندارد.' );
 		}
@@ -189,18 +204,63 @@ function sap_ai_request_gateway( $model, $system, $user, $schema, $args ) {
 		}
 		return new WP_Error( 'sap_ai_http', 'خطای سرویس هوش مصنوعی: ' . mb_substr( $msg, 0, 300 ) );
 	}
-	$in   = (int) ( $data['usage']['prompt_tokens'] ?? 0 );
-	$out  = (int) ( $data['usage']['completion_tokens'] ?? 0 );
-	sap_ai_track_usage( $model, $in, $out );
-	$text = (string) ( $data['choices'][0]['message']['content'] ?? '' );
-	if ( 'length' === ( $data['choices'][0]['finish_reason'] ?? '' ) ) {
-		return new WP_Error( 'sap_ai_truncated', 'پاسخ هوش مصنوعی ناقص ماند (طولانی‌تر از سقف). دوباره امتحان کنید.' );
-	}
-	$json = sap_ai_extract_json( $text );
+	$parsed = sap_ai_parse_stream( $raw );
+	sap_ai_track_usage( $model, $parsed['in'], $parsed['out'] );
+	$json = sap_ai_extract_json( $parsed['text'] );
 	if ( null === $json ) {
+		if ( 'length' === $parsed['finish'] ) {
+			return new WP_Error( 'sap_ai_truncated', 'پاسخ هوش مصنوعی به سقف طول رسید و ناقص ماند. دوباره امتحان کنید.' );
+		}
 		return new WP_Error( 'sap_ai_parse', 'پاسخ هوش مصنوعی قابل خواندن نبود؛ دوباره امتحان کنید یا مدل دیگری انتخاب کنید.' );
 	}
 	return $json;
+}
+
+/**
+ * Assemble a Chat Completions answer from an SSE stream (or a plain JSON body,
+ * when the gateway ignored stream:true).
+ *
+ * @return array{text: string, in: int, out: int, finish: string}
+ */
+function sap_ai_parse_stream( $raw ) {
+	$out = array( 'text' => '', 'in' => 0, 'out' => 0, 'finish' => '' );
+	$one = json_decode( $raw, true );
+	if ( is_array( $one ) && isset( $one['choices'] ) ) {
+		$out['text']   = (string) ( $one['choices'][0]['message']['content'] ?? '' );
+		$out['finish'] = (string) ( $one['choices'][0]['finish_reason'] ?? '' );
+		$out['in']     = (int) ( $one['usage']['prompt_tokens'] ?? 0 );
+		$out['out']    = (int) ( $one['usage']['completion_tokens'] ?? 0 );
+		return $out;
+	}
+	foreach ( preg_split( '/\r?\n/', $raw ) as $line ) {
+		$line = trim( $line );
+		if ( 0 !== strpos( $line, 'data:' ) ) {
+			continue;
+		}
+		$payload = trim( substr( $line, 5 ) );
+		if ( '' === $payload || '[DONE]' === $payload ) {
+			continue;
+		}
+		$chunk = json_decode( $payload, true );
+		if ( ! is_array( $chunk ) ) {
+			continue;
+		}
+		foreach ( (array) ( $chunk['choices'] ?? array() ) as $c ) {
+			$out['text'] .= (string) ( $c['delta']['content'] ?? '' );
+			if ( ! empty( $c['finish_reason'] ) ) {
+				$out['finish'] = (string) $c['finish_reason'];
+			}
+		}
+		if ( ! empty( $chunk['usage'] ) ) {
+			$out['in']  = (int) ( $chunk['usage']['prompt_tokens'] ?? $out['in'] );
+			$out['out'] = (int) ( $chunk['usage']['completion_tokens'] ?? $out['out'] );
+		}
+	}
+	// No usage reported: estimate (Persian ≈ 2.5 characters per token) so the budget still counts it.
+	if ( ! $out['out'] && '' !== $out['text'] ) {
+		$out['out'] = (int) ceil( mb_strlen( $out['text'] ) / 2.5 );
+	}
+	return $out;
 }
 
 /**

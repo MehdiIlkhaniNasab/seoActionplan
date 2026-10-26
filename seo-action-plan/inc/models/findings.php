@@ -147,6 +147,18 @@ function sap_findings( $project_id, $args = array() ) {
 }
 
 /**
+ * Findings still in play (open or planned), highest score first. Used by the AI,
+ * so planning a finding does not count as a change in the facts.
+ */
+function sap_findings_active( $project_id, $limit = 300 ) {
+	$rows = array_merge( sap_findings( $project_id, array( 'status' => 'open', 'limit' => $limit ) ), sap_findings( $project_id, array( 'status' => 'planned', 'limit' => $limit ) ) );
+	usort( $rows, function ( $a, $b ) {
+		return $b['score'] <=> $a['score'] ?: $a['id'] <=> $b['id'];
+	} );
+	return array_slice( $rows, 0, $limit );
+}
+
+/**
  * One finding.
  */
 function sap_finding( $id ) {

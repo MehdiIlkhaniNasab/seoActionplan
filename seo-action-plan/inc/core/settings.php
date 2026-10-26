@@ -7,7 +7,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-const SAP_SECRET_KEYS = array( 'google_client_secret', 'google_refresh_token', 'google_service_account', 'seosignal_key', 'anthropic_key', 'ai_gateway_key' );
+const SAP_SECRET_KEYS = array( 'google_client_secret', 'google_refresh_token', 'google_service_account', 'seosignal_key', 'anthropic_key', 'ai_gateway_key', 'psi_key' );
 
 /**
  * Default settings.
@@ -31,6 +31,7 @@ function sap_settings_defaults() {
 		'ai_budget'              => 10,  // Monthly AI budget in USD; AI stops when reached.
 		'ai_auto'                => 0,   // Run the AI analysis in the scheduled weekly sync too (costs API credit).
 		'use_recurring'          => 0,   // Add the recurring tasks below when a plan is generated.
+		'psi_key'                => '',
 		'seosignal_daily_cap'    => 40,  // Of the 50 daily SEO Signal requests, leave some for the panel / SeoReport.
 		'seosignal_cache_days'   => 25,  // Search volumes are monthly data: refresh at most once a month.
 		'min_impressions'        => 50,  // Striking distance / cannibalization noise floor (28 days).
