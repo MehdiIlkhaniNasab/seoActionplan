@@ -57,9 +57,13 @@ add_action( 'admin_post_sap_save_settings', function () {
 		'recurring'            => sanitize_textarea_field( sap_post( 'recurring' ) ),
 		'use_recurring'        => sap_post( 'use_recurring' ) ? 1 : 0,
 		'ai_auto'              => sap_post( 'ai_auto' ) ? 1 : 0,
-		'ai_model'             => array_key_exists( sap_post( 'ai_model' ), sap_ai_models() ) ? sap_post( 'ai_model' ) : 'claude-opus-5-5',
+		'ai_provider'          => 'anthropic' === sap_post( 'ai_provider' ) ? 'anthropic' : 'gateway',
+		'ai_base_url'          => esc_url_raw( trim( (string) sap_post( 'ai_base_url' ) ) ) ?: 'https://api.gapgpt.app/v1',
+		'ai_model'             => preg_replace( '/[^a-zA-Z0-9._:\/-]/', '', (string) sap_post( 'ai_model' ) ) ?: 'claude-sonnet-5-5',
+		'ai_model_assist'      => preg_replace( '/[^a-zA-Z0-9._:\/-]/', '', (string) sap_post( 'ai_model_assist' ) ) ?: 'claude-haiku-5-5',
+		'ai_budget'            => max( 0, (float) sap_norm_text( sap_post( 'ai_budget', 10 ) ) ),
 	);
-	foreach ( array( 'google_client_secret', 'seosignal_key', 'anthropic_key' ) as $k ) {
+	foreach ( array( 'google_client_secret', 'seosignal_key', 'anthropic_key', 'ai_gateway_key' ) as $k ) {
 		$v = trim( (string) sap_post( $k ) );
 		if ( '' !== $v && false === strpos( $v, '•' ) ) {
 			$changes[ $k ] = sanitize_text_field( $v );

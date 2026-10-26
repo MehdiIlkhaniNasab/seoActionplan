@@ -182,28 +182,81 @@ function sap_ai_analysis_schema() {
 }
 
 /**
+ * Fill in anything a model left out, so the views never break on a partial answer.
+ */
+function sap_ai_normalize_analysis( $res ) {
+	$res = wp_parse_args( (array) $res, array( 'summary' => '', 'health' => array(), 'focus_insights' => array(), 'wins' => array(), 'risks' => array(), 'plan' => array() ) );
+	foreach ( array( 'health', 'focus_insights', 'wins', 'risks', 'plan' ) as $k ) {
+		$res[ $k ] = is_array( $res[ $k ] ) ? array_values( $res[ $k ] ) : array();
+	}
+	$res['summary'] = (string) $res['summary'];
+	$res['wins']    = array_values( array_filter( array_map( 'strval', array_filter( $res['wins'], 'is_scalar' ) ) ) );
+	$res['risks']   = array_values( array_filter( array_map( 'strval', array_filter( $res['risks'], 'is_scalar' ) ) ) );
+	$res['health']  = array_values( array_filter( array_map( function ( $h ) {
+		return is_array( $h ) ? wp_parse_args( $h, array( 'area' => '', 'score' => 0, 'note' => '' ) ) : null;
+	}, $res['health'] ) ) );
+	$res['focus_insights'] = array_values( array_filter( array_map( function ( $f ) {
+		return is_array( $f ) ? wp_parse_args( $f, array( 'focus' => '', 'insight' => '' ) ) : null;
+	}, $res['focus_insights'] ) ) );
+	$areas = sap_contexts();
+	$plan  = array();
+	foreach ( $res['plan'] as $item ) {
+		if ( ! is_array( $item ) || '' === trim( (string) ( $item['title'] ?? '' ) ) ) {
+			continue;
+		}
+		$item           = wp_parse_args( $item, array( 'why' => '', 'steps' => array(), 'deliverable' => '', 'area' => 'content_update', 'impact' => 'medium', 'effort_hours' => 1, 'week' => 1, 'focus' => '', 'url' => '', 'keyword' => '', 'finding_ids' => array() ) );
+		$item['steps']  = array_values( array_map( 'strval', array_filter( (array) $item['steps'], 'is_scalar' ) ) );
+		$item['area']   = array_key_exists( $item['area'], $areas ) ? $item['area'] : 'content_update';
+		$item['impact'] = in_array( $item['impact'], array( 'high', 'medium', 'low' ), true ) ? $item['impact'] : 'medium';
+		foreach ( array( 'title', 'why', 'deliverable', 'focus', 'url', 'keyword' ) as $k ) {
+			$item[ $k ] = is_scalar( $item[ $k ] ) ? (string) $item[ $k ] : '';
+		}
+		$plan[] = $item;
+	}
+	$res['plan'] = $plan;
+	return $res;
+}
+
+/**
  * Run the AI analysis and store it as the "ai_analysis" dataset.
  *
- * @return array|WP_Error The analysis.
+ * When the project's data has not changed since the last analysis, the stored one
+ * is kept and no AI call is made (unless forced).
+ *
+ * @return array|WP_Error The analysis (with "skipped" => true when reused).
  */
-function sap_ai_analyze( $project ) {
+function sap_ai_analyze( $project, $force = false ) {
 	$brief = sap_ai_brief( $project );
 	if ( empty( $brief['search_console'] ) && empty( $brief['findings'] ) ) {
 		return new WP_Error( 'sap_ai_nodata', 'هنوز داده‌ای برای تحلیل نیست؛ اول سرچ کنسول را متصل و همگام‌سازی کنید.' );
 	}
+	// Fingerprint of the facts only (not the plan being built or the day of the month).
+	$facts = $brief;
+	unset( $facts['this_month'], $facts['project']['days_left'] );
+	foreach ( $facts['findings'] as &$f ) {
+		unset( $f['id'], $f['score'] );
+	}
+	unset( $f );
+	$hash = md5( wp_json_encode( $facts ) . '|' . sap_ai_model_for( 'analysis' ) );
+	$old  = sap_dataset( $project['id'], 'ai_analysis' );
+	if ( ! $force && $old && ( $old['meta']['hash'] ?? '' ) === $hash ) {
+		$old['payload']['skipped'] = true;
+		return $old['payload'];
+	}
 	$task = implode( "\n", array(
 		'داده‌های پروژه سئو در JSON زیر است: نتایج سرچ کنسول (۲۸ روز)، وضعیت تکنیکال خزش، شیت محتوا و کلاسترینگ، ردیاب رتبه و یافته‌های قوانین تحلیل (findings) که با id مشخص شده‌اند.',
-		'۱. وضعیت پروژه را تشخیص بده (summary)، سلامت هر حوزه را نمره بده (health) و برای هر Focus یک بینش کلیدی بنویس.',
+		'۱. وضعیت پروژه را تشخیص بده (summary)، سلامت هر حوزه را نمره ۰ تا ۱۰۰ بده (health) و برای هر Focus یک بینش کلیدی بنویس.',
 		'۲. مهم‌ترین دستاوردها (wins) و ریسک‌ها (risks) را کوتاه فهرست کن.',
-		sprintf( '۳. اکشن پلن این ماه را بچین: ۸ تا ۱۵ کار مشخص که جمع زمانشان از %s ساعت بیشتر نشود، مرتب‌شده بر اساس اولویت، با هفته پیشنهادی. هر کار که از یک یا چند finding آمده، idهای آن را در finding_ids بگذار. کارهایی که در this_month هستند را تکرار نکن.', sap_num( $project['capacity_hours'] ) ),
-		'برای کارهای تایتل/متا، FAQ و لینک داخلی، خروجی آماده را در deliverable بنویس.',
+		sprintf( '۳. اکشن پلن این ماه را بچین: ۸ تا ۱۵ کار مشخص که جمع زمانشان از %s ساعت بیشتر نشود، مرتب‌شده بر اساس اولویت، با هفته پیشنهادی ۱ تا ۴. هر کار که از یک یا چند finding آمده، idهای آن را در finding_ids بگذار. کارهایی که در this_month هستند را تکرار نکن.', sap_num( $project['capacity_hours'] ) ),
+		'برای کارهای تایتل/متا، FAQ و لینک داخلی، خروجی آماده را در deliverable بنویس؛ در غیر این صورت رشته خالی.',
 		'',
 		wp_json_encode( $brief, JSON_UNESCAPED_UNICODE ),
 	) );
-	$res = sap_ai_request( sap_ai_system_prompt(), $task, sap_ai_analysis_schema(), array( 'max_tokens' => 16000, 'effort' => 'medium' ) );
+	$res = sap_ai_request( sap_ai_system_prompt(), $task, sap_ai_analysis_schema(), array( 'purpose' => 'analysis', 'max_tokens' => 12000, 'effort' => 'medium' ) );
 	if ( is_wp_error( $res ) ) {
 		return $res;
 	}
+	$res   = sap_ai_normalize_analysis( $res );
 	$valid = array_flip( array_column( $brief['findings'], 'id' ) );
 	foreach ( $res['plan'] as $i => $item ) {
 		$res['plan'][ $i ]['finding_ids'] = array_values( array_filter( array_map( 'intval', (array) $item['finding_ids'] ), function ( $id ) use ( $valid ) {
@@ -212,9 +265,11 @@ function sap_ai_analyze( $project ) {
 		$res['plan'][ $i ]['ref'] = 'ai' . substr( md5( $item['title'] . '|' . $item['url'] ), 0, 14 );
 	}
 	sap_dataset_put( $project['id'], 'ai_analysis', $res, array(
-		'model'  => sap_setting( 'ai_model', 'claude-opus-5-5' ),
+		'model'  => sap_ai_model_for( 'analysis' ),
 		'period' => sap_period_current(),
 		'count'  => count( $res['plan'] ),
+		'hash'   => $hash,
+		'cost'   => sap_ai_usage()['last_cost'] ?? 0,
 	) );
 	return $res;
 }
@@ -352,11 +407,15 @@ function sap_ai_task_assist( $task ) {
 		'',
 		wp_json_encode( $data, JSON_UNESCAPED_UNICODE ),
 	) );
-	$res = sap_ai_request( sap_ai_system_prompt(), $prompt, $schema, array( 'max_tokens' => 8000, 'effort' => 'low', 'timeout' => 180 ) );
+	$res = sap_ai_request( sap_ai_system_prompt(), $prompt, $schema, array( 'purpose' => 'assist', 'max_tokens' => 4000, 'effort' => 'low', 'timeout' => 150 ) );
 	if ( is_wp_error( $res ) ) {
 		return $res;
 	}
-	$text = trim( $res['output'] );
+	$text = trim( is_scalar( $res['output'] ?? '' ) ? (string) ( $res['output'] ?? '' ) : '' );
+	$res['tips'] = array_values( array_filter( (array) ( $res['tips'] ?? array() ), 'is_scalar' ) );
+	if ( '' === $text ) {
+		return new WP_Error( 'sap_ai_empty', 'هوش مصنوعی خروجی‌ای برنگرداند؛ دوباره امتحان کنید.' );
+	}
 	if ( $res['tips'] ) {
 		$text .= "\n\nنکات:\n• " . implode( "\n• ", $res['tips'] );
 	}

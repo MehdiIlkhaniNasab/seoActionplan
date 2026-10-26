@@ -7,7 +7,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-const SAP_SECRET_KEYS = array( 'google_client_secret', 'google_refresh_token', 'google_service_account', 'seosignal_key', 'anthropic_key' );
+const SAP_SECRET_KEYS = array( 'google_client_secret', 'google_refresh_token', 'google_service_account', 'seosignal_key', 'anthropic_key', 'ai_gateway_key' );
 
 /**
  * Default settings.
@@ -22,8 +22,13 @@ function sap_settings_defaults() {
 		'google_scopes'          => '',
 		'google_service_account' => '',
 		'seosignal_key'          => '',
+		'ai_provider'            => 'gateway', // gateway (OpenAI-compatible, e.g. GapGPT) | anthropic (direct).
+		'ai_base_url'            => 'https://api.gapgpt.app/v1',
+		'ai_gateway_key'         => '',
 		'anthropic_key'          => '',
-		'ai_model'               => 'claude-opus-5-5',
+		'ai_model'               => 'claude-sonnet-5-5', // Analysis.
+		'ai_model_assist'        => 'claude-haiku-5-5',  // «بنویس برام».
+		'ai_budget'              => 10,  // Monthly AI budget in USD; AI stops when reached.
 		'ai_auto'                => 0,   // Run the AI analysis in the scheduled weekly sync too (costs API credit).
 		'use_recurring'          => 0,   // Add the recurring tasks below when a plan is generated.
 		'seosignal_daily_cap'    => 40,  // Of the 50 daily SEO Signal requests, leave some for the panel / SeoReport.

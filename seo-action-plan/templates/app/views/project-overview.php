@@ -113,7 +113,7 @@ foreach ( $tasks as $t ) {
 	<section class="sap-panel sap-ai">
 		<div class="sap-panel-head">
 			<h2><span class="sap-ai-badge"><?php echo sap_icon( 'spark', 14 ); // phpcs:ignore ?>AI</span>تشخیص هوشمند وضعیت پروژه</h2>
-			<small class="sap-muted"><?php echo esc_html( sap_jdate( $ai_ds['fetched_at'] ) ); ?></small>
+			<small class="sap-muted" dir="auto"><?php echo esc_html( sap_jdate( $ai_ds['fetched_at'] ) . ' · ' . ( $ai_ds['meta']['model'] ?? '' ) . ( isset( $ai_ds['meta']['cost'] ) ? ' · ' . sap_num( $ai_ds['meta']['cost'], 3 ) . ' دلار' : '' ) ); ?></small>
 		</div>
 		<p class="sap-ai-summary"><?php echo esc_html( $ai['summary'] ); ?></p>
 		<?php if ( $ai['health'] ) : ?>

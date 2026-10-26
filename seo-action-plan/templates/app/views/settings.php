@@ -53,23 +53,42 @@ $auth  = sap_google_auth_url();
 	</section>
 
 	<section class="sap-panel">
-		<h2><span class="sap-ai-badge"><?php echo sap_icon( 'spark', 14 ); // phpcs:ignore ?>AI</span>هوش مصنوعی (Claude)</h2>
-		<?php $ai_usage = sap_ai_usage(); ?>
+		<h2><span class="sap-ai-badge"><?php echo sap_icon( 'spark', 14 ); // phpcs:ignore ?>AI</span>هوش مصنوعی</h2>
+		<?php
+		$ai_usage = sap_ai_usage();
+		$pct      = $ai_usage['budget'] > 0 ? min( 100, round( 100 * $ai_usage['cost'] / $ai_usage['budget'] ) ) : 0;
+		?>
 		<div class="sap-status-row">
 			<span class="sap-conn <?php echo sap_ai_connected() ? 'is-on' : ''; ?>"><i></i><?php echo sap_ai_connected() ? 'متصل' : 'کلید وارد نشده'; ?></span>
-			<?php if ( $ai_usage['requests'] ) : ?>
-				<span class="sap-muted">این ماه: <?php echo esc_html( sap_num( $ai_usage['requests'] ) ); ?> درخواست · <?php echo esc_html( sap_num( round( ( $ai_usage['input'] + $ai_usage['output'] ) / 1000 ) ) ); ?> هزار توکن</span>
-			<?php endif; ?>
+			<span class="sap-muted">این ماه: <?php echo esc_html( sap_num( $ai_usage['requests'] ) ); ?> درخواست · <b><?php echo esc_html( sap_num( $ai_usage['cost'], 3 ) ); ?> دلار</b><?php echo $ai_usage['budget'] > 0 ? ' از سقف ' . esc_html( sap_num( $ai_usage['budget'], 2 ) ) . ' دلار' : ''; ?></span>
 		</div>
-		<div class="sap-grid-2">
-			<label>کلید API (Anthropic)<input type="text" name="anthropic_key" dir="ltr" value="<?php echo esc_attr( sap_mask( $s['anthropic_key'] ) ); ?>" autocomplete="off" placeholder="sk-ant-…">
-				<small>از console.anthropic.com › API Keys بسازید. کلید فقط روی سرور و رمزنگاری‌شده نگه داشته می‌شود.</small>
-			</label>
-			<label>مدل
-				<select name="ai_model"><?php foreach ( sap_ai_models() as $k => $label ) : ?><option value="<?php echo esc_attr( $k ); ?>" <?php selected( $s['ai_model'], $k ); ?>><?php echo esc_html( $label ); ?></option><?php endforeach; ?></select>
+		<?php if ( $ai_usage['budget'] > 0 ) : ?>
+			<div class="sap-progress sap-budget <?php echo $pct >= 90 ? 'is-bad' : ''; ?>"><i style="width:<?php echo esc_attr( $pct ); ?>%"></i></div>
+		<?php endif; ?>
+		<p class="sap-label">سرویس</p>
+		<?php sap_segment( 'ai_provider', array( 'gateway' => 'GapGPT / سازگار با OpenAI', 'anthropic' => 'Anthropic مستقیم' ), $s['ai_provider'] ); ?>
+		<div class="sap-grid-2" data-sap-show="ai_provider=gateway">
+			<label>آدرس API<input type="url" name="ai_base_url" dir="ltr" value="<?php echo esc_attr( $s['ai_base_url'] ); ?>" placeholder="https://api.gapgpt.app/v1"></label>
+			<label>کلید API سرویس<input type="text" name="ai_gateway_key" dir="ltr" value="<?php echo esc_attr( sap_mask( $s['ai_gateway_key'] ) ); ?>" autocomplete="off" placeholder="sk-…">
+				<small>کلید فقط روی سرور و رمزنگاری‌شده نگه داشته می‌شود.</small>
 			</label>
 		</div>
-		<?php sap_switch( 'ai_auto', $s['ai_auto'], 'تحلیل هوشمند در همگام‌سازی خودکار هفتگی هم اجرا شود', 'هر اجرا هزینه API دارد؛ اگر خاموش باشد، تحلیل هوشمند فقط با دکمه «تحلیل کامل» اجرا می‌شود.' ); ?>
+		<div class="sap-grid-2" data-sap-show="ai_provider=anthropic">
+			<label>کلید API (Anthropic)<input type="text" name="anthropic_key" dir="ltr" value="<?php echo esc_attr( sap_mask( $s['anthropic_key'] ) ); ?>" autocomplete="off" placeholder="sk-ant-…"></label>
+		</div>
+		<datalist id="sap-ai-models"><?php foreach ( sap_ai_models() as $k => $label ) : ?><option value="<?php echo esc_attr( $k ); ?>"><?php echo esc_html( $label ); ?></option><?php endforeach; ?></datalist>
+		<div class="sap-grid-3">
+			<label>مدل تحلیل پروژه<input type="text" name="ai_model" dir="ltr" list="sap-ai-models" value="<?php echo esc_attr( $s['ai_model'] ); ?>">
+				<small>پیشنهاد: claude-sonnet-5-5 (حدود ۰٫۱ دلار هر تحلیل)</small>
+			</label>
+			<label>مدل «بنویس برام»<input type="text" name="ai_model_assist" dir="ltr" list="sap-ai-models" value="<?php echo esc_attr( $s['ai_model_assist'] ); ?>">
+				<small>پیشنهاد: claude-haiku-5-5 (حدود ۰٫۰۰۱ دلار هر بار)</small>
+			</label>
+			<label>سقف بودجه ماهانه (دلار)<input type="number" name="ai_budget" min="0" step="0.5" value="<?php echo esc_attr( $s['ai_budget'] ); ?>">
+				<small>وقتی پر شود، هوش مصنوعی تا ماه بعد متوقف می‌شود. ۰ = بدون سقف.</small>
+			</label>
+		</div>
+		<?php sap_switch( 'ai_auto', $s['ai_auto'], 'تحلیل هوشمند در همگام‌سازی خودکار هفتگی هم اجرا شود', 'اگر داده‌ها تغییر نکرده باشند، تحلیل قبلی بدون هزینه نگه داشته می‌شود.' ); ?>
 	</section>
 
 	<section class="sap-panel">

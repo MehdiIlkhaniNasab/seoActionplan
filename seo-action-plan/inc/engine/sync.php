@@ -391,15 +391,19 @@ function sap_step_analyze( $project ) {
 /**
  * AI diagnosis + suggested plan.
  */
-function sap_step_ai( $project ) {
+function sap_step_ai( $project, $force = false ) {
 	if ( ! sap_ai_connected() ) {
 		return sap_skip( 'کلید هوش مصنوعی وارد نشده؛ تحلیل هوشمند انجام نشد (تنظیمات › هوش مصنوعی).' );
 	}
-	$res = sap_ai_analyze( $project );
+	$res = sap_ai_analyze( $project, $force );
 	if ( is_wp_error( $res ) ) {
 		return $res;
 	}
-	return array( 'msg' => sprintf( 'تشخیص وضعیت و %s کار پیشنهادی آماده شد.', sap_num( count( $res['plan'] ) ) ) );
+	if ( ! empty( $res['skipped'] ) ) {
+		return sap_skip( 'داده‌ها از تحلیل هوشمند قبلی تغییری نکرده؛ همان تحلیل نگه داشته شد (بدون هزینه). برای تحلیل دوباره «بدون کش» را بزنید.' );
+	}
+	$u = sap_ai_usage();
+	return array( 'msg' => sprintf( 'تشخیص وضعیت و %s کار پیشنهادی آماده شد · هزینه این تحلیل حدود %s دلار (این ماه %s از %s دلار).', sap_num( count( $res['plan'] ) ), sap_num( $u['last_cost'], 3 ), sap_num( $u['cost'], 2 ), sap_num( $u['budget'], 2 ) ) );
 }
 
 /**

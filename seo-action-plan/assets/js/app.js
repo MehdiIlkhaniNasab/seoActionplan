@@ -328,4 +328,16 @@
 		if (b && b.classList.contains('sap-btn') && !ev.defaultPrevented) { b.classList.add('is-loading'); }
 	});
 
+	/* ---- Show fields for the selected option: data-sap-show="name=value" ---- */
+	document.querySelectorAll('[data-sap-show]').forEach(function (el) {
+		var parts = el.getAttribute('data-sap-show').split('=');
+		var form = el.closest('form');
+		function apply() {
+			var on = form.querySelector('input[name="' + parts[0] + '"]:checked');
+			el.hidden = !on || on.value !== parts[1];
+		}
+		form.querySelectorAll('input[name="' + parts[0] + '"]').forEach(function (r) { r.addEventListener('change', apply); });
+		apply();
+	});
+
 })();
