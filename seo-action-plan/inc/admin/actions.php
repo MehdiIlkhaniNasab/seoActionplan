@@ -1,0 +1,359 @@
+<?php
+/**
+ * Form handlers (admin-post.php).
+ *
+ * @package SeoActionPlan
+ */
+
+defined( 'ABSPATH' ) || exit;
+
+/**
+ * Verify nonce + capability, or die.
+ */
+function sap_guard( $action, $manager = true ) {
+	$ok = $manager ? sap_can() : sap_can_work();
+	if ( ! $ok || ! isset( $_POST['_sap_nonce'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['_sap_nonce'] ) ), $action ) ) {
+		wp_die( 'دسترسی غیرمجاز', 403 );
+	}
+}
+
+/**
+ * Redirect back with a flash message.
+ */
+function sap_back( $url, $msg, $ok = true ) {
+	wp_safe_redirect( add_query_arg( array( 'sap_msg' => rawurlencode( $msg ), 'sap_ok' => $ok ? 1 : 0 ), $url ) );
+	exit;
+}
+
+/**
+ * Read a POST field (unslashed).
+ */
+function sap_post( $key, $default = '' ) {
+	return isset( $_POST[ $key ] ) ? wp_unslash( $_POST[ $key ] ) : $default; // phpcs:ignore
+}
+
+/**
+ * Return URL posted by the form (same-site only), or a fallback.
+ */
+function sap_return_url( $fallback ) {
+	$r = (string) sap_post( '_return' );
+	return $r ? wp_validate_redirect( $r, $fallback ) : $fallback;
+}
+
+/* ---- Settings ---------------------------------------------------------- */
+
+add_action( 'admin_post_sap_save_settings', function () {
+	sap_guard( 'sap_save_settings' );
+	$changes = array(
+		'google_auth_mode'     => 'service' === sap_post( 'google_auth_mode' ) ? 'service' : 'oauth',
+		'google_client_id'     => sanitize_text_field( sap_post( 'google_client_id' ) ),
+		'seosignal_daily_cap'  => min( 1000, max( 1, absint( sap_post( 'seosignal_daily_cap', 40 ) ) ) ),
+		'seosignal_cache_days' => min( 90, max( 1, absint( sap_post( 'seosignal_cache_days', 25 ) ) ) ),
+		'min_impressions'      => max( 1, absint( sap_post( 'min_impressions', 50 ) ) ),
+		'ctr_min_impressions'  => max( 1, absint( sap_post( 'ctr_min_impressions', 200 ) ) ),
+		'decay_min_clicks'     => max( 1, absint( sap_post( 'decay_min_clicks', 30 ) ) ),
+		'decay_drop'           => min( 95, max( 5, absint( sap_post( 'decay_drop', 30 ) ) ) ),
+		'auto_sync'            => in_array( sap_post( 'auto_sync' ), array( 'off', 'weekly', 'daily' ), true ) ? sap_post( 'auto_sync' ) : 'weekly',
+		'recurring'            => sanitize_textarea_field( sap_post( 'recurring' ) ),
+	);
+	foreach ( array( 'google_client_secret', 'seosignal_key' ) as $k ) {
+		$v = trim( (string) sap_post( $k ) );
+		if ( '' !== $v && false === strpos( $v, '•' ) ) {
+			$changes[ $k ] = sanitize_text_field( $v );
+		}
+	}
+	$sa = trim( (string) sap_post( 'google_service_account' ) );
+	if ( '' !== $sa && false === strpos( $sa, '•' ) ) {
+		$json = json_decode( $sa, true );
+		if ( empty( $json['client_email'] ) || empty( $json['private_key'] ) ) {
+			sap_back( sap_admin_url( 'sap-settings' ), 'JSON سرویس اکانت نامعتبر است.', false );
+		}
+		$changes['google_service_account'] = $sa;
+	}
+	sap_update_settings( $changes );
+	delete_transient( 'sap_google_access_token' );
+	delete_transient( 'sap_gsc_sites' );
+	sap_back( sap_admin_url( 'sap-settings' ), 'تنظیمات ذخیره شد.' );
+} );
+
+add_action( 'admin_post_sap_google_disconnect', function () {
+	sap_guard( 'sap_google_disconnect' );
+	sap_update_settings( array( 'google_refresh_token' => '', 'google_account_email' => '', 'google_scopes' => '' ) );
+	delete_transient( 'sap_google_access_token' );
+	delete_transient( 'sap_gsc_sites' );
+	sap_back( sap_admin_url( 'sap-settings' ), 'اتصال گوگل قطع شد.' );
+} );
+
+add_action( 'admin_post_sap_sheet_template', function () {
+	if ( ! sap_can_work() ) {
+		wp_die( 'دسترسی غیرمجاز', 403 );
+	}
+	$type = 'clusters' === ( $_GET['type'] ?? '' ) ? 'clusters' : 'calendar'; // phpcs:ignore WordPress.Security.NonceVerification
+	nocache_headers();
+	header( 'Content-Type: text/csv; charset=utf-8' );
+	header( 'Content-Disposition: attachment; filename="seo-' . $type . '-template.csv"' );
+	echo sap_sheet_template_csv( $type ); // phpcs:ignore WordPress.Security.EscapeOutput
+	exit;
+} );
+
+/* ---- Projects ---------------------------------------------------------- */
+
+add_action( 'admin_post_sap_save_project', function () {
+	sap_guard( 'sap_save_project' );
+	$id   = absint( sap_post( 'project_id' ) );
+	$data = array();
+	foreach ( array( 'name', 'site_url', 'gsc_property', 'sheet_id', 'sheet_calendar_tab', 'sheet_cluster_tab', 'ss_project_id', 'ss_device', 'competitors', 'brand_terms', 'capacity_hours' ) as $k ) {
+		$data[ $k ] = sap_post( $k );
+	}
+	if ( '' === trim( (string) $data['name'] ) ) {
+		sap_back( $id ? sap_project_url( $id, 'settings' ) : sap_admin_url( 'sap', array( 'new' => 1 ) ), 'نام پروژه الزامی است.', false );
+	}
+	$new = ! $id;
+	$id  = sap_project_save( $data, $id );
+	sap_project_set_option( $id, 'no_writeback', sap_post( 'writeback' ) ? 0 : 1 );
+	sap_back( sap_project_url( $id, $new ? 'focuses' : 'settings' ), $new ? 'پروژه ساخته شد. حالا Focus و هدف پروژه را تعریف کنید.' : 'تنظیمات پروژه ذخیره شد.' );
+} );
+
+add_action( 'admin_post_sap_delete_project', function () {
+	sap_guard( 'sap_delete_project' );
+	$id = absint( sap_post( 'project_id' ) );
+	if ( 'DELETE' !== sap_post( 'confirm' ) ) {
+		sap_back( sap_project_url( $id, 'settings' ), 'برای حذف، کلمه DELETE را تایپ کنید.', false );
+	}
+	sap_project_delete( $id );
+	sap_back( sap_admin_url( 'sap' ), 'پروژه و همه داده‌هایش حذف شد.' );
+} );
+
+add_action( 'admin_post_sap_regen_key', function () {
+	sap_guard( 'sap_regen_key' );
+	global $wpdb;
+	$id = absint( sap_post( 'project_id' ) );
+	$wpdb->update( sap_table( 'projects' ), array( 'api_key' => sap_token( 32 ) ), array( 'id' => $id ) );
+	sap_back( sap_project_url( $id, 'settings' ), 'کلید API پروژه عوض شد؛ ایجنت خزش و اتصال SeoReport را با کلید جدید بروز کنید.' );
+} );
+
+add_action( 'admin_post_sap_crawl_upload', function () {
+	sap_guard( 'sap_crawl_upload' );
+	$id = absint( sap_post( 'project_id' ) );
+	if ( empty( $_FILES['crawl']['tmp_name'] ) ) { // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
+		sap_back( sap_project_url( $id, 'settings' ), 'فایلی انتخاب نشده است.', false );
+	}
+	$rows = sap_crawl_rows_from_file( $_FILES['crawl']['tmp_name'], sanitize_file_name( wp_unslash( $_FILES['crawl']['name'] ?? '' ) ) ); // phpcs:ignore
+	if ( is_wp_error( $rows ) ) {
+		sap_back( sap_project_url( $id, 'settings' ), $rows->get_error_message(), false );
+	}
+	sap_sf_store_crawl( $id, $rows, 'upload' );
+	sap_back( sap_project_url( $id, 'overview' ), sprintf( 'خزش با %s آدرس دریافت شد. برای اعمال در تحلیل، «همگام‌سازی و تحلیل» را اجرا کنید.', sap_num( count( $rows ) ) ) );
+} );
+
+add_action( 'admin_post_sap_review_done', function () {
+	sap_guard( 'sap_review_done' );
+	$id = absint( sap_post( 'project_id' ) );
+	sap_project_set_option( $id, 'last_review', sap_now() );
+	sap_activity_add( $id, array(
+		'category' => 'management',
+		'action'   => 'weekly_review',
+		'title'    => 'بازبینی هفتگی اکشن پلن (Weekly Review)',
+		'source'   => 'system',
+	) );
+	sap_back( sap_project_url( $id, 'overview' ), 'بازبینی هفتگی ثبت شد.' );
+} );
+
+/* ---- Focuses ----------------------------------------------------------- */
+
+add_action( 'admin_post_sap_save_focus', function () {
+	sap_guard( 'sap_save_focus' );
+	$pid  = absint( sap_post( 'project_id' ) );
+	$fid  = absint( sap_post( 'focus_id' ) );
+	$data = array();
+	foreach ( array( 'name', 'url_patterns', 'clusters', 'keywords', 'goal', 'kpi_metric', 'kpi_baseline', 'kpi_target', 'deadline', 'weight', 'status' ) as $k ) {
+		$data[ $k ] = sap_post( $k );
+	}
+	if ( '' === trim( (string) $data['name'] ) ) {
+		sap_back( sap_project_url( $pid, 'focuses' ), 'نام Focus الزامی است.', false );
+	}
+	$fid   = sap_focus_save( $pid, $data, $fid );
+	$focus = sap_focus( $fid );
+	// A new focus without baseline starts from today's value.
+	if ( $focus && ! $focus['kpi_baseline'] ) {
+		$k = sap_focus_kpis( $focus, $pid );
+		if ( $k ) {
+			global $wpdb;
+			$wpdb->update( sap_table( 'focuses' ), array( 'kpi_baseline' => $k[ $focus['kpi_metric'] ] ), array( 'id' => $fid ) );
+		}
+	}
+	sap_back( sap_project_url( $pid, 'focuses' ), 'Focus ذخیره شد. برای اعمال روی یافته‌ها، تحلیل را دوباره اجرا کنید.' );
+} );
+
+add_action( 'admin_post_sap_delete_focus', function () {
+	sap_guard( 'sap_delete_focus' );
+	$pid = absint( sap_post( 'project_id' ) );
+	sap_focus_delete( $pid, absint( sap_post( 'focus_id' ) ) );
+	sap_back( sap_project_url( $pid, 'focuses' ), 'Focus حذف شد.' );
+} );
+
+add_action( 'admin_post_sap_focus_baseline', function () {
+	sap_guard( 'sap_focus_baseline' );
+	global $wpdb;
+	$pid   = absint( sap_post( 'project_id' ) );
+	$focus = sap_focus( absint( sap_post( 'focus_id' ) ) );
+	$k     = $focus ? sap_focus_kpis( $focus, $pid ) : null;
+	if ( ! $k ) {
+		sap_back( sap_project_url( $pid, 'focuses' ), 'داده سرچ کنسول هنوز دریافت نشده است.', false );
+	}
+	$wpdb->update( sap_table( 'focuses' ), array( 'kpi_baseline' => $k[ $focus['kpi_metric'] ] ), array( 'id' => $focus['id'] ) );
+	sap_back( sap_project_url( $pid, 'focuses' ), 'مقدار فعلی به‌عنوان نقطه شروع (Baseline) ثبت شد.' );
+} );
+
+/* ---- Findings (inbox) -------------------------------------------------- */
+
+add_action( 'admin_post_sap_findings', function () {
+	sap_guard( 'sap_findings' );
+	$pid    = absint( sap_post( 'project_id' ) );
+	$do     = sanitize_key( sap_post( 'do' ) );
+	$period = sap_period_sanitize( sap_post( 'period', sap_period_current() ) );
+	$ids    = array_map( 'absint', (array) sap_post( 'ids', array() ) );
+	// Per-row buttons send quick="do:id" inside the bulk form.
+	if ( preg_match( '/^([a-z]+):(\d+)$/', (string) sap_post( 'quick' ), $m ) ) {
+		$do  = $m[1];
+		$ids = array( (int) $m[2] );
+	}
+	$n = 0;
+	foreach ( $ids as $id ) {
+		$f = sap_finding( $id );
+		if ( ! $f || $f['project_id'] !== $pid ) {
+			continue;
+		}
+		if ( 'plan' === $do ) {
+			sap_finding_to_task( $f, $period );
+		} elseif ( 'someday' === $do ) {
+			sap_finding_to_task( $f, '', 'someday' );
+		} elseif ( 'dismiss' === $do ) {
+			sap_finding_set_status( $id, 'dismissed' );
+		} elseif ( 'reopen' === $do ) {
+			sap_finding_set_status( $id, 'open' );
+		}
+		++$n;
+	}
+	$labels = array(
+		'plan'    => 'به اکشن پلن ' . sap_period_label( $period ) . ' اضافه شد',
+		'someday' => 'به «شاید بعداً» منتقل شد',
+		'dismiss' => 'رد شد',
+		'reopen'  => 'دوباره باز شد',
+	);
+	sap_back( sap_return_url( sap_project_url( $pid, 'findings' ) ), sprintf( '%s مورد %s.', sap_num( $n ), $labels[ $do ] ?? 'بروز شد' ), $n > 0 );
+} );
+
+/* ---- Plan & tasks ------------------------------------------------------ */
+
+add_action( 'admin_post_sap_plan_generate', function () {
+	sap_guard( 'sap_plan_generate' );
+	$pid    = absint( sap_post( 'project_id' ) );
+	$period = sap_period_sanitize( sap_post( 'period' ) );
+	$cap    = (float) sap_norm_text( sap_post( 'capacity' ) );
+	$res    = sap_plan_generate( $pid, $period, $cap > 0 ? array( 'capacity' => $cap ) : array() );
+	sap_back( sap_project_url( $pid, 'plan', array( 'period' => $period ) ), sprintf(
+		'اکشن پلن %s ساخته شد: %s کار دوره‌ای و %s اقدام از یافته‌ها — %s از %s ساعت ظرفیت.',
+		sap_period_label( $period ),
+		sap_num( $res['recurring'] ),
+		sap_num( $res['added'] ),
+		sap_num( $res['hours'], 1 ),
+		sap_num( $res['capacity'] )
+	) );
+} );
+
+add_action( 'admin_post_sap_plan_carry', function () {
+	sap_guard( 'sap_plan_carry' );
+	$pid  = absint( sap_post( 'project_id' ) );
+	$from = sap_period_sanitize( sap_post( 'from' ) );
+	$to   = sap_period_shift( $from, 1 );
+	$n    = sap_plan_carry_over( $pid, $from, $to );
+	sap_back( sap_project_url( $pid, 'plan', array( 'period' => $to ) ), sprintf( '%s کار ناتمام از %s به %s منتقل شد.', sap_num( $n ), sap_period_label( $from ), sap_period_label( $to ) ) );
+} );
+
+add_action( 'admin_post_sap_task_save', function () {
+	sap_guard( 'sap_task_save', false );
+	$id   = absint( sap_post( 'task_id' ) );
+	$task = $id ? sap_task( $id ) : null;
+	$pid  = $task ? $task['project_id'] : absint( sap_post( 'project_id' ) );
+	if ( ! sap_can() && ( ! $task || (int) $task['assignee'] !== get_current_user_id() ) ) {
+		wp_die( 'فقط کارهای خودتان را می‌توانید ویرایش کنید.', 403 );
+	}
+	$fields = sap_can()
+		? array( 'title', 'notes', 'result', 'context', 'status', 'period', 'assignee', 'waiting_for', 'due_date', 'effort', 'url', 'keyword', 'focus_id' )
+		: array( 'status', 'result', 'url' );
+	$data   = array();
+	foreach ( $fields as $k ) {
+		if ( isset( $_POST[ $k ] ) ) { // phpcs:ignore WordPress.Security.NonceVerification
+			$data[ $k ] = sap_post( $k );
+		}
+	}
+	if ( ! $id ) {
+		$data['project_id'] = $pid;
+		if ( '' === trim( (string) ( $data['title'] ?? '' ) ) ) {
+			sap_back( sap_return_url( sap_project_url( $pid, 'plan' ) ), 'عنوان کار الزامی است.', false );
+		}
+	}
+	sap_task_save( $data, $id );
+	sap_back( sap_return_url( sap_project_url( $pid, 'plan' ) ), $id ? 'کار بروز شد.' : 'کار به اکشن پلن اضافه شد.' );
+} );
+
+add_action( 'admin_post_sap_task_delete', function () {
+	sap_guard( 'sap_task_delete' );
+	$task = sap_task( absint( sap_post( 'task_id' ) ) );
+	if ( $task ) {
+		sap_task_delete( $task['id'] );
+	}
+	sap_back( sap_return_url( sap_project_url( $task ? $task['project_id'] : 0, 'plan' ) ), 'کار حذف شد (یافته مرتبط به صندوق ورودی برگشت).' );
+} );
+
+/* ---- Activity log ------------------------------------------------------ */
+
+add_action( 'admin_post_sap_activity_add', function () {
+	sap_guard( 'sap_activity_add', false );
+	$pid  = absint( sap_post( 'project_id' ) );
+	$date = sap_parse_date( sap_post( 'date' ) );
+	sap_activity_add( $pid, array(
+		'focus_id'     => absint( sap_post( 'focus_id' ) ),
+		'category'     => sanitize_key( sap_post( 'category' ) ),
+		'action'       => 'manual',
+		'title'        => sap_post( 'title' ),
+		'url'          => sap_post( 'url' ),
+		'before_value' => sap_post( 'before_value' ),
+		'after_value'  => sap_post( 'after_value' ),
+		'source'       => 'manual',
+		'happened_at'  => $date ? $date . ' ' . current_time( 'H:i:s' ) : sap_now(),
+	) );
+	sap_back( sap_return_url( sap_project_url( $pid, 'activity' ) ), 'اقدام در لاگ ثبت شد.' );
+} );
+
+add_action( 'admin_post_sap_activity_delete', function () {
+	sap_guard( 'sap_activity_delete' );
+	$pid = absint( sap_post( 'project_id' ) );
+	sap_activity_delete( $pid, absint( sap_post( 'activity_id' ) ) );
+	sap_back( sap_return_url( sap_project_url( $pid, 'activity' ) ), 'ردیف لاگ حذف شد.' );
+} );
+
+add_action( 'admin_post_sap_activity_csv', function () {
+	if ( ! sap_can() || ! isset( $_GET['_sap_nonce'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_GET['_sap_nonce'] ) ), 'sap_activity_csv' ) ) {
+		wp_die( 'دسترسی غیرمجاز', 403 );
+	}
+	$project = sap_project( absint( $_GET['project'] ?? 0 ) );
+	if ( ! $project ) {
+		wp_die( 'پروژه یافت نشد', 404 );
+	}
+	$period          = sap_period_sanitize( sanitize_text_field( wp_unslash( $_GET['period'] ?? '' ) ) );
+	list( $s, $e )   = sap_period_range( $period );
+	$export          = sap_activity_export( $project, $s, $e );
+	nocache_headers();
+	header( 'Content-Type: text/csv; charset=utf-8' );
+	header( 'Content-Disposition: attachment; filename="activity-' . $project['id'] . '-' . $period . '.csv"' );
+	$out = fopen( 'php://output', 'w' ); // phpcs:ignore WordPress.WP.AlternativeFunctions
+	fwrite( $out, "\xEF\xBB\xBF" ); // phpcs:ignore WordPress.WP.AlternativeFunctions
+	fputcsv( $out, array( 'تاریخ', 'حوزه', 'Focus', 'اقدام', 'آدرس', 'قبل', 'بعد', 'منبع', 'انجام‌دهنده' ), ',', '"', '\\' );
+	foreach ( $export['items'] as $i ) {
+		fputcsv( $out, array( $i['date_jalali'], $i['category_label'], $i['focus'], $i['title'], rawurldecode( (string) $i['url'] ), $i['before'], $i['after'], sap_activity_sources()[ $i['source'] ] ?? $i['source'], $i['user'] ), ',', '"', '\\' );
+	}
+	fclose( $out ); // phpcs:ignore WordPress.WP.AlternativeFunctions
+	exit;
+} );

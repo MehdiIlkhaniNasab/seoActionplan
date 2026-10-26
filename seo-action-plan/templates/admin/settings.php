@@ -1,0 +1,125 @@
+<?php
+/**
+ * Global settings & connections.
+ *
+ * @package SeoActionPlan
+ */
+
+defined( 'ABSPATH' ) || exit;
+
+$s     = sap_settings();
+$post  = esc_url( admin_url( 'admin-post.php' ) );
+$usage = sap_ss_usage();
+$auth  = sap_google_auth_url();
+?>
+<header class="sap-head">
+	<div>
+		<p class="sap-eyebrow">اکشن پلن سئو</p>
+		<h1>تنظیمات و اتصال‌ها</h1>
+		<p class="sap-muted">کلیدها و توکن‌ها رمزنگاری‌شده در دیتابیس ذخیره می‌شوند و هرگز به مرورگر ارسال نمی‌شوند.</p>
+	</div>
+</header>
+
+<form method="post" action="<?php echo $post; // phpcs:ignore ?>" class="sap-form">
+	<?php sap_form_fields( 'sap_save_settings' ); ?>
+
+	<section class="sap-panel">
+		<h2>Google (Search Console + Sheets)</h2>
+		<div class="sap-status-row">
+			<span class="sap-conn <?php echo sap_google_connected() ? 'is-on' : ''; ?>"><i></i>
+				<?php
+				if ( ! sap_google_connected() ) {
+					echo 'متصل نیست';
+				} elseif ( 'service' === $s['google_auth_mode'] ) {
+					echo 'سرویس اکانت: <span dir="ltr">' . esc_html( sap_google_service_email() ) . '</span>';
+				} else {
+					echo 'متصل: <span dir="ltr">' . esc_html( $s['google_account_email'] ) . '</span>' . ( sap_google_has_sheets() ? '' : ' — <b>بدون دسترسی Sheets</b>' );
+				}
+				?>
+			</span>
+		</div>
+		<div class="sap-grid-2">
+			<label>روش اتصال
+				<select name="google_auth_mode">
+					<option value="oauth" <?php selected( $s['google_auth_mode'], 'oauth' ); ?>>OAuth (حساب گوگل خودتان)</option>
+					<option value="service" <?php selected( $s['google_auth_mode'], 'service' ); ?>>Service Account</option>
+				</select>
+			</label>
+			<label>Redirect URI (در Google Cloud ثبت کنید)<code dir="ltr" data-sap-copy><?php echo esc_html( sap_google_redirect_uri() ); ?></code></label>
+		</div>
+		<div class="sap-grid-2">
+			<label>OAuth Client ID<input type="text" name="google_client_id" dir="ltr" value="<?php echo esc_attr( $s['google_client_id'] ); ?>"></label>
+			<label>OAuth Client Secret<input type="text" name="google_client_secret" dir="ltr" value="<?php echo esc_attr( sap_mask( $s['google_client_secret'] ) ); ?>" autocomplete="off"></label>
+		</div>
+		<label>JSON سرویس اکانت (روش جایگزین)<textarea name="google_service_account" rows="3" dir="ltr" placeholder="{ &quot;type&quot;: &quot;service_account&quot;, … }"><?php echo $s['google_service_account'] ? esc_textarea( '•••• ذخیره شده (' . sap_google_service_email() . ')' ) : ''; ?></textarea>
+			<small>ایمیل سرویس اکانت را در پراپرتی‌های سرچ کنسول (Restricted) اضافه کنید و گوگل شیت‌ها را با آن (Editor) به‌اشتراک بگذارید.</small>
+		</label>
+		<p class="sap-muted">در Google Cloud Console دو API را فعال کنید: <b>Google Search Console API</b> و <b>Google Sheets API</b>. اگر از SeoReport استفاده می‌کنید می‌توانید از همان پروژه Google Cloud و همان OAuth Client استفاده کنید؛ فقط Redirect URI بالا را هم به Client اضافه کنید.</p>
+	</section>
+
+	<section class="sap-panel">
+		<h2>سئو سیگنال</h2>
+		<div class="sap-status-row">
+			<span class="sap-conn <?php echo sap_ss_connected() ? 'is-on' : ''; ?>"><i></i><?php echo sap_ss_connected() ? 'کلید ذخیره شده' : 'کلید وارد نشده'; ?></span>
+			<span class="sap-muted">مصرف امروز این افزونه: <?php echo esc_html( sap_num( $usage['used'] ) . ' از ' . sap_num( $usage['cap'] ) ); ?><?php echo $usage['last_error'] ? ' · آخرین خطا: ' . esc_html( $usage['last_error'] ) : ''; ?></span>
+		</div>
+		<div class="sap-grid-3">
+			<label>کلید API (ایمیل:توکن)<input type="text" name="seosignal_key" dir="ltr" value="<?php echo esc_attr( sap_mask( $s['seosignal_key'] ) ); ?>" autocomplete="off">
+				<small>پنل سئو سیگنال › منوی کاربری › مدیریت API › ساخت کلید.</small>
+			</label>
+			<label>سقف درخواست روزانه برای این افزونه<input type="number" name="seosignal_daily_cap" min="1" value="<?php echo esc_attr( $s['seosignal_daily_cap'] ); ?>">
+				<small>سقف پیش‌فرض سئو سیگنال ۵۰ درخواست در روز (مشترک بین همه ابزارها) است؛ ردیاب رتبه شامل سقف نیست.</small>
+			</label>
+			<label>تازه بودن کش (روز)<input type="number" name="seosignal_cache_days" min="1" max="90" value="<?php echo esc_attr( $s['seosignal_cache_days'] ); ?>">
+				<small>حجم جستجو، گپ رقبا و سوالات تا این مدت دوباره درخواست نمی‌شوند.</small>
+			</label>
+		</div>
+	</section>
+
+	<section class="sap-panel">
+		<h2>قوانین تحلیل</h2>
+		<div class="sap-grid-3">
+			<label>حداقل نمایش ۲۸ روزه (Striking Distance و کنیبالیزیشن)<input type="number" name="min_impressions" min="1" value="<?php echo esc_attr( $s['min_impressions'] ); ?>"></label>
+			<label>حداقل نمایش برای CTR پایین<input type="number" name="ctr_min_impressions" min="1" value="<?php echo esc_attr( $s['ctr_min_impressions'] ); ?>"></label>
+			<label>همگام‌سازی خودکار
+				<select name="auto_sync">
+					<option value="weekly" <?php selected( $s['auto_sync'], 'weekly' ); ?>>هفتگی</option>
+					<option value="daily" <?php selected( $s['auto_sync'], 'daily' ); ?>>روزانه</option>
+					<option value="off" <?php selected( $s['auto_sync'], 'off' ); ?>>خاموش</option>
+				</select>
+			</label>
+			<label>افت محتوا: حداقل کلیک ۲۸ روز قبل<input type="number" name="decay_min_clicks" min="1" value="<?php echo esc_attr( $s['decay_min_clicks'] ); ?>"></label>
+			<label>افت محتوا: درصد افت<input type="number" name="decay_drop" min="5" max="95" value="<?php echo esc_attr( $s['decay_drop'] ); ?>"></label>
+		</div>
+	</section>
+
+	<section class="sap-panel">
+		<h2>کارهای دوره‌ای ماهانه</h2>
+		<p class="sap-muted">هر خط: <code>حوزه | عنوان کار | ساعت</code> — حوزه‌ها: <?php echo esc_html( implode( '، ', array_keys( sap_contexts() ) ) ); ?>. این کارها هنگام ساخت اکشن پلن هر ماه خودکار اضافه می‌شوند.</p>
+		<textarea name="recurring" rows="7" dir="rtl"><?php echo esc_textarea( $s['recurring'] ); ?></textarea>
+	</section>
+
+	<div class="sap-form-foot">
+		<button class="sap-btn is-primary" type="submit">ذخیره تنظیمات</button>
+	</div>
+</form>
+
+<section class="sap-panel">
+	<h2>اتصال حساب گوگل</h2>
+	<?php if ( 'oauth' !== $s['google_auth_mode'] ) : ?>
+		<p class="sap-muted">روش Service Account فعال است؛ نیازی به اتصال OAuth نیست.</p>
+	<?php elseif ( ! $auth ) : ?>
+		<p class="sap-muted">اول Client ID و Client Secret را ذخیره کنید.</p>
+	<?php else : ?>
+		<div class="sap-actions">
+			<a class="sap-btn is-primary" href="<?php echo esc_url( $auth ); ?>"><?php echo sap_google_connected() ? 'اتصال دوباره حساب گوگل' : 'اتصال حساب گوگل'; ?></a>
+			<?php if ( sap_google_connected() ) : ?>
+				<form method="post" action="<?php echo $post; // phpcs:ignore ?>">
+					<?php sap_form_fields( 'sap_google_disconnect' ); ?>
+					<button class="sap-btn is-ghost" type="submit">قطع اتصال</button>
+				</form>
+			<?php endif; ?>
+		</div>
+		<p class="sap-muted">در صفحه گوگل تیک هر دو دسترسی (Search Console و Google Sheets) را بزنید.</p>
+	<?php endif; ?>
+</section>

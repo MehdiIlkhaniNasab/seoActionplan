@@ -1,0 +1,55 @@
+<?php
+/**
+ * Plugin Name:       SEO Action Plan
+ * Description:       مدیر سئو: تحلیل داده‌های سرچ کنسول، گوگل شیت، سئو سیگنال و اسکریمینگ فراگ، کشف ایرادها و فرصت‌ها، ساخت اکشن پلن ماهانه به روش GTD و ثبت صفر تا صد اقدامات برای گزارش سئو.
+ * Version:           0.1.0
+ * Requires at least: 6.4
+ * Requires PHP:      8.0
+ * Author:            Mehdi Ilkhani Nasab
+ * License:           GPL-2.0-or-later
+ * Text Domain:       seo-action-plan
+ *
+ * @package SeoActionPlan
+ */
+
+defined( 'ABSPATH' ) || exit;
+
+const SAP_VERSION    = '0.1.0';
+const SAP_DB_VERSION = '1';
+const SAP_CAP        = 'sap_manage'; // Full access: projects, settings, plans.
+const SAP_CAP_WORK   = 'sap_work';   // Team members: their own tasks.
+
+define( 'SAP_FILE', __FILE__ );
+define( 'SAP_DIR', __DIR__ );
+define( 'SAP_URL', plugin_dir_url( __FILE__ ) );
+
+foreach ( array(
+	'core/helpers',
+	'core/jalali',
+	'core/settings',
+	'core/install',
+	'models/projects',
+	'models/focuses',
+	'models/datasets',
+	'models/findings',
+	'models/tasks',
+	'models/activity',
+	'connectors/google',
+	'connectors/gsc',
+	'connectors/sheets',
+	'connectors/seosignal',
+	'connectors/screaming-frog',
+	'engine/detectors',
+	'engine/kpi',
+	'engine/planner',
+	'engine/sync',
+	'rest',
+	'admin/menu',
+	'admin/actions',
+) as $sap_file ) {
+	require_once SAP_DIR . '/inc/' . $sap_file . '.php';
+}
+unset( $sap_file );
+
+register_activation_hook( __FILE__, 'sap_install' );
+register_deactivation_hook( __FILE__, 'sap_deactivate' );
