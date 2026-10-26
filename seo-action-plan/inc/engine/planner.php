@@ -60,22 +60,28 @@ function sap_plan_add_recurring( $project_id, $period ) {
 /**
  * Generate (or top up) the plan of a period.
  *
- * @param array $args capacity (hours, default project capacity), max_tasks, focus_share.
- * @return array{recurring:int, added:int, hours:float, capacity:float}
+ * With an AI analysis, its concrete tasks come first and only critical findings
+ * are added on top; without one, the highest-scoring findings fill the capacity.
+ * Recurring tasks are added only when enabled in settings.
+ *
+ * @param array $args capacity (hours, default project capacity), max_tasks.
+ * @return array{recurring:int, ai:int, added:int, hours:float, capacity:float}
  */
 function sap_plan_generate( $project_id, $period, $args = array() ) {
-	$project = sap_project( $project_id );
-	$args    = wp_parse_args( $args, array(
+	$project  = sap_project( $project_id );
+	$args     = wp_parse_args( $args, array(
 		'capacity'  => $project ? $project['capacity_hours'] : 40,
 		'max_tasks' => 40,
 	) );
-	$rec      = sap_plan_add_recurring( $project_id, $period );
-	$used     = sap_plan_used_hours( $project_id, $period );
 	$capacity = (float) $args['capacity'];
+	$rec      = sap_setting( 'use_recurring' ) ? sap_plan_add_recurring( $project_id, $period ) : 0;
+	$ai       = sap_ai_plan_to_tasks( $project, $period, $capacity );
+	$used     = sap_plan_used_hours( $project_id, $period );
+	$min      = $ai['added'] || sap_dataset( $project_id, 'ai_analysis' ) ? 60 : 0; // After AI: critical items only.
 	$added    = 0;
 	$count    = count( sap_tasks( array( 'project_id' => $project_id, 'period' => $period ) ) );
 	foreach ( sap_findings( $project_id, array( 'status' => 'open', 'limit' => 300 ) ) as $f ) {
-		if ( $count >= $args['max_tasks'] || $used >= $capacity ) {
+		if ( $count >= $args['max_tasks'] || $used >= $capacity || $f['score'] < $min ) {
 			break;
 		}
 		if ( $used + $f['effort'] > $capacity ) {
@@ -89,6 +95,7 @@ function sap_plan_generate( $project_id, $period, $args = array() ) {
 	sap_project_set_option( $project_id, 'plan_generated_' . $period, sap_now() );
 	return array(
 		'recurring' => $rec,
+		'ai'        => $ai['added'],
 		'added'     => $added,
 		'hours'     => $used,
 		'capacity'  => $capacity,

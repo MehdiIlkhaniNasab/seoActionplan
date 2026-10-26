@@ -55,8 +55,11 @@ add_action( 'admin_post_sap_save_settings', function () {
 		'decay_drop'           => min( 95, max( 5, absint( sap_post( 'decay_drop', 30 ) ) ) ),
 		'auto_sync'            => in_array( sap_post( 'auto_sync' ), array( 'off', 'weekly', 'daily' ), true ) ? sap_post( 'auto_sync' ) : 'weekly',
 		'recurring'            => sanitize_textarea_field( sap_post( 'recurring' ) ),
+		'use_recurring'        => sap_post( 'use_recurring' ) ? 1 : 0,
+		'ai_auto'              => sap_post( 'ai_auto' ) ? 1 : 0,
+		'ai_model'             => array_key_exists( sap_post( 'ai_model' ), sap_ai_models() ) ? sap_post( 'ai_model' ) : 'claude-opus-5-5',
 	);
-	foreach ( array( 'google_client_secret', 'seosignal_key' ) as $k ) {
+	foreach ( array( 'google_client_secret', 'seosignal_key', 'anthropic_key' ) as $k ) {
 		$v = trim( (string) sap_post( $k ) );
 		if ( '' !== $v && false === strpos( $v, '•' ) ) {
 			$changes[ $k ] = sanitize_text_field( $v );
@@ -108,10 +111,26 @@ add_action( 'admin_post_sap_save_project', function () {
 	if ( '' === trim( (string) $data['name'] ) ) {
 		sap_back( $id ? sap_project_url( $id, 'settings' ) : sap_url( 'new' ), 'نام پروژه الزامی است.', false );
 	}
+	// No property chosen: pick the Search Console property that matches the site.
+	if ( '' === trim( (string) $data['gsc_property'] ) && $data['site_url'] && sap_google_connected() ) {
+		$sites  = sap_gsc_sites();
+		$domain = sap_clean_domain( $data['site_url'] );
+		foreach ( is_wp_error( $sites ) ? array() : $sites as $site ) {
+			if ( sap_clean_domain( str_replace( 'sc-domain:', '', $site['url'] ) ) === $domain ) {
+				$data['gsc_property'] = $site['url'];
+				if ( 0 === strpos( $site['url'], 'sc-domain:' ) ) {
+					break; // Prefer the domain property.
+				}
+			}
+		}
+	}
+	if ( null === sap_post( 'capacity_hours', null ) && $id ) {
+		$data['capacity_hours'] = sap_project( $id )['capacity_hours'];
+	}
 	$new = ! $id;
 	$id  = sap_project_save( $data, $id );
 	sap_project_set_option( $id, 'no_writeback', sap_post( 'writeback' ) ? 0 : 1 );
-	sap_back( sap_project_url( $id, $new ? 'focuses' : 'settings' ), $new ? 'پروژه ساخته شد. حالا Focus و هدف پروژه را تعریف کنید.' : 'تنظیمات پروژه ذخیره شد.' );
+	sap_back( sap_project_url( $id, $new ? 'overview' : 'settings' ), $new ? 'پروژه ساخته شد. قدم بعدی را در کارت «قدم بعدی» دنبال کنید.' : 'تنظیمات پروژه ذخیره شد.' );
 } );
 
 add_action( 'admin_post_sap_delete_project', function () {
@@ -185,6 +204,41 @@ add_action( 'admin_post_sap_save_focus', function () {
 	sap_back( sap_project_url( $pid, 'focuses' ), 'Focus ذخیره شد. برای اعمال روی یافته‌ها، تحلیل را دوباره اجرا کنید.' );
 } );
 
+add_action( 'admin_post_sap_quick_focus', function () {
+	sap_guard( 'sap_quick_focus' );
+	$pid  = absint( sap_post( 'project_id' ) );
+	$name = trim( (string) sap_post( 'name' ) );
+	if ( '' === $name ) {
+		sap_back( sap_project_url( $pid, 'focuses' ), 'نام Focus را وارد کنید.', false );
+	}
+	$clusters = (array) sap_post( 'cluster_pick', array() );
+	$fid      = sap_focus_save( $pid, array(
+		'name'         => $name,
+		'url_patterns' => sap_post( 'url_patterns' ),
+		'clusters'     => implode( "\n", array_filter( array_merge( $clusters, sap_rows( sap_post( 'clusters' ) ) ) ) ),
+		'keywords'     => sap_post( 'keywords' ) ?: $name,
+		'goal'         => sap_post( 'goal' ),
+		'kpi_metric'   => sap_post( 'kpi_metric', 'clicks' ),
+		'kpi_target'   => sap_post( 'kpi_target' ),
+		'weight'       => 1.5,
+		'status'       => 'active',
+	) );
+	$focus = sap_focus( $fid );
+	$k     = $focus ? sap_focus_kpis( $focus, $pid ) : null;
+	if ( $k ) {
+		global $wpdb;
+		$wpdb->update( sap_table( 'focuses' ), array( 'kpi_baseline' => $k[ $focus['kpi_metric'] ] ), array( 'id' => $fid ) );
+	}
+	sap_back( sap_return_url( sap_project_url( $pid ) ), sprintf( 'Focus «%s» اضافه شد. با «تحلیل کامل» یافته‌ها و اکشن پلن در راستای آن چیده می‌شوند.', $name ) );
+} );
+
+add_action( 'admin_post_sap_focus_skip', function () {
+	sap_guard( 'sap_focus_skip' );
+	$pid = absint( sap_post( 'project_id' ) );
+	sap_project_set_option( $pid, 'focus_skipped', 1 );
+	sap_back( sap_project_url( $pid ), 'بدون Focus ادامه می‌دهیم؛ هر وقت خواستید از تب «Focus و اهداف» اضافه کنید.' );
+} );
+
 add_action( 'admin_post_sap_delete_focus', function () {
 	sap_guard( 'sap_delete_focus' );
 	$pid = absint( sap_post( 'project_id' ) );
@@ -252,14 +306,19 @@ add_action( 'admin_post_sap_plan_generate', function () {
 	$period = sap_period_sanitize( sap_post( 'period' ) );
 	$cap    = (float) sap_norm_text( sap_post( 'capacity' ) );
 	$res    = sap_plan_generate( $pid, $period, $cap > 0 ? array( 'capacity' => $cap ) : array() );
-	sap_back( sap_project_url( $pid, 'plan', array( 'period' => $period ) ), sprintf(
-		'اکشن پلن %s ساخته شد: %s کار دوره‌ای و %s اقدام از یافته‌ها — %s از %s ساعت ظرفیت.',
-		sap_period_label( $period ),
-		sap_num( $res['recurring'] ),
-		sap_num( $res['added'] ),
-		sap_num( $res['hours'], 1 ),
-		sap_num( $res['capacity'] )
-	) );
+	$parts = array();
+	if ( $res['ai'] ) {
+		$parts[] = sap_num( $res['ai'] ) . ' کار هوشمند';
+	}
+	if ( $res['added'] ) {
+		$parts[] = sap_num( $res['added'] ) . ' اقدام از یافته‌ها';
+	}
+	if ( $res['recurring'] ) {
+		$parts[] = sap_num( $res['recurring'] ) . ' کار دوره‌ای';
+	}
+	sap_back( sap_project_url( $pid, 'plan', array( 'period' => $period ) ), $parts
+		? sprintf( 'اکشن پلن %s آماده شد: %s — %s از %s ساعت ظرفیت.', sap_period_label( $period ), implode( '، ', $parts ), sap_num( $res['hours'], 1 ), sap_num( $res['capacity'] ) )
+		: 'کار جدیدی اضافه نشد؛ ظرفیت ماه پر است یا یافته/پیشنهاد جدیدی نیست.', (bool) $parts );
 } );
 
 add_action( 'admin_post_sap_plan_carry', function () {

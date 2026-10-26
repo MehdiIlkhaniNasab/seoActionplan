@@ -102,6 +102,23 @@ add_action( 'rest_api_init', function () {
 		},
 	) );
 
+	// AI assistant: write the deliverable of a task.
+	register_rest_route( $ns, '/ai/task/(?P<id>\d+)', array(
+		'methods'             => 'POST',
+		'permission_callback' => 'sap_can_work',
+		'callback'            => function ( WP_REST_Request $req ) {
+			$task = sap_task( (int) $req['id'] );
+			if ( ! $task ) {
+				return new WP_Error( 'sap_task', 'کار یافت نشد.', array( 'status' => 404 ) );
+			}
+			if ( ! sap_can() && $task['assignee'] !== get_current_user_id() ) {
+				return new WP_Error( 'sap_forbidden', 'اجازه این کار را ندارید.', array( 'status' => 403 ) );
+			}
+			$text = sap_ai_task_assist( $task );
+			return is_wp_error( $text ) ? $text : array( 'ok' => true, 'output' => $text );
+		},
+	) );
+
 	// Quick finding action (plan / someday / dismiss / reopen) without page reload.
 	register_rest_route( $ns, '/finding/(?P<id>\d+)', array(
 		'methods'             => 'POST',

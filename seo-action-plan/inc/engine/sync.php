@@ -25,6 +25,7 @@ function sap_sync_steps() {
 		'ss_compare'   => 'سئو سیگنال: مقایسه با رقبا',
 		'ss_questions' => 'سئو سیگنال: سوالات کاربران',
 		'analyze'      => 'تحلیل و کشف ایرادها و فرصت‌ها',
+		'ai'           => 'تحلیل هوشمند و اکشن پلن پیشنهادی (هوش مصنوعی)',
 		'writeback'    => 'نوشتن ستون‌های خودکار در گوگل شیت',
 	);
 }
@@ -59,9 +60,12 @@ function sap_sync_step( $project, $step, $force = false ) {
 /**
  * Run every step (scheduled sync).
  */
-function sap_sync_all( $project_id, $force = false ) {
+function sap_sync_all( $project_id, $force = false, $scheduled = false ) {
 	$out = array();
 	foreach ( array_keys( sap_sync_steps() ) as $step ) {
+		if ( 'ai' === $step && $scheduled && ! sap_setting( 'ai_auto' ) ) {
+			continue; // The paid AI step runs on schedule only when enabled.
+		}
 		$project      = sap_project( $project_id ); // Fresh options each step.
 		$out[ $step ] = sap_sync_step( $project, $step, $force );
 	}
@@ -385,6 +389,20 @@ function sap_step_analyze( $project ) {
 }
 
 /**
+ * AI diagnosis + suggested plan.
+ */
+function sap_step_ai( $project ) {
+	if ( ! sap_ai_connected() ) {
+		return sap_skip( 'کلید هوش مصنوعی وارد نشده؛ تحلیل هوشمند انجام نشد (تنظیمات › هوش مصنوعی).' );
+	}
+	$res = sap_ai_analyze( $project );
+	if ( is_wp_error( $res ) ) {
+		return $res;
+	}
+	return array( 'msg' => sprintf( 'تشخیص وضعیت و %s کار پیشنهادی آماده شد.', sap_num( count( $res['plan'] ) ) ) );
+}
+
+/**
  * Write the auto columns of both sheets.
  */
 function sap_step_writeback( $project ) {
@@ -464,5 +482,5 @@ add_action( 'sap_daily', function () {
 } );
 
 add_action( 'sap_sync_project', function ( $project_id ) {
-	sap_sync_all( (int) $project_id );
+	sap_sync_all( (int) $project_id, false, true );
 } );

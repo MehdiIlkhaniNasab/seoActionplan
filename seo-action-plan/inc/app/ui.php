@@ -108,3 +108,93 @@ function sap_filter_form( $url ) {
 	}
 	return strtok( $url, '?' );
 }
+
+/**
+ * Toggle switch (checkbox).
+ */
+function sap_switch( $name, $checked, $label, $hint = '' ) {
+	printf(
+		'<label class="sap-switch"><input type="checkbox" name="%s" value="1" %s><span class="sap-switch-track" aria-hidden="true"></span><span class="sap-switch-text"><b>%s</b>%s</span></label>',
+		esc_attr( $name ),
+		checked( (bool) $checked, true, false ),
+		esc_html( $label ),
+		$hint ? '<small>' . esc_html( $hint ) . '</small>' : ''
+	);
+}
+
+/**
+ * Segmented control (radio group).
+ *
+ * @param array $options value => label.
+ */
+function sap_segment( $name, $options, $current ) {
+	echo '<div class="sap-segment" role="radiogroup">';
+	foreach ( $options as $value => $label ) {
+		printf(
+			'<label><input type="radio" name="%s" value="%s" %s><span>%s</span></label>',
+			esc_attr( $name ),
+			esc_attr( $value ),
+			checked( (string) $current, (string) $value, false ),
+			esc_html( $label )
+		);
+	}
+	echo '</div>';
+}
+
+/**
+ * Multi-select chips (checkboxes).
+ */
+function sap_chip_pick( $name, $options, $selected = array() ) {
+	$selected = array_map( 'sap_kw_key', (array) $selected );
+	echo '<div class="sap-chip-pick">';
+	foreach ( $options as $value => $label ) {
+		printf(
+			'<label><input type="checkbox" name="%s[]" value="%s" %s><span>%s</span></label>',
+			esc_attr( $name ),
+			esc_attr( $value ),
+			checked( in_array( sap_kw_key( $value ), $selected, true ), true, false ),
+			esc_html( $label )
+		);
+	}
+	echo '</div>';
+}
+
+/**
+ * Guided path of a project: five steps and the one thing to do now.
+ *
+ * @return array{steps: array, current: string}
+ */
+function sap_project_path( $project ) {
+	$pid    = $project['id'];
+	$period = sap_period_current();
+	$tasks  = sap_tasks( array( 'project_id' => $pid, 'period' => $period ) );
+	$review = sap_weekly_review( $pid );
+	$steps  = array(
+		'connect' => array( 'اتصال داده‌ها', '' !== $project['gsc_property'] || '' !== $project['sheet_id'] ),
+		'analyze' => array( 'تحلیل', ! empty( $project['options']['last_sync'] ) ),
+		'focus'   => array( 'Focus و هدف', (bool) sap_focuses( $pid, true ) || ! empty( $project['options']['focus_skipped'] ) ),
+		'plan'    => array( 'اکشن پلن', (bool) $tasks ),
+		'run'     => array( 'اجرا و بازبینی', $tasks && ! $review['due'] && ! $review['overdue'] ),
+	);
+	$current = 'done';
+	foreach ( $steps as $k => $s ) {
+		if ( ! $s[1] ) {
+			$current = $k;
+			break;
+		}
+	}
+	return array( 'steps' => $steps, 'current' => $current, 'review' => $review, 'tasks' => $tasks );
+}
+
+/**
+ * Labels of the AI health areas.
+ */
+function sap_health_areas() {
+	return array(
+		'technical' => 'تکنیکال',
+		'content'   => 'محتوا',
+		'onpage'    => 'سئو داخلی',
+		'authority' => 'اعتبار و لینک',
+		'focus'     => 'Focus',
+	);
+}

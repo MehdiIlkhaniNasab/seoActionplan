@@ -39,12 +39,7 @@ $auth  = sap_google_auth_url();
 			</span>
 		</div>
 		<div class="sap-grid-2">
-			<label>روش اتصال
-				<select name="google_auth_mode">
-					<option value="oauth" <?php selected( $s['google_auth_mode'], 'oauth' ); ?>>OAuth (حساب گوگل خودتان)</option>
-					<option value="service" <?php selected( $s['google_auth_mode'], 'service' ); ?>>Service Account</option>
-				</select>
-			</label>
+			<div><p class="sap-label">روش اتصال</p><?php sap_segment( 'google_auth_mode', array( 'oauth' => 'OAuth (حساب گوگل)', 'service' => 'Service Account' ), $s['google_auth_mode'] ); ?></div>
 			<label>Redirect URI (در Google Cloud ثبت کنید)<code dir="ltr" data-sap-copy><?php echo esc_html( sap_google_redirect_uri() ); ?></code></label>
 		</div>
 		<div class="sap-grid-2">
@@ -55,6 +50,26 @@ $auth  = sap_google_auth_url();
 			<small>ایمیل سرویس اکانت را در پراپرتی‌های سرچ کنسول (Restricted) اضافه کنید و گوگل شیت‌ها را با آن (Editor) به‌اشتراک بگذارید.</small>
 		</label>
 		<p class="sap-muted">در Google Cloud Console دو API را فعال کنید: <b>Google Search Console API</b> و <b>Google Sheets API</b>. اگر از SeoReport استفاده می‌کنید می‌توانید از همان پروژه Google Cloud و همان OAuth Client استفاده کنید؛ فقط Redirect URI بالا را هم به Client اضافه کنید.</p>
+	</section>
+
+	<section class="sap-panel">
+		<h2><span class="sap-ai-badge"><?php echo sap_icon( 'spark', 14 ); // phpcs:ignore ?>AI</span>هوش مصنوعی (Claude)</h2>
+		<?php $ai_usage = sap_ai_usage(); ?>
+		<div class="sap-status-row">
+			<span class="sap-conn <?php echo sap_ai_connected() ? 'is-on' : ''; ?>"><i></i><?php echo sap_ai_connected() ? 'متصل' : 'کلید وارد نشده'; ?></span>
+			<?php if ( $ai_usage['requests'] ) : ?>
+				<span class="sap-muted">این ماه: <?php echo esc_html( sap_num( $ai_usage['requests'] ) ); ?> درخواست · <?php echo esc_html( sap_num( round( ( $ai_usage['input'] + $ai_usage['output'] ) / 1000 ) ) ); ?> هزار توکن</span>
+			<?php endif; ?>
+		</div>
+		<div class="sap-grid-2">
+			<label>کلید API (Anthropic)<input type="text" name="anthropic_key" dir="ltr" value="<?php echo esc_attr( sap_mask( $s['anthropic_key'] ) ); ?>" autocomplete="off" placeholder="sk-ant-…">
+				<small>از console.anthropic.com › API Keys بسازید. کلید فقط روی سرور و رمزنگاری‌شده نگه داشته می‌شود.</small>
+			</label>
+			<label>مدل
+				<select name="ai_model"><?php foreach ( sap_ai_models() as $k => $label ) : ?><option value="<?php echo esc_attr( $k ); ?>" <?php selected( $s['ai_model'], $k ); ?>><?php echo esc_html( $label ); ?></option><?php endforeach; ?></select>
+			</label>
+		</div>
+		<?php sap_switch( 'ai_auto', $s['ai_auto'], 'تحلیل هوشمند در همگام‌سازی خودکار هفتگی هم اجرا شود', 'هر اجرا هزینه API دارد؛ اگر خاموش باشد، تحلیل هوشمند فقط با دکمه «تحلیل کامل» اجرا می‌شود.' ); ?>
 	</section>
 
 	<section class="sap-panel">
@@ -81,13 +96,7 @@ $auth  = sap_google_auth_url();
 		<div class="sap-grid-3">
 			<label>حداقل نمایش ۲۸ روزه (Striking Distance و کنیبالیزیشن)<input type="number" name="min_impressions" min="1" value="<?php echo esc_attr( $s['min_impressions'] ); ?>"></label>
 			<label>حداقل نمایش برای CTR پایین<input type="number" name="ctr_min_impressions" min="1" value="<?php echo esc_attr( $s['ctr_min_impressions'] ); ?>"></label>
-			<label>همگام‌سازی خودکار
-				<select name="auto_sync">
-					<option value="weekly" <?php selected( $s['auto_sync'], 'weekly' ); ?>>هفتگی</option>
-					<option value="daily" <?php selected( $s['auto_sync'], 'daily' ); ?>>روزانه</option>
-					<option value="off" <?php selected( $s['auto_sync'], 'off' ); ?>>خاموش</option>
-				</select>
-			</label>
+			<div><p class="sap-label">همگام‌سازی خودکار</p><?php sap_segment( 'auto_sync', array( 'weekly' => 'هفتگی', 'daily' => 'روزانه', 'off' => 'خاموش' ), $s['auto_sync'] ); ?></div>
 			<label>افت محتوا: حداقل کلیک ۲۸ روز قبل<input type="number" name="decay_min_clicks" min="1" value="<?php echo esc_attr( $s['decay_min_clicks'] ); ?>"></label>
 			<label>افت محتوا: درصد افت<input type="number" name="decay_drop" min="5" max="95" value="<?php echo esc_attr( $s['decay_drop'] ); ?>"></label>
 		</div>
@@ -95,6 +104,7 @@ $auth  = sap_google_auth_url();
 
 	<section class="sap-panel">
 		<h2>کارهای دوره‌ای ماهانه</h2>
+		<?php sap_switch( 'use_recurring', $s['use_recurring'], 'افزودن کارهای دوره‌ای به اکشن پلن هر ماه', 'خاموش باشد، فقط کارهای مشخص و تحلیل‌محور در برنامه می‌آیند.' ); ?>
 		<p class="sap-muted">هر خط: <code>حوزه | عنوان کار | ساعت</code> — حوزه‌ها: <?php echo esc_html( implode( '، ', array_keys( sap_contexts() ) ) ); ?>. این کارها هنگام ساخت اکشن پلن هر ماه خودکار اضافه می‌شوند.</p>
 		<textarea name="recurring" rows="7" dir="rtl"><?php echo esc_textarea( $s['recurring'] ); ?></textarea>
 	</section>

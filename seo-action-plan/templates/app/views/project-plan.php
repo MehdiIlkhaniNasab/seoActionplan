@@ -61,7 +61,7 @@ $args = array( 'fnames' => $fnames, 'here' => $here, 'focuses' => $focuses, 'ope
 		<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" class="sap-inline">
 			<?php sap_form_fields( 'sap_plan_generate', array( 'project_id' => $pid, 'period' => $period ) ); ?>
 			<label class="sap-inline-label">ظرفیت <input type="number" name="capacity" min="1" value="<?php echo esc_attr( (int) $cap ); ?>" class="is-tiny"> ساعت</label>
-			<button class="sap-btn is-primary" type="submit"><?php echo sap_icon( 'spark' ); // phpcs:ignore ?><?php echo $tasks ? 'تکمیل خودکار برنامه' : 'ساخت خودکار اکشن پلن'; ?></button>
+			<button class="sap-btn is-primary" type="submit"><?php echo sap_icon( 'spark' ); // phpcs:ignore ?><?php echo $tasks ? 'تکمیل هوشمند برنامه' : 'ساخت اکشن پلن هوشمند'; ?></button>
 		</form>
 		<?php if ( $cols['next'] || $cols['doing'] || $cols['waiting'] || $cols['inbox'] ) : ?>
 			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">

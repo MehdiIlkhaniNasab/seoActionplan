@@ -23,6 +23,7 @@ function sap_dataset_labels() {
 		'ss_compare'     => 'سئو سیگنال: مقایسه با رقبا',
 		'ss_questions'   => 'سئو سیگنال: سوالات کاربران (Focusها)',
 		'crawl'          => 'Screaming Frog: آخرین خزش',
+		'ai_analysis'    => 'هوش مصنوعی: تحلیل و اکشن پلن',
 	);
 }
 

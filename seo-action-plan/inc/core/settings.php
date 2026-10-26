@@ -7,7 +7,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-const SAP_SECRET_KEYS = array( 'google_client_secret', 'google_refresh_token', 'google_service_account', 'seosignal_key' );
+const SAP_SECRET_KEYS = array( 'google_client_secret', 'google_refresh_token', 'google_service_account', 'seosignal_key', 'anthropic_key' );
 
 /**
  * Default settings.
@@ -22,6 +22,10 @@ function sap_settings_defaults() {
 		'google_scopes'          => '',
 		'google_service_account' => '',
 		'seosignal_key'          => '',
+		'anthropic_key'          => '',
+		'ai_model'               => 'claude-opus-5-5',
+		'ai_auto'                => 0,   // Run the AI analysis in the scheduled weekly sync too (costs API credit).
+		'use_recurring'          => 0,   // Add the recurring tasks below when a plan is generated.
 		'seosignal_daily_cap'    => 40,  // Of the 50 daily SEO Signal requests, leave some for the panel / SeoReport.
 		'seosignal_cache_days'   => 25,  // Search volumes are monthly data: refresh at most once a month.
 		'min_impressions'        => 50,  // Striking distance / cannibalization noise floor (28 days).
@@ -30,10 +34,6 @@ function sap_settings_defaults() {
 		'decay_drop'             => 30,  // Content decay: % drop.
 		'auto_sync'              => 'weekly', // off|weekly|daily.
 		'recurring'              => implode( "\n", array(
-			'technical | خزش ماهانه Screaming Frog و بررسی ایرادهای جدید | 2',
-			'technical | بررسی سایت‌مپ‌ها و گزارش ایندکس سرچ کنسول | 1',
-			'research | بروزرسانی شیت کلاسترینگ و حجم جستجوی کلمات | 1',
-			'management | بازبینی هفتگی (Weekly Review) — ۴ جلسه | 2',
 			'management | تهیه گزارش ماهانه سئو | 3',
 		) ),
 	);

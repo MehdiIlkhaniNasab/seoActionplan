@@ -100,7 +100,7 @@ list( $jy, $jm, $jd ) = sap_jnow();
 	<div class="sap-empty is-hero">
 		<?php echo sap_icon( 'target', 40 ); // phpcs:ignore ?>
 		<h2>اولین پروژه را بسازید</h2>
-		<p>۱. در «تنظیمات و اتصال‌ها» حساب گوگل و کلید سئو سیگنال را وصل کنید. ۲. پروژه بسازید و گوگل شیت و سرچ کنسول آن را وارد کنید. ۳. Focus و هدف را تعریف کنید و «همگام‌سازی و تحلیل» را بزنید.</p>
+		<p>۱. در «تنظیمات و اتصال‌ها» حساب گوگل، هوش مصنوعی و سئو سیگنال را وصل کنید. ۲. پروژه بسازید (فقط نام و آدرس سایت). ۳. از کارت «قدم بعدی» پروژه پیش بروید.</p>
 		<div class="sap-actions is-center">
 			<a class="sap-btn" href="<?php echo esc_url( sap_url( 'settings' ) ); ?>">تنظیمات و اتصال‌ها</a>
 			<a class="sap-btn is-primary" href="<?php echo esc_url( sap_url( 'new' ) ); ?>">ساخت پروژه</a>

@@ -24,6 +24,9 @@ $post    = esc_url( admin_url( 'admin-post.php' ) );
 			<?php if ( $t['focus_id'] && isset( $fnames[ $t['focus_id'] ] ) ) : ?>
 				<span class="sap-chip is-focus"><?php echo sap_icon( 'target', 12 ); // phpcs:ignore ?><?php echo esc_html( $fnames[ $t['focus_id'] ] ); ?></span>
 			<?php endif; ?>
+			<?php if ( 'ai' === $t['source'] ) : ?>
+				<span class="sap-chip is-ai"><?php echo sap_icon( 'spark', 11 ); // phpcs:ignore ?>هوشمند</span>
+			<?php endif; ?>
 			<?php if ( $t['recurring'] ) : ?>
 				<span class="sap-chip is-rec">دوره‌ای</span>
 			<?php endif; ?>
@@ -54,9 +57,19 @@ $post    = esc_url( admin_url( 'admin-post.php' ) );
 		<?php if ( $t['url'] ) : ?>
 			<p><a href="<?php echo esc_url( $t['url'] ); ?>" target="_blank" rel="noopener" dir="ltr"><?php echo esc_html( rawurldecode( $t['url'] ) ); ?></a></p>
 		<?php endif; ?>
+		<div class="sap-ai-output" data-sap-ai-box <?php echo '' === trim( $t['ai_output'] ) ? 'hidden' : ''; ?>>
+			<div class="sap-ai-output-head"><span><?php echo sap_icon( 'spark', 13 ); // phpcs:ignore ?>خروجی آماده</span><button type="button" class="sap-icon-btn" data-sap-copy-target title="کپی"><?php echo sap_icon( 'log', 14 ); // phpcs:ignore ?></button></div>
+			<pre><?php echo esc_html( $t['ai_output'] ); ?></pre>
+		</div>
+		<?php if ( sap_ai_connected() && ! in_array( $t['status'], array( 'done', 'dropped' ), true ) ) : ?>
+			<button type="button" class="sap-btn is-small is-ai" data-sap-ai-task="<?php echo esc_attr( $t['id'] ); ?>"><?php echo sap_icon( 'spark', 14 ); // phpcs:ignore ?><?php echo '' === trim( $t['ai_output'] ) ? 'بنویس برام' : 'نوشتن دوباره'; ?></button>
+		<?php endif; ?>
 		<form method="post" action="<?php echo $post; // phpcs:ignore ?>" class="sap-form">
 			<?php sap_form_fields( 'sap_task_save', array( 'task_id' => $t['id'], '_return' => $here . '#task-' . $t['id'] ) ); ?>
+			<label>نتیجه / چه کاری انجام شد (در گزارش ماهانه می‌آید)<textarea name="result" rows="2" placeholder="مثلاً: تایتل از «…» به «…» تغییر کرد؛ ۴ سوال FAQ اضافه شد"><?php echo esc_textarea( $t['result'] ); ?></textarea></label>
 			<?php if ( $manager ) : ?>
+				<details class="sap-more">
+				<summary>ویرایش جزئیات <small>عنوان، مسئول، سررسید، ماه، Focus…</small></summary>
 				<div class="sap-grid-3">
 					<label class="is-wide">عنوان<input type="text" name="title" value="<?php echo esc_attr( $t['title'] ); ?>"></label>
 					<label>حوزه<select name="context"><?php foreach ( sap_contexts() as $k => $label ) : ?><option value="<?php echo esc_attr( $k ); ?>" <?php selected( $k, $t['context'] ); ?>><?php echo esc_html( $label ); ?></option><?php endforeach; ?></select></label>
@@ -70,10 +83,10 @@ $post    = esc_url( admin_url( 'admin-post.php' ) );
 					<label class="is-wide">آدرس صفحه<input type="url" name="url" dir="ltr" value="<?php echo esc_attr( $t['url'] ); ?>"></label>
 				</div>
 				<label>توضیحات<textarea name="notes" rows="3"><?php echo esc_textarea( $t['notes'] ); ?></textarea></label>
+				</details>
 			<?php else : ?>
 				<label>آدرس صفحه (مثلاً لینک مقاله منتشرشده)<input type="url" name="url" dir="ltr" value="<?php echo esc_attr( $t['url'] ); ?>"></label>
 			<?php endif; ?>
-			<label>نتیجه / چه کاری انجام شد (در گزارش ماهانه می‌آید)<textarea name="result" rows="2" placeholder="مثلاً: تایتل از «…» به «…» تغییر کرد؛ ۴ سوال FAQ اضافه شد"><?php echo esc_textarea( $t['result'] ); ?></textarea></label>
 			<div class="sap-form-foot">
 				<button class="sap-btn is-small is-primary" type="submit">ذخیره</button>
 			</div>

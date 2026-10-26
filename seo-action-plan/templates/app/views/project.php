@@ -14,23 +14,23 @@ $log = (array) ( $project['options']['sync_log'] ?? array() );
 ?>
 <header class="sap-head">
 	<div>
-		<p class="sap-eyebrow"><a href="<?php echo esc_url( sap_url() ); ?>">پروژه‌ها</a> / <span dir="ltr"><?php echo esc_html( sap_project_domain( $project ) ); ?></span></p>
+		<p class="sap-eyebrow"><a href="<?php echo esc_url( sap_url() ); ?>">داشبورد</a> / <span dir="ltr"><?php echo esc_html( sap_project_domain( $project ) ); ?></span></p>
 		<h1><?php echo esc_html( $project['name'] ); ?></h1>
 		<p class="sap-muted">
 			<?php
 			$last = $project['options']['last_sync'] ?? '';
-			echo $last ? 'آخرین همگام‌سازی کامل: ' . esc_html( sap_jdate( $last ) . ' ' . substr( $last, 11, 5 ) ) : 'هنوز همگام‌سازی نشده — «همگام‌سازی و تحلیل» را بزنید.';
+			echo $last ? 'آخرین تحلیل: ' . esc_html( sap_jdate( $last ) . ' ' . sap_fa( substr( $last, 11, 5 ) ) ) : 'هنوز تحلیل نشده';
 			?>
 		</p>
 	</div>
 	<div class="sap-actions">
-		<button type="button" class="sap-btn is-primary" data-sap-sync="<?php echo esc_attr( $project['id'] ); ?>"><?php echo sap_icon( 'refresh' ); // phpcs:ignore ?>همگام‌سازی و تحلیل</button>
-		<button type="button" class="sap-btn" data-sap-sync="<?php echo esc_attr( $project['id'] ); ?>" data-force="1" title="داده‌های سئو سیگنال را هم با وجود کش تازه دوباره می‌گیرد (مصرف سهمیه)">همگام‌سازی کامل</button>
+		<button type="button" class="sap-btn is-primary" data-sap-sync="<?php echo esc_attr( $project['id'] ); ?>"><?php echo sap_icon( 'spark' ); // phpcs:ignore ?>تحلیل کامل</button>
+		<button type="button" class="sap-btn" data-sap-sync="<?php echo esc_attr( $project['id'] ); ?>" data-force="1" title="داده‌های سئو سیگنال را هم با وجود کش تازه دوباره می‌گیرد (مصرف سهمیه)"><?php echo sap_icon( 'refresh' ); // phpcs:ignore ?>بدون کش</button>
 	</div>
 </header>
 
 <section class="sap-panel sap-sync" data-sap-sync-panel hidden>
-	<h2>همگام‌سازی و تحلیل</h2>
+	<h2><?php echo sap_icon( 'spark' ); // phpcs:ignore ?>تحلیل کامل پروژه</h2>
 	<ol class="sap-steps">
 		<?php foreach ( sap_sync_steps() as $id => $label ) : ?>
 			<li data-step="<?php echo esc_attr( $id ); ?>">
@@ -41,7 +41,7 @@ $log = (array) ( $project['options']['sync_log'] ?? array() );
 		<?php endforeach; ?>
 	</ol>
 	<div class="sap-sync-foot" data-sap-sync-done hidden>
-		<a class="sap-btn is-primary" href="<?php echo esc_url( sap_project_url( $project['id'], 'findings' ) ); ?>">مشاهده ایرادها و فرصت‌ها</a>
+		<a class="sap-btn is-primary" href="<?php echo esc_url( sap_project_url( $project['id'] ) ); ?>">مشاهده نتیجه تحلیل</a>
 		<a class="sap-btn" href="<?php echo esc_url( sap_project_url( $project['id'], $tab ) ); ?>">بارگذاری دوباره صفحه</a>
 	</div>
 </section>

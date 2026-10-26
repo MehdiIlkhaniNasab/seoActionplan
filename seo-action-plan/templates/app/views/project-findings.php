@@ -50,7 +50,7 @@ $here     = sap_project_url( $pid, 'findings', array_filter( array( 'fstatus' =>
 <?php if ( ! $list ) : ?>
 	<div class="sap-empty">
 		<?php echo sap_icon( 'inbox', 32 ); // phpcs:ignore ?>
-		<p><?php echo 'open' === $status ? 'صندوق ورودی خالی است. اگر هنوز همگام‌سازی نکرده‌اید، «همگام‌سازی و تحلیل» را بزنید.' : 'موردی نیست.'; ?></p>
+		<p><?php echo 'open' === $status ? 'صندوق ورودی خالی است. اگر هنوز تحلیل نکرده‌اید، «تحلیل کامل» را بزنید.' : 'موردی نیست.'; ?></p>
 	</div>
 <?php else : ?>
 	<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" class="sap-findings">

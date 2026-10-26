@@ -37,7 +37,7 @@ function sap_task_hydrate( $row ) {
 	$row['assignee']   = (int) $row['assignee'];
 	$row['effort']     = (float) $row['effort'];
 	$row['score']      = (float) $row['score'];
-	foreach ( array( 'notes', 'result', 'url', 'waiting_for', 'keyword', 'period', 'recurring' ) as $k ) {
+	foreach ( array( 'notes', 'result', 'url', 'waiting_for', 'keyword', 'period', 'recurring', 'source', 'ai_ref', 'ai_output' ) as $k ) {
 		$row[ $k ] = (string) $row[ $k ];
 	}
 	return $row;
@@ -104,6 +104,9 @@ function sap_task_save( $data, $id = 0 ) {
 		'url'         => 'esc_url_raw',
 		'keyword'     => 'sanitize_text_field',
 		'recurring'   => 'sanitize_key',
+		'source'      => 'sanitize_key',
+		'ai_ref'      => 'sanitize_key',
+		'ai_output'   => 'sanitize_textarea_field',
 	);
 	foreach ( $map as $k => $fn ) {
 		if ( array_key_exists( $k, $data ) ) {
