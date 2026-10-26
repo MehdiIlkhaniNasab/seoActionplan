@@ -1,4 +1,4 @@
-/* SEO Action Plan — admin interactions (no build step). */
+/* SEO Action Plan — app interactions (no build step). */
 (function () {
 	'use strict';
 	if (!window.SAP) { return; }
@@ -14,6 +14,38 @@
 			});
 		});
 	}
+
+	function post(path, data) {
+		return api(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data || {}) });
+	}
+
+	/* ---- Toast ---- */
+	var toastEl;
+	function toast(msg, bad) {
+		if (!toastEl) {
+			toastEl = document.createElement('div');
+			toastEl.className = 'sap-toast';
+			toastEl.setAttribute('role', 'status');
+			document.body.appendChild(toastEl);
+		}
+		toastEl.textContent = msg;
+		toastEl.className = 'sap-toast is-show' + (bad ? ' is-bad' : '');
+		clearTimeout(toastEl._t);
+		toastEl._t = setTimeout(function () { toastEl.className = 'sap-toast'; }, 2600);
+	}
+
+	function fadeOut(el) {
+		el.classList.add('is-leaving');
+		setTimeout(function () { el.remove(); }, 260);
+	}
+
+	/* ---- Mobile navigation ---- */
+	document.querySelectorAll('[data-sap-open-nav]').forEach(function (b) {
+		b.addEventListener('click', function () { document.body.classList.add('nav-open'); });
+	});
+	document.querySelectorAll('[data-sap-close-nav]').forEach(function (b) {
+		b.addEventListener('click', function () { document.body.classList.remove('nav-open'); });
+	});
 
 	/* ---- Sync runner: one REST request per step, in order ---- */
 	document.querySelectorAll('[data-sap-sync]').forEach(function (btn) {
@@ -35,6 +67,7 @@
 				if (i >= items.length) {
 					done.hidden = false;
 					document.querySelectorAll('[data-sap-sync]').forEach(function (b) { b.disabled = false; });
+					toast('همگام‌سازی و تحلیل تمام شد.');
 					return;
 				}
 				var li = items[i++];
@@ -57,6 +90,69 @@
 		});
 	});
 
+	/* ---- Task status buttons: change in place ---- */
+	function refreshCounts() {
+		document.querySelectorAll('.sap-col').forEach(function (col) {
+			var n = col.querySelectorAll('.sap-task').length;
+			var small = col.querySelector('h3 small');
+			if (small) { small.textContent = n.toLocaleString('fa-IR'); }
+			var empty = col.querySelector('.sap-col-empty');
+			if (empty) { empty.hidden = n > 0; }
+		});
+	}
+	document.addEventListener('click', function (ev) {
+		var btn = ev.target.closest('.sap-quick button[name="status"]');
+		if (!btn) { return; }
+		ev.preventDefault();
+		var form = btn.closest('form');
+		var id = form.querySelector('input[name="task_id"]').value;
+		var status = btn.value;
+		btn.disabled = true;
+		post('task/' + id + '/status', { status: status }).then(function (res) {
+			toast('وضعیت: ' + res.label);
+			if (form.hasAttribute('data-sap-remove-on-done')) {
+				fadeOut(form.closest('[data-sap-row]'));
+				return;
+			}
+			var card = form.closest('.sap-task');
+			card.className = card.className.replace(/\bis-[a-z]+\b/g, '').trim() + ' is-' + status;
+			form.querySelectorAll('button[name="status"]').forEach(function (b) { b.hidden = b.value === status; });
+			var select = card.querySelector('select[name="status"]');
+			if (select) { select.value = status; }
+			var col = document.querySelector('.sap-col.is-' + status);
+			if (col) {
+				card.open = false;
+				col.insertBefore(card, col.querySelector('.sap-task'));
+				refreshCounts();
+			} else if (document.querySelector('.sap-board') || ['done', 'dropped', 'someday'].indexOf(status) !== -1) {
+				fadeOut(card);
+				setTimeout(refreshCounts, 300);
+			}
+		}).catch(function (e) { toast(e.message, true); }).then(function () { btn.disabled = false; });
+	});
+
+	/* ---- Finding row buttons: act in place ---- */
+	document.addEventListener('click', function (ev) {
+		var btn = ev.target.closest('button[name="quick"]');
+		if (!btn) { return; }
+		ev.preventDefault();
+		var parts = btn.value.split(':');
+		var form = btn.closest('form');
+		var period = form.querySelector('select[name="period"]');
+		btn.disabled = true;
+		post('finding/' + parts[1], { do: parts[0], period: period ? period.value : '' }).then(function (res) {
+			toast(res.msg);
+			var row = btn.closest('.sap-finding');
+			fadeOut(row);
+			var counter = document.querySelector('[data-sap-count]');
+			if (counter) {
+				var n = Math.max(0, parseInt(counter.getAttribute('data-sap-count'), 10) - 1);
+				counter.setAttribute('data-sap-count', n);
+				counter.textContent = n.toLocaleString('fa-IR');
+			}
+		}).catch(function (e) { toast(e.message, true); btn.disabled = false; });
+	});
+
 	/* ---- Search Console properties ---- */
 	document.querySelectorAll('[data-sap-load-gsc]').forEach(function (btn) {
 		btn.addEventListener('click', function () {
@@ -69,8 +165,8 @@
 					o.value = s.url;
 					dl.appendChild(o);
 				});
-				btn.textContent = (res.sites || []).length + ' پراپرتی — روی فیلد کلیک کنید';
-			}).catch(function (e) { window.alert(e.message); }).then(function () { btn.disabled = false; });
+				btn.textContent = (res.sites || []).length.toLocaleString('fa-IR') + ' پراپرتی — روی فیلد کلیک کنید';
+			}).catch(function (e) { toast(e.message, true); }).then(function () { btn.disabled = false; });
 		});
 	});
 
@@ -109,14 +205,18 @@
 			if (!navigator.clipboard) { return; }
 			navigator.clipboard.writeText(el.textContent.trim()).then(function () {
 				el.classList.add('is-copied');
+				toast('کپی شد');
 				setTimeout(function () { el.classList.remove('is-copied'); }, 900);
 			});
 		});
 	});
 
-	/* ---- Open the task named in the URL hash ---- */
+	/* ---- Flash messages fade; open the task named in the URL ---- */
+	var flash = document.querySelector('.sap-flash.is-ok');
+	if (flash) { setTimeout(function () { flash.classList.add('is-leaving'); }, 6000); }
 	if (location.hash && location.hash.indexOf('#task-') === 0) {
 		var t = document.querySelector(location.hash);
 		if (t && t.tagName === 'DETAILS') { t.open = true; t.scrollIntoView({ block: 'center' }); }
 	}
+
 })();

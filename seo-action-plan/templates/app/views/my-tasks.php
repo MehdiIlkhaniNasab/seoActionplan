@@ -34,7 +34,7 @@ foreach ( $by_p as $pid => $list ) :
 	$args    = array(
 		'fnames'  => wp_list_pluck( $focuses, 'name', 'id' ),
 		'focuses' => $focuses,
-		'here'    => sap_admin_url( 'sap-my' ),
+		'here'    => sap_url( 'my' ),
 		'open_id' => 0,
 	);
 	?>

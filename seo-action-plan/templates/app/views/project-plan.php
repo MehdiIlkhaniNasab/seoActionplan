@@ -42,10 +42,9 @@ $here = sap_project_url( $pid, 'plan', array_filter( array( 'period' => $period,
 $args = array( 'fnames' => $fnames, 'here' => $here, 'focuses' => $focuses, 'open_id' => $open ? $open['id'] : 0 );
 ?>
 <div class="sap-toolbar">
-	<form method="get" class="sap-filters">
-		<input type="hidden" name="page" value="sap">
-		<input type="hidden" name="project" value="<?php echo esc_attr( $pid ); ?>">
-		<input type="hidden" name="tab" value="plan">
+	<?php $fbase = sap_project_url( $pid, 'plan' ); ?>
+	<form method="get" class="sap-filters" action="<?php echo esc_url( strtok( $fbase, '?' ) ); ?>">
+		<?php sap_filter_form( $fbase ); ?>
 		<select name="period" onchange="this.form.submit()">
 			<?php foreach ( sap_period_options( 12, 3 ) as $k => $label ) : ?>
 				<option value="<?php echo esc_attr( $k ); ?>" <?php selected( $k, $period ); ?>><?php echo esc_html( $label ); ?><?php echo sap_period_current() === $k ? ' (ماه جاری)' : ''; ?></option>

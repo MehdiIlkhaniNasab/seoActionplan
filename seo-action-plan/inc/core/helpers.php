@@ -278,20 +278,6 @@ function sap_can_work() {
 }
 
 /**
- * Admin URL of a plugin screen.
- */
-function sap_admin_url( $page = 'sap', $args = array() ) {
-	return add_query_arg( array_merge( array( 'page' => $page ), $args ), admin_url( 'admin.php' ) );
-}
-
-/**
- * Project screen URL.
- */
-function sap_project_url( $project_id, $tab = 'overview', $args = array() ) {
-	return sap_admin_url( 'sap', array_merge( array( 'project' => (int) $project_id, 'tab' => $tab ), $args ) );
-}
-
-/**
  * Inline SVG icon set (stroke icons, 24px grid).
  */
 function sap_icon( $name, $size = 18 ) {
@@ -351,7 +337,7 @@ function sap_context_label( $key ) {
  * Render an admin template with variables.
  */
 function sap_view( $name, $vars = array() ) {
-	$file = SAP_DIR . '/templates/admin/' . $name . '.php';
+	$file = SAP_DIR . '/templates/app/views/' . $name . '.php';
 	if ( ! file_exists( $file ) ) {
 		return;
 	}

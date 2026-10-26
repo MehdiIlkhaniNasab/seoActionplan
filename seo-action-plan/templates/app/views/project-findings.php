@@ -27,10 +27,9 @@ $here     = sap_project_url( $pid, 'findings', array_filter( array( 'fstatus' =>
 			<a class="<?php echo $k === $status ? 'is-active' : ''; ?>" href="<?php echo esc_url( sap_project_url( $pid, 'findings', array_filter( array( 'fstatus' => $k, 'context' => $context, 'focus' => $focus ), 'strlen' ) ) ); ?>"><?php echo esc_html( $label ); ?></a>
 		<?php endforeach; ?>
 	</div>
-	<form method="get" class="sap-filters">
-		<input type="hidden" name="page" value="sap">
-		<input type="hidden" name="project" value="<?php echo esc_attr( $pid ); ?>">
-		<input type="hidden" name="tab" value="findings">
+	<?php $fbase = sap_project_url( $pid, 'findings' ); ?>
+	<form method="get" class="sap-filters" action="<?php echo esc_url( strtok( $fbase, '?' ) ); ?>">
+		<?php sap_filter_form( $fbase ); ?>
 		<input type="hidden" name="fstatus" value="<?php echo esc_attr( $status ); ?>">
 		<select name="focus" onchange="this.form.submit()">
 			<option value="">همه Focusها</option>
@@ -70,7 +69,7 @@ $here     = sap_project_url( $pid, 'findings', array_filter( array( 'fstatus' =>
 				<?php endforeach; ?>
 			</select>
 			<button class="sap-btn is-small" type="submit">اعمال روی انتخاب‌شده‌ها</button>
-			<span class="sap-muted"><?php echo esc_html( sap_num( count( $list ) ) ); ?> مورد · مرتب‌شده بر اساس امتیاز اولویت</span>
+			<span class="sap-muted"><b data-sap-count="<?php echo esc_attr( count( $list ) ); ?>"><?php echo esc_html( sap_num( count( $list ) ) ); ?></b> مورد · مرتب‌شده بر اساس امتیاز اولویت</span>
 		</div>
 
 		<?php foreach ( $list as $f ) : ?>

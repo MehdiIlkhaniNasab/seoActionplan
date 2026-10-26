@@ -18,7 +18,7 @@ $new = ! $p['id'];
 <?php if ( $new ) : ?>
 	<header class="sap-head">
 		<div>
-			<p class="sap-eyebrow"><a href="<?php echo esc_url( sap_admin_url( 'sap' ) ); ?>">پروژه‌ها</a></p>
+			<p class="sap-eyebrow"><a href="<?php echo esc_url( sap_url() ); ?>">پروژه‌ها</a></p>
 			<h1>پروژه جدید</h1>
 			<p class="sap-muted">هر پروژه یک سایت کارفرماست. بعد از ساخت، Focus (زاویه دید) و هدف آن را تعریف می‌کنید.</p>
 		</div>
@@ -53,7 +53,7 @@ $new = ! $p['id'];
 		<label>نام تب کلاسترینگ<input type="text" name="sheet_cluster_tab" value="<?php echo esc_attr( $p['sheet_cluster_tab'] ); ?>"></label>
 	</div>
 	<label class="sap-check"><input type="checkbox" name="writeback" value="1" <?php checked( empty( $p['options']['no_writeback'] ) ); ?>> بعد از هر تحلیل، ستون‌های خودکار (حجم، جایگاه، کلیک، وضعیت پوشش) در شیت نوشته شود</label>
-	<p class="sap-muted">ساختار استاندارد ستون‌ها و فایل نمونه را در <a href="<?php echo esc_url( sap_admin_url( 'sap-guide' ) ); ?>">راهنما</a> ببینید. شیت را با حساب گوگل متصل به‌اشتراک بگذارید (دسترسی Editor برای نوشتن ستون‌های خودکار).</p>
+	<p class="sap-muted">ساختار استاندارد ستون‌ها و فایل نمونه را در <a href="<?php echo esc_url( sap_url( 'guide' ) ); ?>">راهنما</a> ببینید. شیت را با حساب گوگل متصل به‌اشتراک بگذارید (دسترسی Editor برای نوشتن ستون‌های خودکار).</p>
 
 	<h2>سئو سیگنال</h2>
 	<div class="sap-grid-3">

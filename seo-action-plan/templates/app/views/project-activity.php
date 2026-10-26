@@ -26,10 +26,9 @@ $csv     = wp_nonce_url( add_query_arg( array( 'action' => 'sap_activity_csv', '
 $sources = sap_activity_sources();
 ?>
 <div class="sap-toolbar">
-	<form method="get" class="sap-filters">
-		<input type="hidden" name="page" value="sap">
-		<input type="hidden" name="project" value="<?php echo esc_attr( $pid ); ?>">
-		<input type="hidden" name="tab" value="activity">
+	<?php $fbase = sap_project_url( $pid, 'activity' ); ?>
+	<form method="get" class="sap-filters" action="<?php echo esc_url( strtok( $fbase, '?' ) ); ?>">
+		<?php sap_filter_form( $fbase ); ?>
 		<select name="period" onchange="this.form.submit()">
 			<?php foreach ( sap_period_options( 12, 0 ) as $k => $label ) : ?>
 				<option value="<?php echo esc_attr( $k ); ?>" <?php selected( $k, $period ); ?>><?php echo esc_html( $label ); ?></option>

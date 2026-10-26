@@ -171,6 +171,8 @@ function sap_install() {
 function sap_deactivate() {
 	wp_clear_scheduled_hook( 'sap_daily' );
 	wp_clear_scheduled_hook( 'sap_sync_project' );
+	delete_option( 'sap_rewrite_version' );
+	flush_rewrite_rules( false );
 }
 
 add_action( 'plugins_loaded', function () {

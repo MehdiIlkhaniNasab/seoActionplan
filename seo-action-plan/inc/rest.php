@@ -80,6 +80,57 @@ add_action( 'rest_api_init', function () {
 			return is_wp_error( $list ) ? $list : array( 'projects' => $list, 'usage' => sap_ss_usage() );
 		},
 	) );
+
+	// Quick task status change from the board / dashboard (no page reload).
+	register_rest_route( $ns, '/task/(?P<id>\d+)/status', array(
+		'methods'             => 'POST',
+		'permission_callback' => 'sap_can_work',
+		'callback'            => function ( WP_REST_Request $req ) {
+			$task = sap_task( (int) $req['id'] );
+			if ( ! $task ) {
+				return new WP_Error( 'sap_task', 'کار یافت نشد.', array( 'status' => 404 ) );
+			}
+			$status = sanitize_key( $req->get_param( 'status' ) );
+			if ( ! array_key_exists( $status, sap_task_statuses() ) ) {
+				return new WP_Error( 'sap_status', 'وضعیت نامعتبر.', array( 'status' => 400 ) );
+			}
+			if ( ! sap_can() && ( $task['assignee'] !== get_current_user_id() || ! in_array( $status, array( 'doing', 'waiting', 'done' ), true ) ) ) {
+				return new WP_Error( 'sap_forbidden', 'اجازه این تغییر را ندارید.', array( 'status' => 403 ) );
+			}
+			sap_task_save( array( 'status' => $status ), $task['id'] );
+			return array( 'ok' => true, 'status' => $status, 'label' => sap_task_statuses()[ $status ] );
+		},
+	) );
+
+	// Quick finding action (plan / someday / dismiss / reopen) without page reload.
+	register_rest_route( $ns, '/finding/(?P<id>\d+)', array(
+		'methods'             => 'POST',
+		'permission_callback' => 'sap_can',
+		'callback'            => function ( WP_REST_Request $req ) {
+			$f  = sap_finding( (int) $req['id'] );
+			$do = sanitize_key( $req->get_param( 'do' ) );
+			if ( ! $f ) {
+				return new WP_Error( 'sap_finding', 'یافته پیدا نشد.', array( 'status' => 404 ) );
+			}
+			$period = sap_period_sanitize( (string) ( $req->get_param( 'period' ) ?: sap_period_current() ) );
+			if ( 'plan' === $do ) {
+				sap_finding_to_task( $f, $period );
+				$msg = 'به اکشن پلن ' . sap_period_label( $period ) . ' اضافه شد';
+			} elseif ( 'someday' === $do ) {
+				sap_finding_to_task( $f, '', 'someday' );
+				$msg = 'به «شاید بعداً» رفت';
+			} elseif ( 'dismiss' === $do ) {
+				sap_finding_set_status( $f['id'], 'dismissed' );
+				$msg = 'رد شد';
+			} elseif ( 'reopen' === $do ) {
+				sap_finding_set_status( $f['id'], 'open' );
+				$msg = 'به صندوق ورودی برگشت';
+			} else {
+				return new WP_Error( 'sap_do', 'عملیات نامعتبر.', array( 'status' => 400 ) );
+			}
+			return array( 'ok' => true, 'msg' => $msg );
+		},
+	) );
 } );
 
 /**
@@ -88,7 +139,7 @@ add_action( 'rest_api_init', function () {
 function sap_rest_oauth_google( WP_REST_Request $req ) {
 	$code  = (string) $req->get_param( 'code' );
 	$state = (string) $req->get_param( 'state' );
-	$back  = sap_admin_url( 'sap-settings' );
+	$back  = sap_url( 'settings' );
 	if ( $req->get_param( 'error' ) || '' === $code ) {
 		wp_safe_redirect( add_query_arg( array( 'sap_msg' => rawurlencode( 'اتصال گوگل لغو شد.' ), 'sap_ok' => 0 ), $back ) );
 		exit;

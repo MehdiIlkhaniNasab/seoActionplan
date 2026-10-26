@@ -14,7 +14,7 @@ $log = (array) ( $project['options']['sync_log'] ?? array() );
 ?>
 <header class="sap-head">
 	<div>
-		<p class="sap-eyebrow"><a href="<?php echo esc_url( sap_admin_url( 'sap' ) ); ?>">پروژه‌ها</a> / <span dir="ltr"><?php echo esc_html( sap_project_domain( $project ) ); ?></span></p>
+		<p class="sap-eyebrow"><a href="<?php echo esc_url( sap_url() ); ?>">پروژه‌ها</a> / <span dir="ltr"><?php echo esc_html( sap_project_domain( $project ) ); ?></span></p>
 		<h1><?php echo esc_html( $project['name'] ); ?></h1>
 		<p class="sap-muted">
 			<?php

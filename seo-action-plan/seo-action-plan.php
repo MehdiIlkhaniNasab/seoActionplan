@@ -44,8 +44,9 @@ foreach ( array(
 	'engine/planner',
 	'engine/sync',
 	'rest',
-	'admin/menu',
-	'admin/actions',
+	'app/ui',
+	'app/router',
+	'app/actions',
 ) as $sap_file ) {
 	require_once SAP_DIR . '/inc/' . $sap_file . '.php';
 }

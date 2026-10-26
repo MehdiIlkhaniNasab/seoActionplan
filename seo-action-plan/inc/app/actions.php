@@ -66,14 +66,14 @@ add_action( 'admin_post_sap_save_settings', function () {
 	if ( '' !== $sa && false === strpos( $sa, '•' ) ) {
 		$json = json_decode( $sa, true );
 		if ( empty( $json['client_email'] ) || empty( $json['private_key'] ) ) {
-			sap_back( sap_admin_url( 'sap-settings' ), 'JSON سرویس اکانت نامعتبر است.', false );
+			sap_back( sap_url( 'settings' ), 'JSON سرویس اکانت نامعتبر است.', false );
 		}
 		$changes['google_service_account'] = $sa;
 	}
 	sap_update_settings( $changes );
 	delete_transient( 'sap_google_access_token' );
 	delete_transient( 'sap_gsc_sites' );
-	sap_back( sap_admin_url( 'sap-settings' ), 'تنظیمات ذخیره شد.' );
+	sap_back( sap_url( 'settings' ), 'تنظیمات ذخیره شد.' );
 } );
 
 add_action( 'admin_post_sap_google_disconnect', function () {
@@ -81,7 +81,7 @@ add_action( 'admin_post_sap_google_disconnect', function () {
 	sap_update_settings( array( 'google_refresh_token' => '', 'google_account_email' => '', 'google_scopes' => '' ) );
 	delete_transient( 'sap_google_access_token' );
 	delete_transient( 'sap_gsc_sites' );
-	sap_back( sap_admin_url( 'sap-settings' ), 'اتصال گوگل قطع شد.' );
+	sap_back( sap_url( 'settings' ), 'اتصال گوگل قطع شد.' );
 } );
 
 add_action( 'admin_post_sap_sheet_template', function () {
@@ -106,7 +106,7 @@ add_action( 'admin_post_sap_save_project', function () {
 		$data[ $k ] = sap_post( $k );
 	}
 	if ( '' === trim( (string) $data['name'] ) ) {
-		sap_back( $id ? sap_project_url( $id, 'settings' ) : sap_admin_url( 'sap', array( 'new' => 1 ) ), 'نام پروژه الزامی است.', false );
+		sap_back( $id ? sap_project_url( $id, 'settings' ) : sap_url( 'new' ), 'نام پروژه الزامی است.', false );
 	}
 	$new = ! $id;
 	$id  = sap_project_save( $data, $id );
@@ -121,7 +121,7 @@ add_action( 'admin_post_sap_delete_project', function () {
 		sap_back( sap_project_url( $id, 'settings' ), 'برای حذف، کلمه DELETE را تایپ کنید.', false );
 	}
 	sap_project_delete( $id );
-	sap_back( sap_admin_url( 'sap' ), 'پروژه و همه داده‌هایش حذف شد.' );
+	sap_back( sap_url(), 'پروژه و همه داده‌هایش حذف شد.' );
 } );
 
 add_action( 'admin_post_sap_regen_key', function () {
