@@ -49,6 +49,7 @@
 	}
 
 	function fadeOut(el) {
+		if (!el) { return; }
 		el.classList.add('is-leaving');
 		setTimeout(function () { el.remove(); }, 260);
 	}
@@ -182,8 +183,14 @@
 		btn.disabled = true;
 		post('finding/' + parts[1], { do: parts[0], period: period ? period.value : '' }).then(function (res) {
 			toast(res.msg);
-			var row = btn.closest('.sap-finding');
-			fadeOut(row);
+			var row = btn.closest('.sap-finding, .sap-proposal');
+			if (row && row.classList.contains('sap-proposal')) {
+				var list = row.parentNode;
+				fadeOut(row);
+				setTimeout(function () { if (list && !list.querySelector('.sap-proposal:not(.is-leaving)')) { location.reload(); } }, 400);
+			} else {
+				fadeOut(row);
+			}
 			var counter = document.querySelector('[data-sap-count]');
 			if (counter) {
 				var n = Math.max(0, parseInt(counter.getAttribute('data-sap-count'), 10) - 1);

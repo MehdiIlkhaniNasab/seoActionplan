@@ -166,6 +166,7 @@ Write-Host "[Sokan] Crawling ($Mode) ..."
 & $SpiderPath @sfArgs
 $csv = Join-Path $out "internal_all.csv"
 if (-not (Test-Path $csv)) { Send-Ping "failed" "internal_all.csv was not produced"; throw "internal_all.csv was not produced in $out" }
+Write-Host "[Sokan] CSV header: $((Get-Content $csv -TotalCount 1).Substring(0, [Math]::Min(200, (Get-Content $csv -TotalCount 1).Length)))"
 Write-Host "[Sokan] Uploading ..."
 $response = & curl.exe -sS -X POST "$Base" -H "X-SAP-Key: $Key" -F "file=@$csv;type=text/csv" -F "agent=sokan-sf-agent.ps1" -F "start_url=$Site"
 Write-Host $response
@@ -227,6 +228,7 @@ echo "[Sokan] Crawling ($MODE) ..."
 "$SPIDER" "${ARGS[@]}" || echo "[Sokan] SEO Spider exited with $?" >&2
 CSV="$OUT/internal_all.csv"
 [[ -f "$CSV" ]] || { ping_sokan failed "internal_all.csv was not produced"; echo "internal_all.csv was not produced" >&2; exit 1; }
+echo "[Sokan] CSV header: $(head -c 200 "$CSV" | head -1)"
 gzip -c "$CSV" > "$OUT/internal_all.csv.gz"
 echo "[Sokan] Uploading ..."
 curl -sS -X POST "$BASE" -H "X-SAP-Key: $KEY" -F "file=@$OUT/internal_all.csv.gz" -F "agent=sokan-sf-agent.sh" -F "start_url=$SITE"

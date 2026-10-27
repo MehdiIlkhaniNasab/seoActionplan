@@ -52,43 +52,69 @@ function sap_sf_column_map() {
  * @return array|WP_Error
  */
 function sap_sf_parse_csv( $file ) {
-	$fh = fopen( $file, 'r' ); // phpcs:ignore WordPress.WP.AlternativeFunctions
+	$file = sap_sf_to_utf8( $file );
+	$fh   = fopen( $file, 'r' ); // phpcs:ignore WordPress.WP.AlternativeFunctions
 	if ( ! $fh ) {
 		return new WP_Error( 'sap_sf_file', 'فایل خزش قابل خواندن نیست.' );
 	}
-	$header = fgetcsv( $fh, 0, ',', '"', '\\' );
-	// Older SF versions put a title row ("Internal - All") above the header.
-	if ( is_array( $header ) && count( $header ) <= 2 ) {
-		$header = fgetcsv( $fh, 0, ',', '"', '\\' );
+	// Delimiter: comma by default; some locales / exports use ; or tab.
+	$sample = (string) fread( $fh, 8192 ); // phpcs:ignore WordPress.WP.AlternativeFunctions
+	rewind( $fh );
+	$top   = implode( "\n", array_slice( explode( "\n", $sample ), 0, 5 ) );
+	$delim = ',';
+	foreach ( array( ';', "\t" ) as $d ) {
+		if ( substr_count( $top, $d ) > substr_count( $top, $delim ) ) {
+			$delim = $d;
+		}
 	}
-	if ( ! is_array( $header ) ) {
+	// The header row is the first of the top rows that has an address column
+	// (older versions put a title row such as «Internal - All» above it).
+	$norm = function ( $h ) {
+		return strtolower( trim( preg_replace( '/^(?:\xEF\xBB\xBF)+/', '', (string) $h ), " \t\r\n\"'" ) );
+	};
+	$addr_names = array( 'address', 'url', 'adresse', 'dirección', 'direccion', 'indirizzo', 'endereço', 'endereco', 'adres', 'アドレス' );
+	$header     = null;
+	$seen       = array();
+	for ( $i = 0; $i < 6; $i++ ) {
+		$row = fgetcsv( $fh, 0, $delim, '"', '\\' );
+		if ( false === $row ) {
+			break;
+		}
+		$row = array_map( $norm, (array) $row );
+		if ( ! $seen && array_filter( $row ) ) {
+			$seen = $row;
+		}
+		if ( array_intersect( $addr_names, $row ) ) {
+			$header = $row;
+			break;
+		}
+	}
+	if ( ! $header ) {
 		fclose( $fh ); // phpcs:ignore
-		return new WP_Error( 'sap_sf_header', 'سربرگ فایل خزش یافت نشد.' );
+		$cols = implode( '، ', array_slice( array_filter( $seen ), 0, 8 ) );
+		return new WP_Error( 'sap_sf_cols', 'ستون Address در فایل پیدا نشد؛ باید خروجی تب Internal › All (فایل internal_all.csv) باشد و زبان Screaming Frog انگلیسی.' . ( '' !== $cols ? ' ستون‌هایی که در فایل بود: ' . $cols : ' فایل خالی بود.' ) );
 	}
-	$header[0] = preg_replace( '/^\xEF\xBB\xBF/', '', $header[0] );
-	$header    = array_map( 'trim', $header );
-	$idx       = array();
+	$idx = array();
 	foreach ( sap_sf_column_map() as $key => $names ) {
-		foreach ( $names as $n ) {
-			$pos = array_search( $n, $header, true );
+		foreach ( array_merge( $names, 'address' === $key ? $addr_names : array() ) as $n ) {
+			$pos = array_search( strtolower( $n ), $header, true );
 			if ( false !== $pos ) {
 				$idx[ $key ] = $pos;
 				break;
 			}
 		}
 	}
-	if ( ! isset( $idx['address'] ) ) {
-		fclose( $fh ); // phpcs:ignore
-		return new WP_Error( 'sap_sf_cols', 'ستون Address در فایل وجود ندارد؛ باید تب Internal:All خروجی گرفته شود.' );
-	}
 	$rows = array();
-	while ( ( $line = fgetcsv( $fh, 0, ',', '"', '\\' ) ) !== false ) {
+	while ( ( $line = fgetcsv( $fh, 0, $delim, '"', '\\' ) ) !== false ) {
 		if ( count( $line ) < 2 ) {
 			continue;
 		}
 		$r = array();
 		foreach ( $idx as $key => $pos ) {
 			$r[ $key ] = isset( $line[ $pos ] ) ? trim( $line[ $pos ] ) : '';
+		}
+		if ( '' === $r['address'] ) {
+			continue;
 		}
 		$rows[] = sap_sf_normalize_row( $r );
 		if ( count( $rows ) >= 100000 ) {
@@ -97,6 +123,22 @@ function sap_sf_parse_csv( $file ) {
 	}
 	fclose( $fh ); // phpcs:ignore
 	return $rows;
+}
+
+/**
+ * A UTF-16 export (BOM FF FE / FE FF) converted to a UTF-8 temp file.
+ *
+ * @return string Path to read.
+ */
+function sap_sf_to_utf8( $file ) {
+	$head = (string) file_get_contents( $file, false, null, 0, 4 ); // phpcs:ignore WordPress.WP.AlternativeFunctions
+	$enc  = 0 === strpos( $head, "\xFF\xFE" ) ? 'UTF-16LE' : ( 0 === strpos( $head, "\xFE\xFF" ) ? 'UTF-16BE' : '' );
+	if ( '' === $enc || ! function_exists( 'mb_convert_encoding' ) ) {
+		return $file;
+	}
+	$out = tempnam( get_temp_dir(), 'sap-sf8' );
+	file_put_contents( $out, mb_convert_encoding( substr( (string) file_get_contents( $file ), 2 ), 'UTF-8', $enc ) ); // phpcs:ignore WordPress.WP.AlternativeFunctions
+	return $out;
 }
 
 /**

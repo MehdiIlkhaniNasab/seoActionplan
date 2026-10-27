@@ -720,11 +720,16 @@ function sap_rest_crawl_ingest( WP_REST_Request $req ) {
 			$rows = array_map( 'sap_sf_normalize_row', $json['rows'] );
 		}
 	}
-	if ( is_wp_error( $rows ) ) {
-		return $rows;
+	if ( empty( $rows ) && ! is_wp_error( $rows ) ) {
+		$rows = new WP_Error( 'sap_empty', 'داده‌ای ارسال نشد یا فایل هیچ ردیفی نداشت. فایل internal_all.csv را در فیلد file ارسال کنید.', array( 'status' => 400 ) );
 	}
-	if ( empty( $rows ) ) {
-		return new WP_Error( 'sap_empty', 'داده‌ای ارسال نشد. فایل internal_all.csv را در فیلد file ارسال کنید.', array( 'status' => 400 ) );
+	if ( is_wp_error( $rows ) ) {
+		if ( function_exists( 'sap_sf_save' ) ) {
+			$p    = sap_project( $project_id );
+			$ping = array_merge( (array) sap_sf_settings( $p )['ping'], array( 'at' => sap_now(), 'stage' => 'failed', 'note' => $rows->get_error_message() ) );
+			sap_sf_save( $project_id, array( 'ping' => $ping ) ); // Shown in the wizard, step 5.
+		}
+		return new WP_Error( $rows->get_error_code(), $rows->get_error_message(), array( 'status' => 400 ) );
 	}
 	$kept = sap_sf_store_crawl( $project_id, $rows, 'agent', $meta );
 	return array(
