@@ -56,14 +56,14 @@ function sap_site_request( $project, $method, $route, $params = array(), $timeou
 	}
 	$res = null;
 	foreach ( $urls as $i => $u ) {
-		$res = wp_remote_request( $u, $args );
+		$res = sap_http( $u, $args );
 		// Sites without pretty permalinks answer /wp-json/ with 404: try ?rest_route=.
 		if ( is_wp_error( $res ) || 404 !== (int) wp_remote_retrieve_response_code( $res ) || false !== strpos( (string) wp_remote_retrieve_body( $res ), 'srcon_' ) ) {
 			break;
 		}
 	}
 	if ( is_wp_error( $res ) ) {
-		return new WP_Error( 'sap_site_http', 'اتصال به سایت کارفرما ناموفق بود: ' . $res->get_error_message() );
+		return new WP_Error( 'sap_site_http', 'اتصال به سایت کارفرما ناموفق بود: ' . sap_net_error( $res ) );
 	}
 	$code = (int) wp_remote_retrieve_response_code( $res );
 	$data = json_decode( (string) wp_remote_retrieve_body( $res ), true );

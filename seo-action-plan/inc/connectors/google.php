@@ -51,7 +51,7 @@ function sap_google_handle_callback( $code, $state ) {
 	if ( ! user_can( (int) $user_id, SAP_CAP ) && ! user_can( (int) $user_id, 'manage_options' ) ) {
 		return new WP_Error( 'sap_forbidden', 'دسترسی مجاز نیست.' );
 	}
-	$res = wp_remote_post( 'https://oauth2.googleapis.com/token', array(
+	$res = sap_http( 'https://oauth2.googleapis.com/token', array( 'method' => 'POST',
 		'timeout' => 20,
 		'body'    => array(
 			'code'          => $code,
@@ -102,7 +102,7 @@ function sap_google_token() {
 		if ( '' === $refresh ) {
 			return new WP_Error( 'sap_google_not_connected', 'حساب گوگل متصل نشده است. از تنظیمات افزونه، حساب گوگل را متصل کنید.' );
 		}
-		$res = wp_remote_post( 'https://oauth2.googleapis.com/token', array(
+		$res = sap_http( 'https://oauth2.googleapis.com/token', array( 'method' => 'POST',
 			'timeout' => 20,
 			'body'    => array(
 				'client_id'     => sap_setting( 'google_client_id' ),
@@ -160,7 +160,7 @@ function sap_google_service_account_token() {
 	if ( ! openssl_sign( $header . '.' . $claims, $sig, $json['private_key'], 'sha256WithRSAEncryption' ) ) {
 		return new WP_Error( 'sap_sa_sign', 'امضای JWT ناموفق بود (کلید خصوصی نامعتبر).' );
 	}
-	$res = wp_remote_post( 'https://oauth2.googleapis.com/token', array(
+	$res = sap_http( 'https://oauth2.googleapis.com/token', array( 'method' => 'POST',
 		'timeout' => 20,
 		'body'    => array(
 			'grant_type' => 'urn:ietf:params:oauth:grant-type:jwt-bearer',
@@ -202,9 +202,9 @@ function sap_google_request( $method, $url, $body = null, $timeout = 60 ) {
 	if ( null !== $body ) {
 		$args['body'] = wp_json_encode( $body );
 	}
-	$res = wp_remote_request( $url, $args );
+	$res = sap_http( $url, $args );
 	if ( is_wp_error( $res ) ) {
-		return $res;
+		return new WP_Error( 'sap_google_net', 'اتصال به گوگل ناموفق بود: ' . sap_net_error( $res, 'گوگل' ) );
 	}
 	$code = wp_remote_retrieve_response_code( $res );
 	$data = json_decode( wp_remote_retrieve_body( $res ), true );

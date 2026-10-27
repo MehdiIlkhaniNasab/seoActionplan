@@ -764,3 +764,91 @@ body.is-picking .sap-task-pick { display: inline-block; }
 	.sap-cloud-w { font-size: calc(12px + 14px * var(--w)); white-space: normal; }
 	.sap-cloud { gap: 4px 10px; }
 }
+.sap-net-tests{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:10px}
+
+/* ---- Grouped tabs ---- */
+.sap-tabs.is-groups { margin-bottom: 0; }
+.sap-tabs.is-groups a { padding: 12px 16px; font-size: 14.5px; }
+.sap-tab-gear { margin-inline-start: auto; }
+.sap-subtabs { display: flex; gap: 6px; flex-wrap: wrap; margin: 12px 0 20px; }
+.sap-subtabs a { display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px; border-radius: 99px; background: var(--soft); border: 1px solid var(--line); color: var(--ink-2) !important; font-size: 13px; font-weight: 600; text-decoration: none; }
+.sap-subtabs a:hover { background: var(--accent-soft); }
+.sap-subtabs a.is-active { background: var(--accent); border-color: var(--accent); color: #fff !important; }
+.sap-tabs.is-groups + :not(.sap-subtabs) { margin-top: 20px; }
+@media (max-width: 700px) { .sap-tab-gear span { display: none; } }
+
+/* ---- Keyword & page graph ---- */
+.sap-graph-insights { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; margin-bottom: 14px; }
+.sap-graph-insights .sap-stat b { font-size: 22px; }
+.sap-graph-bar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 10px; }
+.sap-graph-bar input[type=search] { min-width: 220px; }
+.sap-graph-layers { display: flex; flex-wrap: wrap; gap: 12px; flex: 1; }
+.sap-graph-topics { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.sap-graph-topic { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line); background: var(--card); border-radius: 99px; padding: 3px 11px; font: inherit; font-size: 12.5px; cursor: pointer; color: var(--ink-2); }
+.sap-graph-topic i { width: 10px; height: 10px; border-radius: 50%; }
+.sap-graph-topic small { color: var(--muted); }
+.sap-graph-topic.is-off { opacity: .4; text-decoration: line-through; }
+.sap-graph-stage { position: relative; height: 640px; border-radius: 16px; overflow: hidden; background: radial-gradient(circle at 50% 45%, #FFFFFF 0%, #F2F7FF 55%, #E8F0FB 100%); border: 1px solid var(--line); }
+.sap-graph-stage svg { width: 100%; height: 100%; display: block; cursor: grab; touch-action: none; user-select: none; }
+.sap-graph-stage svg:active { cursor: grabbing; }
+.ge { stroke: #CBD5E1; stroke-width: .8; transition: opacity .2s; }
+.ge-link { stroke: #64748B; stroke-width: 1.2; stroke-opacity: .55; }
+.ge-suggested { stroke: #16A34A; stroke-width: 1.4; stroke-dasharray: 5 4; }
+.ge-planned { stroke: #7C3AED; stroke-width: 1.2; stroke-dasharray: 2 3; }
+.ge-query { stroke-opacity: .5; }
+.gn { cursor: pointer; transition: opacity .2s; }
+.gn circle, .gn rect { stroke: #fff; stroke-width: 1.5; transition: r .2s; }
+.gn-page circle { stroke-width: 2.5; filter: drop-shadow(0 2px 4px rgba(15,27,51,.18)); }
+.gn.is-orphan circle { stroke: #DC2626; stroke-width: 3; stroke-dasharray: 4 3; }
+.gl { font-size: 10px; fill: #1E293B; text-anchor: middle; paint-order: stroke; stroke: rgba(255,255,255,.9); stroke-width: 3px; display: none; pointer-events: none; }
+.gl.is-on, .is-zoomed .gl, .gn.is-hl .gl, .gn.is-match .gl { display: block; }
+.gn-page .gl { font-size: 11.5px; font-weight: 700; }
+.is-focus .gn:not(.is-hl), .is-searching .gn:not(.is-match) { opacity: .13; }
+.is-focus .ge:not(.is-hl) { opacity: .05; }
+.ge.is-hl { stroke-opacity: 1; stroke-width: 2; }
+.gn.is-match circle, .gn.is-match rect { filter: url(#sapGlow); }
+.sap-graph-tip { position: absolute; z-index: 3; max-width: 260px; background: rgba(15,27,51,.94); color: #fff; padding: 8px 11px; border-radius: 10px; font-size: 12.5px; line-height: 1.8; pointer-events: none; }
+.sap-graph-tip .bad, .sap-graph-info .bad { color: #FCA5A5; }
+.sap-graph-info { position: absolute; z-index: 4; inset-block-start: 12px; inset-inline-end: 12px; width: 290px; max-height: calc(100% - 24px); overflow: auto; background: #fff; border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow); padding: 14px; font-size: 13px; line-height: 1.9; }
+.sap-graph-info .bad { color: var(--bad); }
+.sap-graph-info [data-close] { float: left; }
+.sap-graph-info ul { list-style: none; margin: 0; padding: 0; }
+.sap-graph-info li { display: flex; gap: 6px; align-items: center; cursor: pointer; padding: 2px 4px; border-radius: 6px; }
+.sap-graph-info li:hover { background: var(--soft); }
+.sap-graph-info li i { width: 9px; height: 9px; border-radius: 50%; flex: none; }
+.sap-graph-legend { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 10px; font-size: 12px; color: var(--ink-2); }
+.sap-graph-legend span { display: inline-flex; gap: 5px; align-items: center; }
+.sap-graph-legend i { width: 11px; height: 11px; border-radius: 50%; background: #94A3B8; display: inline-block; }
+.sap-graph-legend i.is-page { background: #2563EB; width: 14px; height: 14px; }
+.sap-graph-legend i.is-orphan { background: #fff; border: 2px dashed #DC2626; width: 13px; height: 13px; }
+.sap-graph-legend i.top3 { background: #059669; } .sap-graph-legend i.top10 { background: #2563EB; } .sap-graph-legend i.near { background: #D97706; } .sap-graph-legend i.far { background: #DC2626; }
+.sap-graph-legend i.is-idea { background: #7C3AED; border-radius: 2px; transform: rotate(45deg); width: 9px; height: 9px; }
+.sap-graph-legend b.ln { width: 18px; border-top: 2px solid #64748B; }
+.sap-graph-legend b.ln.is-sug { border-top: 2px dashed #16A34A; }
+.sap-graph-legend b.ln.is-plan { border-top: 2px dotted #7C3AED; }
+@media (max-width: 800px) { .sap-graph-insights { grid-template-columns: repeat(2, 1fr); } .sap-graph-stage { height: 480px; } .sap-graph-info { width: auto; inset-inline: 8px; } }
+.sap-graph-cta { display: flex; align-items: center; gap: 12px; padding: 14px 18px; margin-bottom: 14px; border-radius: 16px; background: linear-gradient(135deg, #1D4ED8, #38BDF8); color: #fff !important; text-decoration: none; box-shadow: var(--shadow); }
+.sap-graph-cta span { display: flex; flex-direction: column; flex: 1; }
+.sap-graph-cta small { opacity: .85; }
+.sap-graph-cta i { font-style: normal; font-size: 20px; }
+.sap-steps li.is-ask .sap-step-dot { background: var(--warn); animation: sap-pulse 1s infinite; }
+.sap-steps li.is-ask small { color: var(--ink); display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.sap-sync-ask { margin: -4px 0 10px; font-size: 13px; }
+
+/* ---- SEO Signal tab ---- */
+.sap-ss-quota { min-width: 220px; text-align: center; background: var(--accent-soft); border-radius: 14px; padding: 12px 16px; }
+.sap-ss-quota b { display: block; font-size: 28px; color: var(--accent-ink); }
+.sap-ss-quota span { font-size: 12px; color: var(--muted); }
+.sap-ss-quota .sap-progress { margin-top: 8px; }
+.sap-ss-actions { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+.sap-ss-action { display: flex; gap: 12px; align-items: center; justify-content: space-between; padding: 10px 14px; border: 1px solid var(--line); border-radius: 12px; }
+.sap-ss-action p { margin: 2px 0 0; }
+.sap-ss-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 12px; margin-bottom: 14px; }
+.sap-ss-tool h3 { margin-top: 0; font-size: 15px; }
+.sap-ss-tool form { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.sap-ss-tool form input[type=text], .sap-ss-tool form textarea { flex: 1 1 180px; }
+.sap-ss-tool.is-pending { opacity: .7; border-style: dashed; }
+.sap-ss-use { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 10px; }
+.sap-ss-use select { max-width: 280px; }
+.sap-ss-recent { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
+.sap-link { background: none; border: 0; padding: 0; color: var(--accent); cursor: pointer; font: inherit; }

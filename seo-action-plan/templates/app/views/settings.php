@@ -111,6 +111,26 @@ $auth  = sap_google_auth_url();
 				<small>حجم جستجو، گپ رقبا و سوالات تا این مدت دوباره درخواست نمی‌شوند.</small>
 			</label>
 		</div>
+		<?php sap_switch( 'ss_auto', $s['ss_auto'], 'همگام‌سازی خودکار (زمان‌بندی‌شده) هم از سهمیه سئو سیگنال استفاده کند', 'خاموش باشد، مراحل پولی سئو سیگنال فقط با «تحلیل کامل» و تأیید شما اجرا می‌شوند؛ ردیاب رتبه (رایگان) همیشه اجرا می‌شود.' ); ?>
+	</section>
+
+	<section class="sap-panel" id="network">
+		<h2>شبکه و پروکسی</h2>
+		<?php if ( sap_proxy_defined() ) : ?>
+			<p class="sap-muted">پروکسی وردپرس شناسایی شد: <code dir="ltr"><?php echo esc_html( sap_proxy_label() ); ?></code> (در wp-config.php). در حالت «هوشمند» فقط گوگل (سرچ کنسول، شیت، PageSpeed) و APIهای خارجی هوش مصنوعی از پروکسی رد می‌شوند؛ سایت کارفرما، GapGPT و سئو سیگنال مستقیم وصل می‌شوند. اگر پروکسی خاموش باشد، درخواست گوگل یک بار مستقیم هم امتحان می‌شود.</p>
+		<?php else : ?>
+			<p class="sap-muted">پروکسی‌ای در wp-config.php تعریف نشده؛ همه اتصال‌ها مستقیم‌اند.</p>
+		<?php endif; ?>
+		<div class="sap-grid-2">
+			<div><p class="sap-label">مسیر اتصال</p><?php sap_segment( 'proxy_mode', array( 'smart' => 'هوشمند (پیشنهادی)', 'all' => 'همه از پروکسی', 'none' => 'همه مستقیم' ), $s['proxy_mode'] ); ?></div>
+			<label>دامنه‌های دیگری که باید از پروکسی بروند (هر خط یکی)<textarea name="proxy_force_hosts" rows="2" dir="ltr" placeholder="example.com"><?php echo esc_textarea( $s['proxy_force_hosts'] ); ?></textarea></label>
+		</div>
+		<div class="sap-net-tests">
+			<?php foreach ( array( 'google' => array( 'گوگل', 'https://sheets.googleapis.com/$discovery/rest?version=v4' ), 'gapgpt' => array( 'هوش مصنوعی', untrailingslashit( $s['ai_base_url'] ?: 'https://api.gapgpt.app/v1' ) . '/models' ), 'seosignal' => array( 'سئو سیگنال', 'https://panel.seosignal.net/' ) ) as $k => $t ) : ?>
+				<button type="button" class="sap-btn is-small" data-sap-net-test="<?php echo esc_attr( $t[1] ); ?>">تست اتصال <?php echo esc_html( $t[0] ); ?></button>
+			<?php endforeach; ?>
+			<span class="sap-muted" data-sap-net-result></span>
+		</div>
 	</section>
 
 	<section class="sap-panel">

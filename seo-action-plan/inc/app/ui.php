@@ -42,7 +42,7 @@ function sap_project_tabs( $mode = '' ) {
 	if ( 'simple' !== $mode ) {
 		return $all;
 	}
-	return array_intersect_key( $all, array_flip( array( 'overview', 'plan', 'calendar', 'ideas', 'keywords', 'activity', 'settings' ) ) );
+	return array_diff_key( $all, array_flip( array( 'findings', 'insights', 'content' ) ) );
 }
 
 /**
@@ -60,8 +60,38 @@ function sap_project_tabs_all() {
 		'ideas'    => array( 'ایده‌های محتوا', 'spark' ),
 		'activity' => array( 'لاگ اقدامات', 'log' ),
 		'focuses'  => array( 'Focus و اهداف', 'target' ),
+		'graph'    => array( 'گراف کلمات و صفحات', 'link' ),
+		'seosignal' => array( 'سئو سیگنال', 'research' ),
 		'settings' => array( 'تنظیمات پروژه', 'settings' ),
 	);
+}
+
+/**
+ * Tabs grouped into a few sections (top bar) with sub-tabs (second bar), so the
+ * project screen stays readable as features grow.
+ *
+ * @return array group => [label, icon, tab keys]
+ */
+function sap_project_groups() {
+	return array(
+		'home'     => array( 'نمای کلی', 'grid', array( 'overview', 'focuses' ) ),
+		'work'     => array( 'برنامه و اجرا', 'list', array( 'plan', 'findings', 'activity' ) ),
+		'content'  => array( 'محتوا', 'log', array( 'calendar', 'ideas', 'content' ) ),
+		'keywords' => array( 'کلمات و رقبا', 'research', array( 'keywords', 'graph', 'seosignal' ) ),
+		'analysis' => array( 'تحلیل', 'spark', array( 'insights' ) ),
+	);
+}
+
+/**
+ * Group of a tab.
+ */
+function sap_tab_group( $tab ) {
+	foreach ( sap_project_groups() as $g => $def ) {
+		if ( in_array( $tab, $def[2], true ) ) {
+			return $g;
+		}
+	}
+	return 'settings' === $tab ? 'settings' : 'home';
 }
 
 /**

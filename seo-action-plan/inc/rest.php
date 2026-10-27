@@ -301,6 +301,53 @@ add_action( 'rest_api_init', function () {
 		},
 	) );
 
+	// SEO Signal: cost of a step, tools of the SEO Signal tab, AI advice, using results.
+	register_rest_route( $ns, '/estimate/(?P<project>\d+)/(?P<step>[a-z_]+)', array(
+		'methods'             => 'GET',
+		'permission_callback' => 'sap_can',
+		'callback'            => function ( WP_REST_Request $req ) {
+			$project = sap_project( (int) $req['project'] );
+			if ( ! $project ) {
+				return new WP_Error( 'sap_project', 'پروژه یافت نشد.', array( 'status' => 404 ) );
+			}
+			$u = sap_ss_usage();
+			return sap_ss_estimate( $project, sanitize_key( $req['step'] ) ) + array( 'left' => sap_ss_remaining(), 'cap' => $u['cap'], 'connected' => sap_ss_connected() );
+		},
+	) );
+	register_rest_route( $ns, '/ss/(?P<project>\d+)/(?P<do>tool|advise|use)', array(
+		'methods'             => 'POST',
+		'permission_callback' => 'sap_can',
+		'callback'            => function ( WP_REST_Request $req ) {
+			$project = sap_project( (int) $req['project'] );
+			if ( ! $project ) {
+				return new WP_Error( 'sap_project', 'پروژه یافت نشد.', array( 'status' => 404 ) );
+			}
+			if ( 'advise' === $req['do'] ) {
+				$res = sap_ss_advise( $project );
+				return is_wp_error( $res ) ? $res : array( 'ok' => true, 'actions' => $res );
+			}
+			if ( 'tool' === $req['do'] ) {
+				$res = sap_ss_tool( $project, sanitize_key( (string) $req->get_param( 'tool' ) ), (array) $req->get_param( 'params' ), (bool) $req->get_param( 'force' ) );
+				return is_wp_error( $res ) ? $res : array( 'ok' => true, 'left' => sap_ss_remaining() ) + $res;
+			}
+			return sap_ss_use( $project, (string) $req->get_param( 'action' ), (array) $req->get_param( 'items' ), (string) $req->get_param( 'url' ) );
+		},
+	) );
+
+	// Network reachability test (settings page).
+	register_rest_route( $ns, '/net/test', array(
+		'methods'             => 'POST',
+		'permission_callback' => 'sap_can',
+		'callback'            => function ( WP_REST_Request $req ) {
+			$url = esc_url_raw( (string) $req->get_param( 'url' ) );
+			if ( ! preg_match( '#^https://(sheets\.googleapis\.com|api\.gapgpt\.app|panel\.seosignal\.net|api\.anthropic\.com)/#', $url ) && $url !== untrailingslashit( esc_url_raw( sap_setting( 'ai_base_url' ) ) ) . '/models' ) {
+				return new WP_Error( 'sap_url', 'آدرس مجاز نیست.', array( 'status' => 400 ) );
+			}
+			$r = sap_net_test( $url );
+			return array( 'ok' => $r['ok'], 'msg' => $r['msg'] . ' · ' . $r['via'] );
+		},
+	) );
+
 	// Client site connector: test, apply a revision as draft, publish, roll back.
 	register_rest_route( $ns, '/site/(?P<project>\d+)/test', array(
 		'methods'             => 'POST',

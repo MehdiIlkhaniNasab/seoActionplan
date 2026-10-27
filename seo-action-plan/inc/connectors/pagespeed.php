@@ -29,7 +29,7 @@ function sap_psi_run( $url, $strategy = 'mobile' ) {
 	if ( $key ) {
 		$args['key'] = rawurlencode( $key );
 	}
-	$res = wp_remote_get( add_query_arg( $args, 'https://www.googleapis.com/pagespeedonline/v5/runPagespeed' ), array( 'timeout' => 120 ) );
+	$res = sap_http( add_query_arg( $args, 'https://www.googleapis.com/pagespeedonline/v5/runPagespeed' ), array( 'method' => 'GET', 'timeout' => 120 ) );
 	if ( is_wp_error( $res ) ) {
 		$msg = $res->get_error_message();
 		if ( false !== stripos( $msg, 'timed out' ) || false !== stripos( $msg, 'timeout' ) ) {

@@ -87,7 +87,7 @@ function sap_ss_request( $endpoint, $body = array(), $metered = true ) {
 		'body'    => wp_json_encode( (object) $body ),
 	) );
 	if ( is_wp_error( $res ) ) {
-		return new WP_Error( 'sap_ss_http', 'اتصال به سئو سیگنال ناموفق بود: ' . $res->get_error_message() );
+		return new WP_Error( 'sap_ss_http', 'اتصال به سئو سیگنال ناموفق بود: ' . sap_net_error( $res ) );
 	}
 	$code = (int) wp_remote_retrieve_response_code( $res );
 	$data = json_decode( wp_remote_retrieve_body( $res ), true );

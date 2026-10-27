@@ -35,9 +35,10 @@ $log = (array) ( $project['options']['sync_log'] ?? array() );
 
 <section class="sap-panel sap-sync" data-sap-sync-panel hidden>
 	<h2><?php echo sap_icon( 'spark' ); // phpcs:ignore ?>تحلیل کامل پروژه</h2>
+	<label class="sap-check sap-sync-ask"><input type="checkbox" data-sap-sync-ask checked> قبل از هر بخش سئو سیگنال از من بپرس (با نمایش مصرف سهمیه)</label>
 	<ol class="sap-steps">
 		<?php foreach ( sap_sync_steps() as $id => $label ) : ?>
-			<li data-step="<?php echo esc_attr( $id ); ?>">
+			<li data-step="<?php echo esc_attr( $id ); ?>"<?php echo in_array( $id, sap_ss_ask_steps(), true ) ? ' data-ask="1"' : ''; ?>>
 				<span class="sap-step-dot"></span>
 				<b><?php echo esc_html( $label ); ?></b>
 				<small data-msg><?php echo isset( $log[ $id ] ) ? esc_html( 'آخرین اجرا: ' . $log[ $id ]['msg'] ) : ''; ?></small>
@@ -50,10 +51,36 @@ $log = (array) ( $project['options']['sync_log'] ?? array() );
 	</div>
 </section>
 
-<nav class="sap-tabs">
-	<?php foreach ( $tabs as $key => $t ) : ?>
-		<a class="<?php echo $key === $tab ? 'is-active' : ''; ?>" href="<?php echo esc_url( sap_project_url( $project['id'], $key ) ); ?>"><?php echo sap_icon( $t[1], 16 ); // phpcs:ignore ?><?php echo esc_html( $t[0] ); ?></a>
+<?php
+$cur_group = sap_tab_group( $tab );
+$all_tabs  = sap_project_tabs_all();
+?>
+<nav class="sap-tabs is-groups">
+	<?php foreach ( sap_project_groups() as $g => $def ) : ?>
+		<?php
+		$subs = array_values( array_filter( $def[2], function ( $k ) use ( $tabs ) {
+			return isset( $tabs[ $k ] );
+		} ) );
+		if ( ! $subs ) {
+			continue;
+		}
+		?>
+		<a class="<?php echo $g === $cur_group ? 'is-active' : ''; ?>" href="<?php echo esc_url( sap_project_url( $project['id'], $g === $cur_group ? $tab : $subs[0] ) ); ?>"><?php echo sap_icon( $def[1], 16 ); // phpcs:ignore ?><?php echo esc_html( $def[0] ); ?></a>
 	<?php endforeach; ?>
+	<a class="sap-tab-gear <?php echo 'settings' === $tab ? 'is-active' : ''; ?>" href="<?php echo esc_url( sap_project_url( $project['id'], 'settings' ) ); ?>" title="تنظیمات پروژه"><?php echo sap_icon( 'settings', 16 ); // phpcs:ignore ?><span>تنظیمات</span></a>
 </nav>
+<?php
+$group_def = sap_project_groups()[ $cur_group ] ?? null;
+$subs      = $group_def ? array_values( array_filter( $group_def[2], function ( $k ) use ( $tabs, $tab ) {
+	return isset( $tabs[ $k ] ) || $k === $tab;
+} ) ) : array();
+?>
+<?php if ( count( $subs ) > 1 ) : ?>
+	<nav class="sap-subtabs">
+		<?php foreach ( $subs as $k ) : ?>
+			<a class="<?php echo $k === $tab ? 'is-active' : ''; ?>" href="<?php echo esc_url( sap_project_url( $project['id'], $k ) ); ?>"><?php echo sap_icon( $all_tabs[ $k ][1], 14 ); // phpcs:ignore ?><?php echo esc_html( $all_tabs[ $k ][0] ); ?></a>
+		<?php endforeach; ?>
+	</nav>
+<?php endif; ?>
 
 <?php sap_view( 'project-' . $tab, array( 'project' => $project ) ); ?>

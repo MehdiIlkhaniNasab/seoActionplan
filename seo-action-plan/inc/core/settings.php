@@ -30,6 +30,9 @@ function sap_settings_defaults() {
 		'ai_model_assist'        => 'claude-haiku-5-5',  // «بنویس برام».
 		'ai_budget'              => 10,  // Monthly AI budget in USD; AI stops when reached.
 		'ai_auto'                => 0,   // Run the AI analysis in the scheduled weekly sync too (costs API credit).
+		'proxy_mode'             => 'smart', // smart: only Google / foreign AI through WP_PROXY_HOST | all | none.
+		'proxy_force_hosts'      => '',      // Extra hosts that must use the proxy (one per line).
+		'ss_auto'                => 0,       // Spend SEO Signal quota in the scheduled sync too.
 		'use_recurring'          => 0,   // Add the recurring tasks below when a plan is generated.
 		'psi_key'                => '',
 		'seosignal_daily_cap'    => 40,  // Of the 50 daily SEO Signal requests, leave some for the panel / SeoReport.

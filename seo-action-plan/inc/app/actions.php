@@ -62,6 +62,9 @@ add_action( 'admin_post_sap_save_settings', function () {
 		'ai_model'             => preg_replace( '/[^a-zA-Z0-9._:\/-]/', '', (string) sap_post( 'ai_model' ) ) ?: 'claude-sonnet-5-5',
 		'ai_model_assist'      => preg_replace( '/[^a-zA-Z0-9._:\/-]/', '', (string) sap_post( 'ai_model_assist' ) ) ?: 'claude-haiku-5-5',
 		'ai_budget'            => max( 0, (float) sap_norm_text( sap_post( 'ai_budget', 10 ) ) ),
+		'proxy_mode'           => in_array( sap_post( 'proxy_mode' ), array( 'smart', 'all', 'none' ), true ) ? sap_post( 'proxy_mode' ) : 'smart',
+		'proxy_force_hosts'    => sanitize_textarea_field( (string) sap_post( 'proxy_force_hosts' ) ),
+		'ss_auto'              => sap_post( 'ss_auto' ) ? 1 : 0,
 	);
 	foreach ( array( 'google_client_secret', 'seosignal_key', 'anthropic_key', 'ai_gateway_key', 'psi_key' ) as $k ) {
 		$v = trim( (string) sap_post( $k ) );

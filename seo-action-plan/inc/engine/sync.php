@@ -76,6 +76,9 @@ function sap_sync_all( $project_id, $force = false, $scheduled = false ) {
 		if ( 0 === strpos( $step, 'ai_' ) && $scheduled && ! sap_setting( 'ai_auto' ) ) {
 			continue; // The paid AI steps run on schedule only when enabled.
 		}
+		if ( $scheduled && in_array( $step, array( 'ss_volumes', 'ss_compare', 'ss_questions' ), true ) && ! sap_setting( 'ss_auto' ) ) {
+			continue; // SEO Signal quota is spent on schedule only when enabled.
+		}
 		do {
 			$project      = sap_project( $project_id ); // Fresh options each step.
 			$out[ $step ] = sap_sync_step( $project, $step, $force );
@@ -184,7 +187,9 @@ function sap_step_sheets( $project ) {
 		$msgs[] = sprintf( 'تقویم محتوا: %s ردیف', sap_num( count( $cal['rows'] ) ) ) . ( $logged ? sprintf( ' (%s انتشار جدید در لاگ ثبت شد)', sap_num( $logged ) ) : '' ) . ( ! empty( $imported ) ? sprintf( ' · %s مقاله از شیت وارد تقویم ابزار شد', sap_num( $imported ) ) : '' );
 	}
 	$cl = sap_sheet_read( $project['sheet_id'], $project['sheet_cluster_tab'], 'clusters' );
-	if ( is_wp_error( $cl ) ) {
+	if ( is_wp_error( $cl ) && 'sap_sheet_tab' === $cl->get_error_code() ) {
+		$msgs[] = 'تب کلاسترینگ در شیت نیست (اختیاری)';
+	} elseif ( is_wp_error( $cl ) ) {
 		$errors[] = $cl->get_error_message();
 	} else {
 		sap_dataset_put( $project['id'], 'sheet_clusters', $cl, array( 'count' => count( $cl['rows'] ), 'clusters' => count( array_unique( array_column( $cl['rows'], 'cluster' ) ) ) ) );

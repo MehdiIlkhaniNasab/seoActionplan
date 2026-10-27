@@ -290,10 +290,10 @@ function sap_ai_request_gateway( $model, $system, $user, $schema, $args ) {
 	}
 	if ( is_wp_error( $res ) ) {
 		$msg = $res->get_error_message();
-		if ( false !== strpos( $msg, 'cURL error 7' ) && defined( 'WP_PROXY_HOST' ) ) {
-			$msg = sprintf( 'پروکسی وردپرس (%s:%s) در دسترس نیست. پروکسی را روشن کنید یا برای GapGPT در wp-config.php بنویسید: define( \'WP_PROXY_BYPASS_HOSTS\', \'api.gapgpt.app\' );', WP_PROXY_HOST, defined( 'WP_PROXY_PORT' ) ? WP_PROXY_PORT : '' );
-		} elseif ( false !== strpos( $msg, 'cURL error 28' ) || false !== strpos( $msg, 'cURL error 56' ) ) {
-			$msg = 'اتصال وسط دریافت پاسخ قطع شد (پروکسی یا شبکه). دوباره امتحان کنید؛ اگر تکرار شد، GapGPT را از پروکسی معاف کنید: define( \'WP_PROXY_BYPASS_HOSTS\', \'api.gapgpt.app\' );';
+		if ( false !== strpos( $msg, 'cURL error 28' ) || false !== strpos( $msg, 'cURL error 56' ) ) {
+			$msg = 'اتصال وسط دریافت پاسخ قطع شد (شبکه). دوباره امتحان کنید؛ اگر تکرار شد، در تنظیمات › شبکه و پروکسی مسیر اتصال را بررسی کنید.';
+		} else {
+			$msg = sap_net_error( $res );
 		}
 		return new WP_Error( 'sap_ai_http', 'اتصال به سرویس هوش مصنوعی ناموفق بود: ' . $msg );
 	}

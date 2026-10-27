@@ -72,6 +72,25 @@
 				}
 				var li = items[i++];
 				var msg = li.querySelector('[data-msg]');
+				var askBox = panel.querySelector('[data-sap-sync-ask]');
+				// SEO Signal steps: show what they cost and wait for the user's answer.
+				if (li.hasAttribute('data-ask') && askBox && askBox.checked && !li.hasAttribute('data-approved')) {
+					li.className = 'is-ask';
+					msg.textContent = 'در حال محاسبه مصرف سهمیه…';
+					api('estimate/' + project + '/' + li.getAttribute('data-step')).then(function (est) {
+						if (!est.connected || (est.free && !force)) { li.setAttribute('data-approved', '1'); i--; next(); return; }
+						msg.innerHTML = '';
+						var t = document.createElement('span');
+						t.textContent = est.msg + ' — ' + (est.units ? est.units.toLocaleString('fa-IR') + ' واحد از ' + est.left.toLocaleString('fa-IR') + ' واحد باقی‌مانده امروز' : 'بدون مصرف سهمیه') + ' ';
+						var yes = document.createElement('button'); yes.type = 'button'; yes.className = 'sap-btn is-small is-primary'; yes.textContent = 'اجرا';
+						var no = document.createElement('button'); no.type = 'button'; no.className = 'sap-btn is-small is-ghost'; no.textContent = 'رد این بخش';
+						msg.appendChild(t); msg.appendChild(yes); msg.appendChild(no);
+						yes.addEventListener('click', function () { li.setAttribute('data-approved', '1'); i--; next(); });
+						no.addEventListener('click', function () { li.className = 'is-skip'; msg.textContent = 'به انتخاب شما رد شد (بدون مصرف سهمیه).'; next(); });
+					}).catch(function () { li.setAttribute('data-approved', '1'); i--; next(); });
+					return;
+				}
+				li.removeAttribute('data-approved');
 				li.className = 'is-run';
 				msg.textContent = 'در حال اجرا…';
 				var started = Date.now();
@@ -719,5 +738,88 @@
 			}).catch(function (e) { toast(e.message, true); idle(act); });
 		}
 	});
+
+	/* ---- Network test (settings) ---- */
+	document.addEventListener('click', function (ev) {
+		var b = ev.target.closest('[data-sap-net-test]');
+		if (!b) { return; }
+		var out = document.querySelector('[data-sap-net-result]');
+		busy(b);
+		post('net/test', { url: b.getAttribute('data-sap-net-test') }).then(function (res) {
+			out.textContent = b.textContent.replace('تست اتصال ', '') + ': ' + res.msg; out.className = res.ok ? 'sap-ok' : 'sap-bad';
+		}).catch(function (e) { out.textContent = e.message; out.className = 'sap-bad'; }).then(function () { idle(b); });
+	});
+
+	/* ---- SEO Signal tab ---- */
+	var ssProject = document.querySelector('[data-sap-ss-project]');
+	if (ssProject) {
+		var pid = ssProject.value, box = document.querySelector('[data-sap-ss-results]'), last = null, rows = [];
+		var titles = { research: 'تحقیق کلمه', bulk: 'حجم دسته‌ای', compare: 'مقایسه سایت', rt_history: 'وضعیت تغییر رتبه‌ها', rt_projects: 'پروژه‌های ردیاب رتبه' };
+		var fa = function (v) { return (v === null || v === undefined || v === '') ? '—' : (typeof v === 'number' ? v.toLocaleString('fa-IR') : esc(String(v))); };
+		var render = function (res) {
+			rows = res.rows || [];
+			var tool = last.tool, head = '', body = '';
+			box.hidden = false;
+			box.querySelector('[data-sap-ss-title]').textContent = titles[tool] + ' — ' + rows.length.toLocaleString('fa-IR') + ' ردیف';
+			box.querySelector('[data-sap-ss-meta]').textContent = (res.cached ? 'از کش (بدون مصرف سهمیه) · ' : 'دریافت تازه · ') + (res.left !== undefined ? 'باقی‌مانده امروز: ' + res.left.toLocaleString('fa-IR') : '');
+			box.querySelector('.sap-ss-use').hidden = ['research', 'bulk', 'compare'].indexOf(tool) === -1;
+			if (tool === 'research' || tool === 'bulk') {
+				head = '<tr><th></th><th>کلمه</th><th>حجم جستجو</th><th>رقابت</th></tr>';
+				rows.forEach(function (r, i) { body += '<tr><td><input type="checkbox" data-i="' + i + '"></td><td>' + esc(r.word) + '</td><td>' + fa(r.volume) + '</td><td>' + esc(r.competition || '') + '</td></tr>'; });
+			} else if (tool === 'compare') {
+				head = '<tr><th></th><th>کلمه</th><th>رتبه ما</th><th>رتبه رقیب</th><th>حجم</th></tr>';
+				rows.forEach(function (r, i) { body += '<tr><td><input type="checkbox" data-i="' + i + '"></td><td>' + esc(r.word) + '</td><td>' + fa(r.rank1 || '') + '</td><td>' + fa(r.rank2 || '') + '</td><td>' + fa(r.volume) + '</td></tr>'; });
+			} else if (tool === 'rt_history') {
+				rows.sort(function (a, b) { return (b.start_rank - b.end_rank) - (a.start_rank - a.end_rank); });
+				var up = rows.filter(function (r) { return r.end_rank && r.start_rank && r.end_rank < r.start_rank; }).length, down = rows.filter(function (r) { return r.end_rank > r.start_rank; }).length;
+				box.querySelector('[data-sap-ss-meta]').textContent += ' · بهتر شد: ' + up.toLocaleString('fa-IR') + ' · بدتر شد: ' + down.toLocaleString('fa-IR');
+				head = '<tr><th>کلمه</th><th>رتبه اول دوره</th><th>رتبه آخر</th><th>تغییر</th><th>بهترین</th><th>حجم</th><th>صفحه</th></tr>';
+				rows.forEach(function (r) {
+					var d = r.start_rank && r.end_rank ? r.start_rank - r.end_rank : 0;
+					body += '<tr><td>' + esc(r.keyword) + '</td><td>' + fa(r.start_rank || '') + '</td><td>' + fa(r.end_rank || '') + '</td><td class="' + (d > 0 ? 'sap-ok' : (d < 0 ? 'sap-bad' : '')) + '">' + (d > 0 ? '▲ ' : (d < 0 ? '▼ ' : '')) + fa(Math.abs(d) || '') + '</td><td>' + fa(r.best_rank || '') + '</td><td>' + fa(r.volume) + '</td><td dir="ltr" class="sap-small">' + esc((r.target_url || '').replace(/^https?:\/\/[^/]+/, '')) + '</td></tr>';
+				});
+			} else {
+				head = '<tr><th>شناسه</th><th>نام</th><th>دامنه</th><th>کلمات</th><th>فعال</th></tr>';
+				rows.forEach(function (r) { body += '<tr><td>' + fa(r.id) + '</td><td>' + esc(r.name) + '</td><td dir="ltr">' + esc(r.domain) + '</td><td>' + fa(r.keywords) + '</td><td>' + (r.active ? '✓' : '—') + '</td></tr>'; });
+			}
+			box.querySelector('[data-sap-ss-head]').innerHTML = head;
+			box.querySelector('[data-sap-ss-body]').innerHTML = body || '<tr><td colspan="7" class="sap-muted">داده‌ای نبود.</td></tr>';
+			box.scrollIntoView({ behavior: 'smooth', block: 'start' });
+		};
+		var run = function (tool, params, force, btn) {
+			last = { tool: tool, params: params };
+			if (btn) { busy(btn); }
+			post('ss/' + pid + '/tool', { tool: tool, params: params, force: force ? 1 : 0 }).then(render).catch(function (e) { toast(e.message, true); }).then(function () { if (btn) { idle(btn); } });
+		};
+		document.querySelectorAll('[data-sap-ss-form]').forEach(function (f) {
+			f.addEventListener('submit', function (ev) {
+				ev.preventDefault();
+				var params = {}; new FormData(f).forEach(function (v, k) { params[k] = v; });
+				run(f.getAttribute('data-sap-ss-form'), params, false, f.querySelector('[type=submit]'));
+			});
+		});
+		document.addEventListener('click', function (ev) {
+			var r = ev.target.closest('[data-sap-ss-run]');
+			var adv = ev.target.closest('[data-sap-ss-advise]');
+			var use = ev.target.closest('[data-sap-ss-use]');
+			if (r) { var d = JSON.parse(r.getAttribute('data-sap-ss-run')); run(d.tool, d.params, false, r); }
+			if (ev.target.closest('[data-sap-ss-refresh]') && last) { if (window.confirm('درخواست تازه از سهمیه روزانه مصرف می‌کند. ادامه؟')) { run(last.tool, last.params, true, ev.target); } }
+			if (adv) {
+				busy(adv, 'در حال بررسی داده‌ها…');
+				post('ss/' + adv.getAttribute('data-sap-ss-advise') + '/advise').then(function () { location.reload(); }).catch(function (e) { toast(e.message, true); idle(adv); });
+			}
+			if (use) {
+				var picked = Array.prototype.map.call(box.querySelectorAll('[data-i]:checked'), function (c) { return rows[+c.getAttribute('data-i')]; });
+				var action = use.getAttribute('data-sap-ss-use');
+				if (action === 'volumes' && !picked.length) { picked = rows; }
+				var url = (box.querySelector('[data-sap-ss-page]') || {}).value || '';
+				if (!picked.length) { toast('ردیف‌ها را انتخاب کنید', true); return; }
+				if (action === 'secondary' && !url) { toast('صفحه را انتخاب کنید', true); return; }
+				post('ss/' + pid + '/use', { action: action, items: picked, url: url }).then(function (res) { toast(res.msg); }).catch(function (e) { toast(e.message, true); });
+			}
+		});
+		var all = box.querySelector('[data-sap-ss-all]');
+		if (all) { all.addEventListener('change', function () { box.querySelectorAll('[data-i]').forEach(function (c) { c.checked = all.checked; }); }); }
+	}
 
 })();
