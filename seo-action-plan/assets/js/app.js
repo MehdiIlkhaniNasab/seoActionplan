@@ -764,9 +764,85 @@
 		}).catch(function (e) { out.textContent = e.message; out.className = 'sap-bad'; }).then(function () { idle(b); });
 	});
 
+	/* ---- Screaming Frog wizard: steps, scope, connection test (polls the agent's ping) ---- */
+	(function () {
+		var box = document.querySelector('[data-sap-sfw]');
+		if (!box) { return; }
+		var pid = box.getAttribute('data-sap-sfw');
+		var result = box.querySelector('[data-sap-sf-result]');
+		var reload = function (msg) { if (msg) { toast(msg); } setTimeout(function () { location.reload(); }, 700); };
+		box.addEventListener('click', function (ev) {
+			var head = ev.target.closest('.sap-sfw-steps > li.is-done .sap-sfw-body > b');
+			if (head) { head.closest('li').classList.toggle('is-edit'); }
+			var cfg = ev.target.closest('[data-sap-sf-config]');
+			if (cfg) {
+				var d = {}; d[cfg.getAttribute('data-sap-sf-config')] = 1;
+				busy(cfg, '…');
+				post('crawl/' + pid + '/config', d).then(function (r) { reload(r.msg); }).catch(function (e) { toast(e.message, true); idle(cfg); });
+			}
+			var chk = ev.target.closest('[data-sap-sf-check]');
+			if (chk) {
+				busy(chk, 'در انتظار پیام ایجنت…');
+				var started = Date.now(), before = null;
+				var tick = function () {
+					api('crawl/' + pid + '/status').then(function (r) {
+						var at = r.ping ? r.ping.at : '';
+						if (before === null) { before = at; }
+						if (r.ping && (at !== before || (Date.now() - started < 1500 && r.ping.sf_found))) {
+							idle(chk);
+							result.innerHTML = '';
+							var sp = document.createElement('span');
+							sp.className = r.ping.sf_found ? 'sap-ok' : 'sap-bad';
+							sp.textContent = r.ping.sf_found ? '✓ اتصال برقرار است و Screaming Frog پیدا شد (' + r.ping.os + ' · ' + r.ping.host + ').' : 'ایجنت به سکان وصل شد ولی Screaming Frog را پیدا نکرد؛ برنامه را نصب کنید یا مسیرش را با -SpiderPath بدهید.';
+							result.appendChild(sp);
+							if (r.ping.sf_found) { reload('اتصال تأیید شد؛ مرحله بعد.'); }
+							return;
+						}
+						if (Date.now() - started > 180000) {
+							idle(chk);
+							result.innerHTML = '<span class="sap-bad">پیامی نرسید. دستور تست را اجرا کرده‌اید؟ اگر خطای اتصال داد، فایروال/پروکسی کامپیوتر یا آدرس سایت سکان را بررسی کنید.</span>';
+							return;
+						}
+						result.innerHTML = '<span class="sap-muted">در انتظار اجرای دستور تست روی کامپیوتر شما… (' + Math.round((Date.now() - started) / 1000) + ' ثانیه)</span>';
+						setTimeout(tick, 4000);
+					}).catch(function (e) { idle(chk); toast(e.message, true); });
+				};
+				tick();
+			}
+		});
+		box.addEventListener('submit', function (ev) {
+			var f = ev.target;
+			if (f.matches('[data-sap-sf-scope]')) {
+				ev.preventDefault();
+				var b = f.querySelector('[type=submit]');
+				busy(b, '…');
+				post('crawl/' + pid + '/config', { mode: f.mode.value, limit: f.limit.value }).then(function (r) { reload(r.msg); }).catch(function (e) { toast(e.message, true); idle(b); });
+			}
+			if (f.matches('[data-sap-sf-download]')) {
+				toast('فایل ایجنت دانلود می‌شود؛ مرحله بعد: تست اتصال.');
+				setTimeout(function () { location.reload(); }, 2500);
+			}
+		});
+	}());
+
 	/* ---- Pillars: content audit, content updates, clustering sheet, competitors, off-page data ---- */
 	(function () {
 		var done = function (res) { toast(res.msg || 'انجام شد'); setTimeout(function () { location.reload(); }, 900); };
+		var drawer = document.querySelector('[data-sap-audit-drawer]');
+		var auditTouched = false;
+		var openAudit = function (html) {
+			if (!drawer) { return; }
+			drawer.querySelector('[data-sap-audit-body]').innerHTML = html;
+			drawer.hidden = false;
+			document.body.classList.add('sap-sheet-open');
+		};
+		var closeAudit = function () {
+			if (!drawer) { return; }
+			drawer.hidden = true;
+			document.body.classList.remove('sap-sheet-open');
+			if (auditTouched) { location.reload(); }
+		};
+		document.addEventListener('keydown', function (ev) { if (ev.key === 'Escape' && drawer && !drawer.hidden) { closeAudit(); } });
 		var picked = function () { return Array.prototype.map.call(document.querySelectorAll('[data-sap-audit-pick]:checked'), function (c) { return c.value; }); };
 		document.addEventListener('change', function (ev) {
 			if (ev.target.matches('[data-sap-audit-all]')) {
@@ -782,8 +858,45 @@
 			var rm = ev.target.closest('[data-sap-comp-remove]');
 			var oc = ev.target.closest('[data-sap-offpage-collect]');
 			if (one) {
-				busy(one, 'در حال تحلیل…');
-				post('audit/' + one.getAttribute('data-project') + '/' + one.getAttribute('data-group'), { url: one.getAttribute('data-sap-audit-one') }).then(done).catch(function (e) { toast(e.message, true); idle(one); });
+				var oneUrl = one.getAttribute('data-sap-audit-one');
+				busy(one, '…');
+				openAudit('<div class="sap-ar-loading"><span class="sap-spin"></span><b>در حال تحلیل هوشمند صفحه…</b><p class="sap-muted">محتوا و داده وردپرس صفحه خوانده می‌شود، با کلمات و کوئری‌های سرچ کنسول سنجیده و از دید Focus و فروش تحلیل می‌شود (۲۰ تا ۶۰ ثانیه).</p><div class="sap-progress"><i class="is-indeterminate"></i></div></div>');
+				post('audit/' + one.getAttribute('data-project') + '/' + one.getAttribute('data-group'), { url: oneUrl }).then(function (res) {
+					idle(one);
+					if (res.html) { openAudit(res.html); auditTouched = true; } else { closeAudit(); }
+					toast(res.msg || 'تحلیل انجام شد');
+				}).catch(function (e) { toast(e.message, true); idle(one); closeAudit(); });
+			}
+			var view = ev.target.closest('[data-sap-audit-view]');
+			if (view) {
+				ev.preventDefault();
+				openAudit('<div class="sap-ar-loading"><span class="sap-spin"></span><b>در حال باز کردن…</b></div>');
+				api('audit/' + view.getAttribute('data-project') + '/view?url=' + encodeURIComponent(view.getAttribute('data-sap-audit-view'))).then(function (res) { openAudit(res.html); }).catch(function (e) { toast(e.message, true); closeAudit(); });
+			}
+			if (ev.target.closest('[data-sap-audit-close]')) { closeAudit(); }
+			var pk = ev.target.closest('[data-sap-audit-picked]');
+			if (pk) {
+				var urlsP = picked();
+				if (!urlsP.length) { toast('اول صفحه‌ها را تیک بزنید.', true); return; }
+				if (urlsP.length > 30) { toast('حداکثر ۳۰ صفحه در هر بار؛ ۳۰ صفحه اول تحلیل می‌شود.'); }
+				busy(pk, '…');
+				post('audit/' + pk.getAttribute('data-sap-audit-picked') + '/' + pk.getAttribute('data-group'), { urls: urlsP }).then(function () {
+					idle(pk);
+					var runner = document.createElement('button');
+					runner.type = 'button';
+					runner.className = 'sap-btn is-small is-primary';
+					runner.setAttribute('data-sap-step', 'audit_' + pk.getAttribute('data-group'));
+					runner.setAttribute('data-project', pk.getAttribute('data-sap-audit-picked'));
+					runner.setAttribute('data-force', '');
+					runner.textContent = 'در حال تحلیل ' + urlsP.length + ' صفحه…';
+					pk.parentNode.insertBefore(runner, pk.nextSibling);
+					pk.hidden = true;
+					runner.click();
+				}).catch(function (e) { toast(e.message, true); idle(pk); });
+			}
+			var cp = ev.target.closest('[data-sap-audit-body] [data-sap-copy]');
+			if (cp && navigator.clipboard) {
+				navigator.clipboard.writeText(cp.textContent.trim()).then(function () { cp.classList.add('is-copied'); toast('کپی شد'); setTimeout(function () { cp.classList.remove('is-copied'); }, 900); });
 			}
 			if (add) {
 				busy(add, '…');

@@ -567,6 +567,7 @@ function sap_tech_checklist( $project ) {
 			'score'    => $score,
 			'items'    => $items,
 			'facts'    => sap_tech_facts( $project, $key ),
+			'kpis'     => sap_tech_kpis( $project, $key ),
 			'updated'  => $ages ? max( $ages ) : '',
 		);
 	}
@@ -664,6 +665,120 @@ function sap_tech_facts( $project, $key ) {
 			break;
 	}
 	return $f;
+}
+
+/**
+ * Up to three short numbers for a section card: [value, label, tone (good|warn|bad|'')].
+ */
+function sap_tech_kpis( $project, $key ) {
+	$pid  = $project['id'];
+	$k    = array();
+	$tone = function ( $n, $warn = 1, $bad = 5 ) {
+		return $n >= $bad ? 'bad' : ( $n >= $warn ? 'warn' : 'good' );
+	};
+	switch ( $key ) {
+		case 'sitemap':
+			$s = sap_dataset_payload( $pid, 'sitemap_check' );
+			if ( $s && $s['root'] ) {
+				$miss = count( (array) $s['missing'] );
+				$k[]  = array( sap_num( $miss ), 'صفحه مهم جامانده', $tone( $miss, 1, 10 ) );
+				$k[]  = array( sap_num( $s['total'] ), 'آدرس در ' . sap_num( count( $s['maps'] ) ) . ' فایل', '' );
+				$k[]  = array( $s['in_robots'] ? '✓' : '✕', 'اعلام در robots', $s['in_robots'] ? 'good' : 'warn' );
+			} elseif ( $s ) {
+				$k[] = array( '✕', 'سایت‌مپ پیدا نشد', 'bad' );
+			}
+			break;
+		case 'robots':
+			$r = sap_dataset_payload( $pid, 'robots' );
+			if ( $r ) {
+				$blocked = count( array_filter( (array) $r['tests'], function ( $t ) {
+					return ! $t['allowed'];
+				} ) );
+				$k[] = array( sap_num( $blocked ), 'مسیر مهم مسدود', $tone( $blocked, 1, 1 ) );
+				$k[] = array( sap_num( count( (array) $r['rules'] ) ), 'قانون', '' );
+				$k[] = array( sap_num( count( (array) $r['sitemaps'] ) ), 'سایت‌مپ اعلام‌شده', count( (array) $r['sitemaps'] ) ? 'good' : 'warn' );
+			}
+			break;
+		case 'speed':
+			$pages = (array) ( sap_dataset_payload( $pid, 'cwv' )['pages'] ?? array() );
+			if ( $pages ) {
+				$scores = array_filter( array_column( $pages, 'score' ), 'is_numeric' );
+				$lcps   = array();
+				foreach ( $pages as $c ) {
+					$l = $c['field']['lcp']['p75'] ?? ( $c['lab']['lcp'] ?? null );
+					if ( $l ) {
+						$lcps[] = $l / 1000;
+					}
+				}
+				$avg = $scores ? (int) round( array_sum( $scores ) / count( $scores ) ) : null;
+				$k[] = array( null === $avg ? '—' : sap_num( $avg ), 'میانگین امتیاز موبایل', null === $avg ? '' : ( $avg >= 90 ? 'good' : ( $avg >= 50 ? 'warn' : 'bad' ) ) );
+				if ( $lcps ) {
+					$w   = max( $lcps );
+					$k[] = array( sap_num( $w, 1 ) . 's', 'بدترین LCP', $w <= 2.5 ? 'good' : ( $w <= 4 ? 'warn' : 'bad' ) );
+				}
+				$k[] = array( sap_num( count( $pages ) ), 'صفحه تست‌شده', '' );
+			}
+			break;
+		case 'schema':
+			$pages = (array) ( sap_dataset_payload( $pid, 'pages' )['pages'] ?? array() );
+			if ( $pages ) {
+				$with  = 0;
+				$err   = 0;
+				$types = array();
+				foreach ( $pages as $p ) {
+					$with += $p['schema'] ? 1 : 0;
+					$err  += (int) $p['schema_errors'];
+					foreach ( (array) $p['schema'] as $t ) {
+						$types[ $t ] = true;
+					}
+				}
+				$pc  = (int) round( 100 * $with / count( $pages ) );
+				$k[] = array( sap_num( $pc ) . '٪', 'صفحات دارای اسکیما', $pc >= 90 ? 'good' : ( $pc >= 60 ? 'warn' : 'bad' ) );
+				$k[] = array( sap_num( count( $types ) ), 'نوع اسکیما', '' );
+				$k[] = array( sap_num( $err ), 'خطای JSON-LD', $tone( $err, 1, 3 ) );
+			}
+			break;
+		case 'index':
+			$rows = (array) ( sap_dataset_payload( $pid, 'gsc_inspect' )['rows'] ?? array() );
+			if ( $rows ) {
+				$ok  = count( array_filter( $rows, function ( $r ) {
+					return 'PASS' === ( $r['verdict'] ?? '' );
+				} ) );
+				$no  = count( $rows ) - $ok;
+				$k[] = array( sap_num( $ok ) . '/' . sap_num( count( $rows ) ), 'ایندکس‌شده', $no ? 'warn' : 'good' );
+				$k[] = array( sap_num( $no ), 'ایندکس‌نشده', $tone( $no, 1, 3 ) );
+				$k[] = array( sap_num( count( array_filter( $rows, function ( $r ) {
+					return 'PASS' === ( $r['rich'] ?? '' );
+				} ) ) ), 'Rich Result معتبر', '' );
+			}
+			break;
+		case 'pages':
+		case 'crawl':
+			$c = sap_dataset( $pid, 'crawl' );
+			if ( $c ) {
+				$rows  = (array) ( $c['payload']['rows'] ?? array() );
+				$codes = array();
+				foreach ( $rows as $r ) {
+					$b           = (int) floor( (int) $r['code'] / 100 );
+					$codes[ $b ] = ( $codes[ $b ] ?? 0 ) + 1;
+				}
+				if ( 'pages' === $key ) {
+					$k[] = array( sap_num( $codes[4] ?? 0 ), 'خطای 4xx', $tone( $codes[4] ?? 0, 1, 10 ) );
+					$k[] = array( sap_num( $codes[5] ?? 0 ), 'خطای 5xx', $tone( $codes[5] ?? 0, 1, 1 ) );
+					$k[] = array( sap_num( $codes[3] ?? 0 ), 'ریدایرکت', $tone( $codes[3] ?? 0, 10, 50 ) );
+				} else {
+					$noidx = count( array_filter( $rows, function ( $r ) {
+						return ! $r['idx'];
+					} ) );
+					$days  = max( 0, (int) floor( ( time() - strtotime( $c['fetched_at'] ) ) / DAY_IN_SECONDS ) );
+					$k[]   = array( sap_num( count( $rows ) ), 'آدرس خزش‌شده', '' );
+					$k[]   = array( sap_num( $noidx ), 'غیرقابل‌ایندکس', $tone( $noidx, 5, 30 ) );
+					$k[]   = array( $days ? sap_num( $days ) . ' روز' : 'امروز', 'از آخرین خزش', $days > 45 ? 'warn' : 'good' );
+				}
+			}
+			break;
+	}
+	return $k;
 }
 
 /**

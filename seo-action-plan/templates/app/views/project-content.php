@@ -155,6 +155,44 @@ endif;
 	<?php endif; ?>
 </section>
 
+<?php
+$wp_site = (array) ( $rev['original']['site'] ?? array() );
+$wp_imgs = (array) ( $wp_site['images'] ?? array() );
+$wp_prod = $wp_site['product'] ?? null;
+?>
+<?php if ( 'elementor' === ( $rev['original']['format'] ?? '' ) ) : ?>
+	<p class="sap-alert is-warn">این صفحه با المنتور ساخته شده: متن از ویجت‌های رندرشده المنتور خوانده شد. تغییرات تأییدشده را در ویرایشگر المنتور کپی کنید (تایتل و متا مستقیم قابل اعمال است).</p>
+<?php endif; ?>
+<?php if ( $wp_prod || $wp_imgs ) : ?>
+	<section class="sap-panel">
+		<h3><?php echo sap_icon( 'grid' ); // phpcs:ignore ?>داده صفحه در وردپرس</h3>
+		<?php if ( $wp_prod ) : ?>
+			<div class="sap-ar-prod">
+				<div><span>قیمت</span><b><?php echo '' !== $wp_prod['price'] ? esc_html( sap_num( (float) $wp_prod['price'] ) . ' ' . $wp_prod['currency'] ) : 'ندارد'; ?></b></div>
+				<div><span>موجودی</span><b><?php echo esc_html( array( 'instock' => 'موجود', 'outofstock' => 'ناموجود', 'onbackorder' => 'پیش‌سفارش' )[ $wp_prod['stock'] ] ?? $wp_prod['stock'] ); ?></b></div>
+				<div><span>ویژگی‌ها</span><b><?php echo esc_html( sap_num( count( (array) $wp_prod['attributes'] ) ) ); ?></b></div>
+				<div><span>نظرات</span><b><?php echo esc_html( sap_num( $wp_prod['reviews'] ) ); ?></b></div>
+			</div>
+			<?php if ( $wp_prod['attributes'] ) : ?>
+				<details class="sap-more"><summary>جدول ویژگی‌ها (Attributes)</summary>
+					<table class="sap-table is-compact"><tbody><?php foreach ( $wp_prod['attributes'] as $at ) : ?><tr><th><?php echo esc_html( $at['name'] ); ?></th><td><?php echo esc_html( implode( '، ', (array) $at['values'] ) ); ?></td></tr><?php endforeach; ?></tbody></table>
+				</details>
+			<?php endif; ?>
+			<?php if ( '' !== trim( wp_strip_all_tags( (string) $wp_prod['short'] ) ) ) : ?>
+				<details class="sap-more"><summary>توضیح کوتاه محصول</summary><div class="sap-ar-brief"><?php echo wp_kses( $wp_prod['short'], sap_content_allowed_html() ); // phpcs:ignore ?></div></details>
+			<?php endif; ?>
+		<?php endif; ?>
+		<?php if ( $wp_imgs ) : ?>
+			<p class="sap-label">تصاویر (<?php echo esc_html( sap_num( count( $wp_imgs ) ) ); ?> · <?php echo esc_html( sap_num( count( array_filter( $wp_imgs, function ( $i ) { return '' === trim( (string) $i['alt'] ); } ) ) ) ); ?> بدون Alt)</p>
+			<div class="sap-ar-imgs">
+				<?php foreach ( array_slice( $wp_imgs, 0, 24 ) as $im ) : ?>
+					<figure class="<?php echo '' === trim( (string) $im['alt'] ) ? 'is-noalt' : ''; ?>"><img src="<?php echo esc_url( $im['src'] ); ?>" alt="" loading="lazy"><figcaption><?php echo esc_html( '' !== trim( (string) $im['alt'] ) ? $im['alt'] : 'بدون Alt' ); ?><?php echo 'gallery' === $im['where'] ? ' · گالری' : ( 'featured' === $im['where'] ? ' · شاخص' : '' ); ?></figcaption></figure>
+				<?php endforeach; ?>
+			</div>
+		<?php endif; ?>
+	</section>
+<?php endif; ?>
+
 <section class="sap-panel"><?php sap_view( 'comments', array( 'type' => 'revision', 'object_id' => $rev['id'], 'project_id' => $pid ) ); ?></section>
 
 <?php

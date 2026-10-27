@@ -360,12 +360,32 @@ add_action( 'rest_api_init', function () {
 			if ( ! isset( sap_content_groups()[ $group ] ) ) {
 				return new WP_Error( 'sap_group', 'نوع محتوا نامعتبر است.', array( 'status' => 400 ) );
 			}
-			$url = esc_url_raw( (string) $req->get_param( 'url' ) );
+			$url  = esc_url_raw( (string) $req->get_param( 'url' ) );
+			$urls = array_filter( array_map( 'esc_url_raw', (array) $req->get_param( 'urls' ) ) );
+			if ( $urls ) {
+				// Pick list: the page runs the audit_<group> step (batched) right after.
+				update_option( 'sap_audit_only_' . $project['id'], array_values( array_unique( array_map( 'sap_norm_url', array_slice( $urls, 0, 30 ) ) ) ), false );
+				return array( 'ok' => true, 'msg' => sprintf( '%s صفحه برای تحلیل انتخاب شد.', sap_num( count( $urls ) ) ) );
+			}
 			if ( $url ) {
 				update_option( 'sap_audit_only_' . $project['id'], array( sap_norm_url( $url ) ), false );
 			}
-			$res = sap_ai_stage_step( $project, 'audit_' . $group, true );
-			return is_wp_error( $res ) ? $res : $res;
+			do {
+				$res = sap_ai_stage_step( sap_project( $project['id'] ), 'audit_' . $group, true );
+			} while ( ! is_wp_error( $res ) && ! empty( $res['more'] ) );
+			if ( is_wp_error( $res ) || ! $url ) {
+				return $res;
+			}
+			$res['html'] = sap_audit_result_html( sap_project( $project['id'] ), $url );
+			return $res;
+		} ),
+	) );
+	register_rest_route( $ns, '/audit/(?P<project>\d+)/view', array(
+		'methods'             => 'GET',
+		'permission_callback' => 'sap_can',
+		'callback'            => $project_route( function ( $project, $req ) {
+			$html = sap_audit_result_html( $project, esc_url_raw( (string) $req->get_param( 'url' ) ) );
+			return '' === $html ? new WP_Error( 'sap_404', 'این صفحه در فهرست محتوا نیست.', array( 'status' => 404 ) ) : array( 'ok' => true, 'html' => $html );
 		} ),
 	) );
 	register_rest_route( $ns, '/offpage/(?P<project>\d+)/collect', array(
@@ -394,7 +414,8 @@ add_action( 'rest_api_init', function () {
 				}
 				sap_update_plan( $project, $u, $period, array( 'reason' => $reason, 'source' => sanitize_key( (string) ( $req->get_param( 'source' ) ?: 'manual' ) ) ) );
 			}
-			return array( 'ok' => true, 'msg' => sprintf( '%s صفحه به بخش «آپدیت محتوا»ی تقویم %s اضافه شد.', sap_num( count( $urls ) ), sap_period_label( $period ) ) );
+			$msg = sprintf( '%s صفحه به بخش «آپدیت محتوا»ی تقویم %s اضافه شد', sap_num( count( $urls ) ), sap_period_label( $period ) );
+			return array( 'ok' => true, 'msg' => $msg . sap_calendar_sync_sheet( sap_project( $project['id'] ) ) );
 		} ),
 	) );
 	register_rest_route( $ns, '/update/(?P<id>\d+)', array(
@@ -409,20 +430,20 @@ add_action( 'rest_api_init', function () {
 			switch ( sanitize_key( (string) $req->get_param( 'do' ) ) ) {
 				case 'brief':
 					$b = sap_update_brief( $project, $u );
-					return is_wp_error( $b ) ? $b : array( 'ok' => true, 'msg' => 'بریف آپدیت آماده شد.', 'reload' => true );
+					return is_wp_error( $b ) ? $b : array( 'ok' => true, 'msg' => 'بریف آپدیت آماده شد' . sap_calendar_sync_sheet( $project ), 'reload' => true );
 				case 'status':
 					sap_update_save( array( 'status' => sanitize_key( (string) $req->get_param( 'status' ) ) ), $u['id'] );
 					if ( 'done' === $req->get_param( 'status' ) ) {
 						sap_activity_add( $project['id'], array( 'category' => 'content_update', 'action' => 'content_updated', 'title' => 'آپدیت محتوای «' . $u['title'] . '»', 'url' => $u['url'], 'source' => 'tool', 'ref' => 'upd:' . $u['id'] ) );
 					}
-					return array( 'ok' => true, 'msg' => 'وضعیت ثبت شد.', 'reload' => true );
+					return array( 'ok' => true, 'msg' => 'وضعیت ثبت شد' . sap_calendar_sync_sheet( $project ), 'reload' => true );
 				case 'task':
 					$tid = sap_task_save( array( 'project_id' => $project['id'], 'title' => 'آپدیت کامل محتوای «' . $u['title'] . '»', 'notes' => $u['reason'] . ( $u['brief'] ? "\n\nبریف در تقویم محتوا › آپدیت محتوا." : '' ), 'context' => 'content_update', 'status' => 'next', 'period' => $u['period'], 'effort' => 'product' === $u['content_type'] ? 1.5 : 3, 'url' => $u['url'], 'keyword' => $u['keyword'], 'focus_id' => $u['focus_id'] ) );
 					sap_update_save( array( 'task_id' => $tid, 'status' => 'in_progress' ), $u['id'] );
 					return array( 'ok' => true, 'msg' => 'به اکشن پلن ' . sap_period_label( $u['period'] ) . ' اضافه شد.', 'reload' => true );
 				case 'delete':
 					sap_update_delete( $u['id'] );
-					return array( 'ok' => true, 'msg' => 'حذف شد.', 'reload' => true );
+					return array( 'ok' => true, 'msg' => 'حذف شد' . sap_calendar_sync_sheet( $project ), 'reload' => true );
 			}
 			return new WP_Error( 'sap_do', 'عملیات نامعتبر.', array( 'status' => 400 ) );
 		},

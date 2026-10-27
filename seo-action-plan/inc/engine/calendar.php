@@ -50,6 +50,25 @@ function sap_calendar_months( $project_id ) {
 }
 
 /**
+ * Months shown in the sheet: months with articles or with content updates.
+ */
+function sap_calendar_sheet_months( $project_id ) {
+	$periods = array_keys( sap_calendar_months( $project_id ) );
+	foreach ( sap_updates( $project_id ) as $u ) {
+		if ( '' !== (string) $u['period'] && 'cancelled' !== $u['status'] ) {
+			$periods[] = $u['period'];
+		}
+	}
+	$periods = array_values( array_unique( $periods ) );
+	sort( $periods );
+	$out = array();
+	foreach ( $periods as $i => $p ) {
+		$out[ $p ] = 'M' . ( $i + 1 );
+	}
+	return $out;
+}
+
+/**
  * Articles of a month, in slot order.
  */
 function sap_calendar_items( $project_id, $period ) {
@@ -251,6 +270,10 @@ function sap_blog_parse( $values ) {
 		$lower = array_map( function ( $v ) {
 			return strtolower( trim( (string) $v ) );
 		}, (array) $row );
+		if ( in_array( 'update page', $lower, true ) ) {
+			$cols = array(); // «Update Page» block: content updates written by Sokan, not articles.
+			continue;
+		}
 		if ( in_array( 'main idea', $lower, true ) ) {
 			$cols = array();
 			foreach ( $lower as $ci => $h ) {
@@ -465,9 +488,9 @@ function sap_calendar_write_sheet( $project ) {
 	if ( ! is_wp_error( $old ) && sap_is_blog_layout( $old ) ) {
 		sap_calendar_import_sheet( $project, sap_blog_parse( $old ) );
 	}
-	$months = sap_calendar_months( $project['id'] );
+	$months = sap_calendar_sheet_months( $project['id'] );
 	if ( ! $months ) {
-		return 'تقویم هنوز مقاله‌ای ندارد.';
+		return 'تقویم هنوز مقاله یا آپدیتی ندارد.';
 	}
 
 	// 2. Blog tab, newest month first.
@@ -498,6 +521,30 @@ function sap_calendar_write_sheet( $project ) {
 			++$count;
 		}
 		$r1 = count( $values );
+		// Content updates of the month: their own block under the new articles.
+		$ups = sap_updates( $project['id'], array( 'period' => $period ) );
+		$u0  = null;
+		if ( $ups ) {
+			$u0       = count( $values );
+			$values[] = array( '', 'Update Page', 'KP', 'Title (پیشنهادی)', 'هدف و بریف آپدیت', 'L1', 'K1', 'L2', 'K2', 'L3', 'K3', 'L4', 'K4', 'L5', 'K5', 'نوع صفحه', 'Status', 'Done Date', 'Link', 'تاریخ برنامه' );
+			$ctypes   = sap_content_types();
+			foreach ( $ups as $n => $u ) {
+				$b   = (array) $u['brief'];
+				$row = array( 'U' . ( $n + 1 ), $b['keyword'] ?? $u['keyword'], '', ( $b['title'] ?? '' ) ?: $u['title'], trim( (string) ( $b['summary'] ?? '' ) ?: (string) $u['reason'] ) );
+				$lo  = array_values( (array) ( $b['links_out'] ?? array() ) );
+				for ( $l = 0; $l < 5; $l++ ) {
+					$row[] = isset( $lo[ $l ]['url'] ) ? rawurldecode( $lo[ $l ]['url'] ) : '';
+					$row[] = $lo[ $l ]['anchor'] ?? '';
+				}
+				$row[]    = $ctypes[ $u['content_type'] ] ?? $u['content_type'];
+				$row[]    = 'done' === $u['status'];
+				$row[]    = $u['done_at'] ? sap_jdate( substr( $u['done_at'], 0, 10 ), 'day' ) : '';
+				$row[]    = rawurldecode( $u['url'] );
+				$row[]    = sap_update_statuses()[ $u['status'] ] ?? $u['status'];
+				$values[] = $row;
+			}
+		}
+		$r2 = count( $values );
 		// Header colours and merges, as in the agency template.
 		$fmt[] = sap_gs_merge( $sid, $r0, $r0 + 2, 0, 1 );
 		$fmt[] = sap_gs_merge( $sid, $r0, $r0 + 1, 1, 5 );
@@ -511,6 +558,11 @@ function sap_calendar_write_sheet( $project ) {
 		if ( $r1 > $r0 + 2 ) {
 			$fmt[] = sap_gs_fmt( $sid, $r0 + 2, $r1, 0, 20 );
 			$fmt[] = array( 'setDataValidation' => array( 'range' => array( 'sheetId' => $sid, 'startRowIndex' => $r0 + 2, 'endRowIndex' => $r1, 'startColumnIndex' => 16, 'endColumnIndex' => 17 ), 'rule' => array( 'condition' => array( 'type' => 'BOOLEAN' ) ) ) );
+		}
+		if ( null !== $u0 ) {
+			$fmt[] = sap_gs_fmt( $sid, $u0, $u0 + 1, 1, 20, '#F9CB9C', '#000000', true );
+			$fmt[] = sap_gs_fmt( $sid, $u0 + 1, $r2, 0, 20, '#FFF7EE' );
+			$fmt[] = array( 'setDataValidation' => array( 'range' => array( 'sheetId' => $sid, 'startRowIndex' => $u0 + 1, 'endRowIndex' => $r2, 'startColumnIndex' => 16, 'endColumnIndex' => 17 ), 'rule' => array( 'condition' => array( 'type' => 'BOOLEAN' ) ) ) );
 		}
 		$values[] = array();
 	}
@@ -796,4 +848,22 @@ function sap_updates_write_sheet( $project ) {
 	$fmt[] = array( 'updateSheetProperties' => array( 'properties' => array( 'sheetId' => $sid, 'gridProperties' => array( 'frozenRowCount' => 1 ) ), 'fields' => 'gridProperties.frozenRowCount' ) );
 	sap_gs_batch( $sheet, $fmt );
 	return sprintf( 'آپدیت محتوا (%s صفحه)', sap_num( count( $values ) - 1 ) );
+}
+
+/**
+ * Push the calendar (articles + content updates) to the project sheet right
+ * after a change, so the sheet is the team's live plan.
+ *
+ * @return string Short suffix for the user message ('' when no sheet).
+ */
+function sap_calendar_sync_sheet( $project ) {
+	if ( empty( $project['sheet_id'] ) || ! sap_google_connected() || ! sap_google_has_sheets() ) {
+		return '.';
+	}
+	$a = sap_calendar_write_sheet( $project );
+	$b = sap_updates_write_sheet( $project );
+	if ( is_wp_error( $a ) || is_wp_error( $b ) ) {
+		return '؛ نوشتن در گوگل شیت ناموفق بود: ' . ( is_wp_error( $a ) ? $a->get_error_message() : $b->get_error_message() );
+	}
+	return ' و در تقویم گوگل شیت (تب Blog و «' . SAP_TAB_UPDATES . '») هم ثبت شد.';
 }

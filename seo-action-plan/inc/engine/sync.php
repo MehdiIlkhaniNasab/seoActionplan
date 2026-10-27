@@ -17,6 +17,7 @@ defined( 'ABSPATH' ) || exit;
 function sap_sync_steps() {
 	return array(
 		'site_log'     => 'سایت کارفرما: لاگ تغییرات (افزونه رابط)',
+		'site_inventory' => 'سایت کارفرما: فهرست کامل محتوا (نوشته، برگه، محصول، دسته، برچسب، برند)',
 		'gsc_qp'       => 'سرچ کنسول: کوئری‌ها و صفحات',
 		'gsc_pages'    => 'سرچ کنسول: مقایسه صفحات با ۲۸ روز قبل',
 		'gsc_sitemaps' => 'سرچ کنسول: سایت‌مپ‌ها',
@@ -552,7 +553,10 @@ function sap_step_cwv( $project, $force = false ) {
 /* ---- AI stages --------------------------------------------------------- */
 
 function sap_step_keymap( $project ) {
-	$st = sap_keymap_build( $project );
+	$st  = sap_keymap_build( $project );
+	$inv = sap_keymap_from_inventory( $project );
+	sap_keymap_fix_types( $project );
+	$st['pages'] = count( sap_keymap( $project['id'], true ) );
 	if ( ! $st['pages'] ) {
 		return sap_skip( 'هنوز صفحه‌ای برای نقشه کلمات نیست (اول سرچ کنسول را همگام کنید).' );
 	}
@@ -560,7 +564,7 @@ function sap_step_keymap( $project ) {
 	$conf = count( array_filter( $map, function ( $m ) {
 		return $m['confirmed'] || in_array( $m['source'], array( 'manual', 'sheet' ), true );
 	} ) );
-	return array( 'msg' => sprintf( 'کلمه اصلی %s صفحه مشخص شد (%s از شیت یا تأیید شما، بقیه تشخیص خودکار).', sap_num( $st['pages'] ), sap_num( $conf ) ) );
+	return array( 'msg' => sprintf( 'کلمه اصلی %s صفحه مشخص شد (%s از شیت یا تأیید شما، بقیه تشخیص خودکار)%s.', sap_num( $st['pages'] ), sap_num( $conf ), $inv ? '؛ ' . sap_num( $inv ) . ' صفحه از فهرست وردپرس اضافه شد' : '' ) );
 }
 function sap_step_ai_keymap( $project, $force = false ) {
 	return sap_ai_stage_step( $project, 'keymap', $force );
@@ -694,8 +698,13 @@ function sap_step_writeback( $project ) {
 		$fail   = $fail || is_wp_error( $res );
 		$msgs[] = is_wp_error( $res ) ? 'کلاسترینگ: ' . $res->get_error_message() : 'کلاسترینگ بروز شد';
 	}
+	if ( empty( $project['options']['cluster_generated'] ) && sap_dataset( $project['id'], 'site_inventory' ) ) {
+		$res    = sap_inventory_write_sheet( $project );
+		$fail   = $fail || is_wp_error( $res );
+		$msgs[] = is_wp_error( $res ) ? 'فهرست محتوا: ' . $res->get_error_message() : $res;
+	}
 	// Content calendar (Blog + B keyword), keyword map and change log tabs.
-	if ( sap_calendar_months( $project['id'] ) ) {
+	if ( sap_calendar_sheet_months( $project['id'] ) ) {
 		$res    = sap_calendar_write_sheet( $project );
 		$fail   = $fail || is_wp_error( $res );
 		$msgs[] = is_wp_error( $res ) ? 'تقویم Blog: ' . $res->get_error_message() : $res;

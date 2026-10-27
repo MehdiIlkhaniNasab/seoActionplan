@@ -296,6 +296,19 @@ function sap_content_blocks_from_html( $html, $url = '' ) {
 	if ( ! $main ) {
 		return $out;
 	}
+	// Lazy-loaded images keep the real address in data-* attributes.
+	foreach ( $xp->query( './/img', $main ) as $img ) {
+		foreach ( array( 'data-src', 'data-lazy-src', 'data-original', 'data-lazy' ) as $att ) {
+			$v = trim( $img->getAttribute( $att ) );
+			if ( '' !== $v && ( '' === $img->getAttribute( 'src' ) || 0 === strpos( $img->getAttribute( 'src' ), 'data:' ) || $v !== $img->getAttribute( 'src' ) ) ) {
+				$img->setAttribute( 'src', WP_Http::make_absolute_url( $v, $url ?: 'https://example.com/' ) );
+				break;
+			}
+		}
+		if ( $url && '' !== $img->getAttribute( 'src' ) && 0 !== strpos( $img->getAttribute( 'src' ), 'data:' ) ) {
+			$img->setAttribute( 'src', WP_Http::make_absolute_url( $img->getAttribute( 'src' ), $url ) );
+		}
+	}
 	// Remove chrome that lives inside the content area.
 	foreach ( $xp->query( './/*[contains(@class,"related") or contains(@class,"share") or contains(@class,"comment") or contains(@class,"breadcrumb") or contains(@class,"author-box") or contains(@class,"toc") or contains(@id,"toc") or contains(@class,"ez-toc")]', $main ) as $n ) {
 		$n->parentNode && $n->parentNode->removeChild( $n );
@@ -322,7 +335,7 @@ function sap_content_blocks_from_html( $html, $url = '' ) {
 				continue; // The page title is edited separately.
 			}
 			if ( in_array( $tag, $block, true ) ) {
-				if ( 'img' !== $tag && 'figure' !== $tag && 0 === $len( $c ) ) {
+				if ( 'img' !== $tag && 'figure' !== $tag && 0 === $len( $c ) && ! $c->getElementsByTagName( 'img' )->length ) {
 					continue;
 				}
 				$blocks[] = array( 'tag' => $tag, 'html' => $dom->saveHTML( $c ) );
@@ -339,7 +352,25 @@ function sap_content_blocks_from_html( $html, $url = '' ) {
 		if ( '' === $html ) {
 			continue;
 		}
+		if ( false !== stripos( $html, '<img' ) ) {
+			$text = trim( sap_block_image_label( $html ) . ' ' . $text ); // The AI sees the image and its alt in place.
+		}
 		$out['blocks'][] = array( 'id' => count( $out['blocks'] ) + 1, 'tag' => $b['tag'], 'html' => $html, 'text' => $text );
 	}
 	return $out;
+}
+
+/**
+ * Readable label of the images in a block: «[تصویر · Alt: …]».
+ */
+function sap_block_image_label( $html ) {
+	if ( ! preg_match_all( '/<img\b[^>]*>/i', (string) $html, $m ) ) {
+		return '';
+	}
+	$out = array();
+	foreach ( $m[0] as $tag ) {
+		$alt   = preg_match( '/\salt\s*=\s*["\']([^"\']*)/i', $tag, $a ) ? trim( html_entity_decode( $a[1], ENT_QUOTES, 'UTF-8' ) ) : '';
+		$out[] = '' !== $alt ? '[تصویر · Alt: ' . $alt . ']' : '[تصویر بدون Alt]';
+	}
+	return implode( ' ', $out );
 }

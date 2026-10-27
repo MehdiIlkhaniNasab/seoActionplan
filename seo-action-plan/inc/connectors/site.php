@@ -190,17 +190,48 @@ add_filter( 'sap_content_source', function ( $pre, $url, $project ) {
 	if ( null !== $pre || ! $project || ! sap_site_connected( $project ) ) {
 		return $pre;
 	}
-	$obj = sap_site_request( $project, 'GET', 'resolve', array( 'url' => $url ) );
-	if ( is_wp_error( $obj ) || 'elementor' === ( $obj['editor'] ?? '' ) || '' === trim( (string) ( $obj['content'] ?? '' ) ) ) {
-		return null; // Not found, built with Elementor or empty: read the live page instead.
+	$obj = sap_site_page_details( $project, $url, true );
+	if ( ! is_array( $obj ) ) {
+		return null; // Not found on the site: read the live page instead.
 	}
-	$page = sap_content_blocks_from_raw( (string) $obj['content'], (string) $obj['editor'] );
+	$details  = (array) ( $obj['details'] ?? array() );
+	$rendered = (string) ( $details['rendered'] ?? '' );
+	if ( 'elementor' === ( $obj['editor'] ?? '' ) ) {
+		if ( '' === trim( $rendered ) ) {
+			return null; // Old connector: no rendered HTML, read the live page.
+		}
+		// Built with Elementor: read the rendered widgets (text and images); edits are copied by hand into Elementor.
+		$page = sap_content_blocks_from_html( '<html><body><article class="entry-content">' . $rendered . '</article></body></html>', $url );
+		foreach ( $page['blocks'] as &$b ) {
+			$b['raw']    = $b['html'];
+			$b['locked'] = false;
+		}
+		unset( $b );
+		$page['format'] = 'elementor';
+	} elseif ( '' === trim( (string) ( $obj['content'] ?? '' ) ) ) {
+		if ( 'term' !== ( $obj['kind'] ?? '' ) ) {
+			return null;
+		}
+		$page = array( 'blocks' => array(), 'format' => 'classic' ); // Empty category description: still a valid source (nothing to rewrite yet).
+	} else {
+		$page = sap_content_blocks_from_raw( (string) $obj['content'], (string) $obj['editor'] );
+	}
+	$seo_title = (string) ( $obj['seo']['seo_title'] ?? '' );
 	return array_merge( $page, array(
-		'title'  => (string) ( $obj['seo']['seo_title'] ?? '' ) ?: (string) $obj['title'],
+		'title'  => '' !== $seo_title && false === strpos( $seo_title, '%' ) ? $seo_title : (string) $obj['title'],
 		'h1'     => (string) $obj['title'],
 		'meta'   => (string) ( $obj['seo']['meta_description'] ?? '' ),
 		'source' => 'site',
-		'site'   => array( 'kind' => $obj['kind'], 'id' => (int) $obj['id'], 'editor' => (string) $obj['editor'], 'seo' => (array) ( $obj['seo'] ?? array() ) ),
+		'site'   => array(
+			'kind'    => $obj['kind'],
+			'id'      => (int) $obj['id'],
+			'type'    => (string) ( $obj['type'] ?? '' ),
+			'editor'  => (string) $obj['editor'],
+			'seo'     => (array) ( $obj['seo'] ?? array() ),
+			'images'  => array_slice( (array) ( $details['images'] ?? array() ), 0, 40 ),
+			'product' => $details['product'] ?? null,
+			'term'    => $details['term'] ?? null,
+		),
 	) );
 }, 10, 3 );
 
@@ -225,7 +256,7 @@ function sap_content_blocks_from_raw( $raw, $editor ) {
 				'id'     => count( $out['blocks'] ) + 1,
 				'tag'    => $tag,
 				'html'   => trim( wp_kses( $html, $allowed ) ),
-				'text'   => '' !== $text ? $text : '[' . ( $b['blockName'] ?: 'html' ) . ']',
+				'text'   => '' !== $text ? $text : ( sap_block_image_label( $html ) ?: '[' . ( $b['blockName'] ?: 'html' ) . ']' ),
 				'raw'    => $ser,
 				'name'   => (string) $b['blockName'],
 				'locked' => ! in_array( $b['blockName'], $editable, true ),
@@ -233,7 +264,9 @@ function sap_content_blocks_from_raw( $raw, $editor ) {
 		}
 		return $out;
 	}
-	// Classic editor: paragraphs come from line breaks.
+	// Classic editor: paragraphs come from line breaks; [caption] becomes a figure so the image and its caption stay.
+	$raw    = preg_replace( '#\[caption[^\]]*\](.*?)\[/caption\]#is', '<figure>$1</figure>', $raw );
+	$raw    = preg_replace( '#<figure>\s*((?:<a[^>]*>)?<img[^>]*>(?:</a>)?)\s*(.*?)</figure>#is', '<figure>$1<figcaption>$2</figcaption></figure>', $raw );
 	$parsed = sap_content_blocks_from_html( '<html><body><article>' . wpautop( $raw ) . '</article></body></html>' );
 	foreach ( $parsed['blocks'] as $b ) {
 		$b['raw']        = $b['html'];

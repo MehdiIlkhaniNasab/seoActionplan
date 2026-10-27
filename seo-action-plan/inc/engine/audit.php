@@ -24,7 +24,7 @@ function sap_content_groups() {
 		'products'    => array( 'محصولات', 'grid', array( 'product' ) ),
 		'product_tax' => array( 'دسته، برچسب و برند محصول', 'list', array( 'product_cat', 'product_tag', 'brand' ) ),
 		'posts'       => array( 'مقالات', 'log', array( 'post' ) ),
-		'post_cat'    => array( 'دسته‌بندی مقالات', 'list', array( 'post_cat' ) ),
+		'post_cat'    => array( 'دسته و برچسب مقالات', 'list', array( 'post_cat', 'post_tag' ) ),
 		'pages'       => array( 'برگه‌ها', 'grid', array( 'page' ) ),
 	);
 }
@@ -40,6 +40,7 @@ function sap_content_types() {
 		'brand'       => 'برند',
 		'post'        => 'مقاله',
 		'post_cat'    => 'دسته‌بندی مقاله',
+		'post_tag'    => 'برچسب مقاله',
 		'page'        => 'برگه',
 	);
 }
@@ -48,6 +49,9 @@ function sap_content_types() {
  * Content type of a keyword-map row (page type + URL structure).
  */
 function sap_content_type( $m ) {
+	if ( ! empty( $m['project_id'] ) && ( $it = sap_site_item( (int) $m['project_id'], (string) $m['url'] ) ) ) {
+		return $it['ctype']; // The real WordPress type beats any guess from the URL.
+	}
 	$path  = strtolower( trim( (string) wp_parse_url( rawurldecode( (string) $m['url'] ), PHP_URL_PATH ), '/' ) );
 	$first = explode( '/', $path )[0] ?? '';
 	switch ( $m['page_type'] ) {
@@ -145,6 +149,7 @@ function sap_kw_misfit( $kw, $type, $title = '' ) {
 		'brand'       => array( 'product_cat', 'product' ),
 		'post'        => array( 'post' ),
 		'post_cat'    => array( 'post' ),
+		'post_tag'    => array( 'post' ),
 		'page'        => array( 'page', 'product_cat', 'post', 'product' ),
 	);
 	return in_array( $target, $fits[ $type ] ?? array( $target ), true ) ? '' : $target;
@@ -157,10 +162,19 @@ function sap_kw_misfit( $kw, $type, $title = '' ) {
 /**
  * Pages of the site grouped by content group, with facts and rule checks.
  *
- * @return array group => list of rows [url, title, type, kw, secondary, pos, clicks, impr, words, score, checks[], misfits[]]
+ * With the WordPress inventory (connector 1.3) every published post, page,
+ * product and term is listed with its real type, matched with Search Console
+ * by URL; keyword-map pages that are not in WordPress (home of a blog,
+ * archives…) are added from the map. Without it, the keyword map is the list.
+ *
+ * @return array group => list of rows [url, title, type, kw, kw_src, secondary, queries, pos, clicks, impr, words, score, checks[], misfits[], wp]
  */
 function sap_content_inventory( $project ) {
-	$pid   = $project['id'];
+	static $cache = array();
+	$pid = $project['id'];
+	if ( isset( $cache[ $pid ] ) ) {
+		return $cache[ $pid ];
+	}
 	$pages = (array) ( sap_dataset_payload( $pid, 'pages' )['pages'] ?? array() );
 	$crawl = array();
 	foreach ( (array) ( sap_dataset_payload( $pid, 'crawl' )['rows'] ?? array() ) as $r ) {
@@ -170,71 +184,130 @@ function sap_content_inventory( $project ) {
 	foreach ( (array) ( sap_dataset_payload( $pid, 'gsc_pages' )['cur'] ?? array() ) as $r ) {
 		$gsc[ sap_norm_url( $r['page'] ) ] = $r;
 	}
-	$best = array();
+	$has_gsc = (bool) $gsc;
+	$best    = array();
+	$by_page = array();
 	foreach ( (array) ( sap_dataset_payload( $pid, 'gsc_qp' )['rows'] ?? array() ) as $r ) {
-		$best[ sap_norm_url( $r['page'] ) . '|' . sap_kw_key( $r['query'] ) ] = $r;
+		$pk                                     = sap_norm_url( $r['page'] );
+		$best[ $pk . '|' . sap_kw_key( $r['query'] ) ] = $r;
+		$by_page[ $pk ][]                       = $r;
 	}
-	$money = array();
 	$map   = sap_keymap( $pid );
+	$site  = sap_site_inventory( $pid );
+	$meta  = sap_dataset_payload( $pid, 'site_inventory' );
+	$front = (int) ( $meta['front'] ?? 0 );
+	$seo_p = (string) ( $meta['seo_plugin'] ?? '' );
+	$money = array();
 	foreach ( $map as $k => $m ) {
 		if ( in_array( $m['page_type'], array( 'product', 'category' ), true ) ) {
 			$money[ $k ] = true;
 		}
 	}
-	$groups = array_fill_keys( array_keys( sap_content_groups() ), array() );
-	foreach ( $map as $k => $m ) {
-		$type  = sap_content_type( $m );
-		$group = '';
-		foreach ( sap_content_groups() as $g => $def ) {
-			if ( in_array( $type, $def[2], true ) ) {
-				$group = $g;
-			}
+	foreach ( $site as $k => $it ) {
+		if ( in_array( $it['ctype'], array( 'product', 'product_cat', 'brand' ), true ) ) {
+			$money[ $k ] = true;
 		}
-		$p   = $pages[ $k ] ?? null;
-		$c   = $crawl[ $k ] ?? null;
-		$kw  = (string) $m['primary_kw'];
-		$row = array(
-			'id'        => $m['id'],
-			'url'       => $m['url'],
-			'title'     => $m['title'] ?: ( $p['title'] ?? '' ),
+	}
+	// Source list: WordPress first (complete and typed), then mapped pages it does not have.
+	$list = array();
+	foreach ( $site as $k => $it ) {
+		$list[ $k ] = array( $map[ $k ] ?? null, $it );
+	}
+	foreach ( $map as $k => $m ) {
+		if ( ! isset( $list[ $k ] ) ) {
+			$list[ $k ] = array( $m, null );
+		}
+	}
+	$group_of = array();
+	foreach ( sap_content_groups() as $g => $def ) {
+		foreach ( $def[2] as $t ) {
+			$group_of[ $t ] = $g;
+		}
+	}
+	$groups = array_fill_keys( array_keys( sap_content_groups() ), array() );
+	foreach ( $list as $k => $pair ) {
+		list( $m, $it ) = $pair;
+		$type  = $it ? $it['ctype'] : sap_content_type( $m );
+		$group = $group_of[ $type ] ?? '';
+		if ( ! $group ) {
+			continue;
+		}
+		$p      = $pages[ $k ] ?? null;
+		$c      = $crawl[ $k ] ?? null;
+		$kw     = $m ? (string) $m['primary_kw'] : '';
+		$kw_src = '' !== $kw ? 'map' : '';
+		$focus  = $it ? trim( (string) ( $it['seo']['focus_keyword'] ?? '' ) ) : '';
+		if ( '' === $kw && '' !== $focus ) {
+			$kw     = $focus;
+			$kw_src = 'seo';
+		}
+		$queries = array();
+		foreach ( array_slice( sap_sort( (array) ( $by_page[ $k ] ?? array() ), 'impressions' ), 0, 5 ) as $q ) {
+			$queries[] = array( $q['query'], round( (float) $q['position'], 1 ), (int) $q['impressions'], (int) $q['clicks'] );
+		}
+		$home = ( $m && 'home' === $m['page_type'] ) || ( $it && $front && 'post' === $it['kind'] && (int) $it['id'] === $front );
+		$row  = array(
+			'id'        => $m ? $m['id'] : 0,
+			'url'       => $it ? $it['url'] : $m['url'],
+			'title'     => $it ? $it['title'] : ( $m['title'] ?: ( $p['title'] ?? '' ) ),
 			'type'      => $type,
 			'kw'        => $kw,
-			'secondary' => $m['secondary'],
-			'focus_id'  => (int) $m['focus_id'],
+			'kw_src'    => $kw_src,
+			'secondary' => $m ? $m['secondary'] : array(),
+			'queries'   => $queries,
+			'focus_id'  => $m ? (int) $m['focus_id'] : 0,
 			'pos'       => '' !== $kw && isset( $best[ $k . '|' . sap_kw_key( $kw ) ] ) ? round( (float) $best[ $k . '|' . sap_kw_key( $kw ) ]['position'], 1 ) : null,
 			'clicks'    => (int) ( $gsc[ $k ]['clicks'] ?? 0 ),
 			'impr'      => (int) ( $gsc[ $k ]['impressions'] ?? 0 ),
-			'words'     => $p ? (int) $p['words'] : ( $c ? (int) ( $c['words'] ?? 0 ) : null ),
-			'read'      => (bool) $p,
+			'words'     => $it ? (int) $it['words'] : ( $p ? (int) $p['words'] : ( $c ? (int) ( $c['words'] ?? 0 ) : null ) ),
+			'read'      => (bool) ( $p || $it ),
+			'home'      => $home,
 			'checks'    => array(),
 			'misfits'   => array(),
+			'wp'        => $it ? array_intersect_key( $it, array_flip( array( 'kind', 'id', 'type', 'editor', 'thumb', 'modified', 'date', 'noindex', 'product', 'count', 'images', 'no_alt', 'seo' ) ) ) : null,
 		);
+		if ( null === $row['pos'] && $queries && '' === $kw ) {
+			$row['pos'] = $queries[0][1];
+		}
 		$fail = function ( $msg, $weight = 10 ) use ( &$row ) {
 			$row['checks'][] = array( $msg, $weight );
 		};
-		$title = $p['title'] ?? ( $c['title'] ?? '' );
-		$meta  = $p['meta'] ?? ( $c['meta'] ?? '' );
-		$h1    = $p ? implode( ' ', $p['h1'] ) : ( $c['h1'] ?? '' );
-		if ( '' === $kw && 'page' !== $type ) {
-			$fail( 'کلمه کلیدی اصلی در نقشه کلمات ندارد', 15 );
+		$seo_title = $it ? (string) ( $it['seo']['seo_title'] ?? '' ) : '';
+		$title     = $p['title'] ?? ( $c['title'] ?? ( '' !== $seo_title && false === strpos( $seo_title, '%' ) ? $seo_title : '' ) );
+		$meta_d    = $p['meta'] ?? ( $c['meta'] ?? ( $it ? (string) ( $it['seo']['meta_description'] ?? '' ) : null ) );
+		$h1        = $p ? implode( ' ', $p['h1'] ) : ( $c['h1'] ?? ( $it ? $it['title'] : '' ) );
+		$is_term   = in_array( $type, array( 'product_cat', 'product_tag', 'brand', 'post_cat', 'post_tag' ), true );
+		// Words of the description itself: a category page's HTML also counts the product grid.
+		$words     = $it ? (int) $it['words'] : ( $p ? (int) $p['words'] : null );
+		if ( '' === $kw && 'page' !== $type && ! $home ) {
+			$fail( 'کلمه کلیدی اصلی ندارد (نه در نقشه کلمات، نه در افزونه سئو)', 15 );
 		}
 		if ( '' !== $kw && $title && false === mb_strpos( sap_norm_text( $title ), sap_norm_text( sap_kw_core( $kw ) ) ) && ! array_intersect( sap_tokens( sap_kw_core( $kw ) ), sap_tokens( $title ) ) ) {
 			$fail( 'کلمه اصلی در تایتل نیست', 12 );
 		}
-		if ( '' !== $kw && $p && $h1 && ! array_intersect( sap_tokens( sap_kw_core( $kw ) ), sap_tokens( $h1 ) ) ) {
-			$fail( 'کلمه اصلی در H1 نیست', 8 );
+		if ( '' !== $kw && $h1 && ! array_intersect( sap_tokens( sap_kw_core( $kw ) ), sap_tokens( $h1 ) ) ) {
+			$fail( 'کلمه اصلی در H1 (عنوان) نیست', 8 );
 		}
 		$tl = mb_strlen( $title );
 		if ( $title && ( $tl < 25 || $tl > 65 ) ) {
 			$fail( sprintf( 'طول تایتل %s کاراکتر (مناسب ۳۰ تا ۶۰)', sap_num( $tl ) ), 5 );
 		}
-		if ( ( $p || $c ) && '' === trim( $meta ) ) {
-			$fail( 'متا دیسکریپشن ندارد', 8 );
+		if ( null !== $meta_d && '' === trim( (string) $meta_d ) && ( $p || $c || '' !== $seo_p ) ) {
+			$fail( $p || $c ? 'متا دیسکریپشن ندارد' : 'متا دیسکریپشن اختصاصی در افزونه سئو ندارد', $p || $c ? 8 : 6 );
 		}
 		if ( $p && ! $p['h1'] ) {
 			$fail( 'H1 ندارد', 10 );
 		}
-		$schema = $p ? (array) $p['schema'] : array();
+		if ( $it && 'map' === $kw_src && '' !== $focus && sap_kw_core( $focus ) !== sap_kw_core( $kw ) ) {
+			$fail( sprintf( 'کلمه کانونی افزونه سئو («%s») با کلمه اصلی نقشه یکی نیست', $focus ), 4 );
+		}
+		if ( $it && ! empty( $it['noindex'] ) && ! in_array( $type, array( 'product_tag', 'post_tag' ), true ) ) {
+			$fail( 'در افزونه سئو noindex شده' . ( $row['impr'] ? ' ولی در گوگل نمایش دارد' : '' ), 10 );
+		}
+		if ( $it && $has_gsc && ! $row['impr'] && empty( $it['noindex'] ) && strtotime( (string) ( $it['date'] ?? '' ) ?: 'now' ) < time() - 45 * DAY_IN_SECONDS && ( ! $is_term || (int) ( $it['count'] ?? 0 ) > 0 ) ) {
+			$fail( 'در ۲۸ روز اخیر هیچ نمایشی در گوگل نداشته (ایندکس، کلمه هدف و لینک داخلی بررسی شود)', 8 );
+		}
+		$schema         = $p ? (array) $p['schema'] : array();
 		$links_to_money = 0;
 		if ( $p ) {
 			foreach ( (array) $p['links'] as $l ) {
@@ -244,18 +317,38 @@ function sap_content_inventory( $project ) {
 			}
 		}
 		$text = $p ? sap_norm_text( $p['text'] . ' ' . implode( ' ', $p['h2'] ) . ' ' . implode( ' ', (array) ( $p['h3'] ?? array() ) ) ) : '';
+		$wc   = $it['product'] ?? null;
 		switch ( $type ) {
 			case 'product':
-				if ( $p && $p['words'] < 250 ) {
-					$fail( sprintf( 'توضیحات کم (%s کلمه)؛ صفحه محصول فروشنده باید جامع باشد', sap_num( $p['words'] ) ), 15 );
+				if ( null !== $words && $words < 250 ) {
+					$fail( sprintf( 'توضیحات کم (%s کلمه)؛ صفحه محصول فروشنده باید جامع باشد', sap_num( $words ) ), 15 );
 				}
 				if ( $p && ! in_array( 'Product', $schema, true ) ) {
 					$fail( 'اسکیمای Product ندارد', 12 );
 				}
-				if ( $p && ! preg_match( '/مشخصات|ویژگی|ابعاد|جنس|وزن|سایز|اندازه|رنگ/u', $text ) ) {
+				if ( $wc ) {
+					if ( (int) $wc['attrs'] < 3 ) {
+						$fail( sprintf( 'ویژگی‌های محصول (Attributes) ناقص: %s ویژگی', sap_num( (int) $wc['attrs'] ) ), 12 );
+					}
+					if ( '' === (string) $wc['price'] ) {
+						$fail( 'قیمت ندارد (در گوگل Offer نمایش داده نمی‌شود)', 8 );
+					}
+					if ( 'outofstock' === $wc['stock'] ) {
+						$fail( 'ناموجود است (اگر برنمی‌گردد، ریدایرکت به دسته یا جایگزین بررسی شود)', 3 );
+					}
+					if ( (int) $wc['gallery'] < 2 ) {
+						$fail( 'گالری تصاویر کم (کمتر از ۳ تصویر)', 4 );
+					}
+					if ( ! (int) $wc['reviews'] ) {
+						$fail( 'بدون نظر و امتیاز کاربر', 4 );
+					}
+					if ( (int) $wc['short'] < 20 ) {
+						$fail( 'توضیح کوتاه محصول (بالای دکمه خرید) ندارد یا خیلی کوتاه است', 4 );
+					}
+				} elseif ( $p && ! preg_match( '/مشخصات|ویژگی|ابعاد|جنس|وزن|سایز|اندازه|رنگ/u', $text ) ) {
 					$fail( 'جدول مشخصات/ویژگی‌های محصول دیده نشد', 12 );
 				}
-				if ( $p && ! array_intersect( array( 'AggregateRating', 'Review' ), $schema ) ) {
+				if ( $p && ! $wc && ! array_intersect( array( 'AggregateRating', 'Review' ), $schema ) ) {
 					$fail( 'امتیاز و نظرات کاربران در اسکیما نیست', 5 );
 				}
 				if ( $p && ! preg_match( '/سوالات|پرسش|سوال/u', $text ) ) {
@@ -265,8 +358,11 @@ function sap_content_inventory( $project ) {
 			case 'product_cat':
 			case 'product_tag':
 			case 'brand':
-				if ( $p && $p['words'] < 300 ) {
-					$fail( 'متن معرفی و راهنمای خرید ندارد یا خیلی کوتاه است', 15 );
+				if ( $it && ! (int) ( $it['count'] ?? 0 ) ) {
+					$fail( 'خالی است (هیچ محصولی ندارد)؛ پر یا noindex/حذف شود', 12 );
+				}
+				if ( null !== $words && $words < 300 ) {
+					$fail( sprintf( 'متن معرفی و راهنمای خرید %s', $words ? sap_num( $words ) . ' کلمه (کوتاه)' : 'ندارد' ), 15 );
 				}
 				if ( $p && ! in_array( 'BreadcrumbList', $schema, true ) ) {
 					$fail( 'اسکیمای BreadcrumbList ندارد', 5 );
@@ -274,13 +370,13 @@ function sap_content_inventory( $project ) {
 				if ( $p && ! preg_match( '/سوالات|پرسش|سوال/u', $text ) ) {
 					$fail( 'سوالات متداول ندارد', 5 );
 				}
-				if ( 'product_tag' === $type && $row['impr'] < 10 ) {
+				if ( 'product_tag' === $type && $row['impr'] < 10 && empty( $it['noindex'] ) ) {
 					$fail( 'برچسب کم‌ارزش (بدون نمایش)؛ noindex یا ادغام بررسی شود', 6 );
 				}
 				break;
 			case 'post':
-				if ( $p && $p['words'] < 700 ) {
-					$fail( sprintf( 'مقاله کوتاه (%s کلمه)', sap_num( $p['words'] ) ), 12 );
+				if ( null !== $words && $words < 700 ) {
+					$fail( sprintf( 'مقاله کوتاه (%s کلمه)', sap_num( $words ) ), 12 );
 				}
 				if ( $p && count( $p['h2'] ) < 3 ) {
 					$fail( 'ساختار تیترها ضعیف (کمتر از ۳ H2)', 6 );
@@ -291,27 +387,38 @@ function sap_content_inventory( $project ) {
 				if ( $p && ! array_intersect( array( 'Article', 'BlogPosting', 'NewsArticle' ), $schema ) ) {
 					$fail( 'اسکیمای Article ندارد', 6 );
 				}
+				if ( $it && ! empty( $it['modified'] ) && strtotime( $it['modified'] ) < time() - 365 * DAY_IN_SECONDS && $row['impr'] ) {
+					$fail( 'بیش از یک سال به‌روزرسانی نشده', 5 );
+				}
 				break;
 			case 'post_cat':
-				if ( $p && $p['words'] < 150 ) {
-					$fail( 'متن معرفی دسته ندارد', 6 );
+			case 'post_tag':
+				if ( null !== $words && $words < 150 ) {
+					$fail( 'متن معرفی ندارد', 6 );
+				}
+				if ( $it && ! (int) ( $it['count'] ?? 0 ) ) {
+					$fail( 'خالی است (هیچ مطلبی ندارد)', 8 );
 				}
 				break;
 			case 'page':
-				if ( $p && 'home' !== $m['page_type'] && $p['words'] < 150 ) {
+				if ( null !== $words && ! $home && $words < 150 && ( ! $it || 'elementor' !== ( $it['editor'] ?? '' ) ) ) {
 					$fail( 'محتوای صفحه خیلی کم است', 6 );
 				}
 				break;
 		}
-		if ( $p && $p['no_alt'] > 2 ) {
-			$fail( sprintf( '%s تصویر بدون Alt', sap_num( $p['no_alt'] ) ), 3 );
+		$no_alt = $p ? (int) $p['no_alt'] : ( $it ? (int) $it['no_alt'] : 0 );
+		if ( $no_alt > 2 ) {
+			$fail( sprintf( '%s تصویر بدون Alt', sap_num( $no_alt ) ), 3 );
+		}
+		if ( $it && 'product' !== $type && ! $is_term && ! (int) $it['images'] && ! $home ) {
+			$fail( 'هیچ تصویری ندارد', 4 );
 		}
 		if ( null !== $row['pos'] && $row['pos'] > 10 && $row['pos'] <= 20 ) {
 			$fail( sprintf( 'کلمه اصلی در جایگاه %s (نزدیک صفحه اول)', sap_num( $row['pos'], 1 ) ), 0 );
 		}
 		// Keyword intent vs page type.
-		foreach ( array_merge( array( $kw ), (array) $m['secondary'] ) as $i => $s ) {
-			if ( '' === trim( (string) $s ) ) {
+		foreach ( array_merge( array( $kw ), (array) $row['secondary'] ) as $i => $s ) {
+			if ( '' === trim( (string) $s ) || $home ) {
 				continue;
 			}
 			$mis = sap_kw_misfit( $s, $type, $row['title'] );
@@ -326,17 +433,50 @@ function sap_content_inventory( $project ) {
 		if ( $row['misfits'] ) {
 			$fail( sprintf( '%s کلمه با نیت جستجوی این نوع صفحه نمی‌خواند', sap_num( count( $row['misfits'] ) ) ), $row['misfits'][0]['primary'] ? 15 : 6 );
 		}
-		$row['score'] = max( 0, 100 - array_sum( array_column( $row['checks'], 1 ) ) );
-		if ( $group ) {
-			$groups[ $group ][] = $row;
-		}
+		$row['score']       = max( 0, 100 - array_sum( array_column( $row['checks'], 1 ) ) );
+		$groups[ $group ][] = $row;
 	}
 	foreach ( $groups as &$rows ) {
 		usort( $rows, function ( $a, $b ) {
-			return $b['impr'] <=> $a['impr'];
+			return array( $b['impr'], $b['clicks'] ) <=> array( $a['impr'], $a['clicks'] );
 		} );
 	}
+	unset( $rows );
+	$cache[ $pid ] = $groups;
 	return $groups;
+}
+
+/**
+ * Inventory row of one URL with its group, or null.
+ *
+ * @return array|null [group, row]
+ */
+function sap_audit_row( $project, $url ) {
+	$k = sap_norm_url( $url );
+	foreach ( sap_content_inventory( $project ) as $g => $rows ) {
+		foreach ( $rows as $r ) {
+			if ( sap_norm_url( $r['url'] ) === $k ) {
+				return array( $g, $r );
+			}
+		}
+	}
+	return null;
+}
+
+/**
+ * HTML of the full analysis of one page (drawer of the content audit).
+ */
+function sap_audit_result_html( $project, $url ) {
+	$found = sap_audit_row( $project, $url );
+	if ( ! $found ) {
+		return '';
+	}
+	list( $g, $row ) = $found;
+	$a  = sap_dataset_payload( $project['id'], 'ai_audit' )['groups'][ $g ][ sap_norm_url( $url ) ] ?? null;
+	$wp = $row['wp'] ? sap_site_page_details( $project, $url ) : null;
+	ob_start();
+	sap_view( 'audit-result', array( 'project' => $project, 'row' => $row, 'a' => $a, 'wp' => $wp ) );
+	return (string) ob_get_clean();
 }
 
 /* ---------------------------------------------------------------------------
@@ -399,7 +539,7 @@ add_filter( 'sap_ai_stage_task', function ( $task, $stage ) {
 	}
 	$g = substr( $stage, 6 );
 	return implode( "\n", array(
-		'تو یک متخصص ارشد سئو محتوا و CRO برای سایت‌های فارسی هستی. این صفحات از نوع «' . ( sap_content_groups()[ $g ][0] ?? $g ) . '» هستند، با کلمه اصلی و فرعی نقشه کلمات، کوئری‌های واقعی سرچ کنسول (کوئری، جایگاه، نمایش، CTR%)، تیترها، اسکیما، بخشی از متن و نتیجه چک‌لیست خودکار (checks).',
+		'تو یک متخصص ارشد سئو محتوا و CRO برای سایت‌های فارسی هستی. این صفحات از نوع «' . ( sap_content_groups()[ $g ][0] ?? $g ) . '» هستند، با کلمه اصلی و فرعی نقشه کلمات، کوئری‌های واقعی سرچ کنسول (کوئری، جایگاه، نمایش، CTR%)، تیترها، اسکیما، بخشی از متن و نتیجه چک‌لیست خودکار (checks). داده wordpress مستقیم از خود وردپرس است: ویژگی‌ها (Attributes)، قیمت، موجودی، توضیح کوتاه، گالری، تصاویر و Alt آن‌ها، نظرات، و برای دسته‌ها تعداد و محصولات پرفروش؛ به آن استناد کن.',
 		'Focusها و هدف پروژه در focuses آمده‌اند؛ تحلیل را از دید همین هدف انجام بده: چه چیزی باعث فروش یا لید بیشتر از این صفحه می‌شود.',
 		sap_audit_lens( $g ),
 		'قواعد: کلی‌گویی نکن، به متن و کوئری واقعی استناد کن؛ برای هر صفحه حداکثر ۶ اقدام مشخص و قابل اجرا با ساعت تخمینی بنویس؛ کارهای کوچک هم‌نوع را ادغام کن؛ اگر صفحه خوب است verdict را good بگذار و اقدام اضافه نساز. نیت هر کلمه را دقیق بسنج و کلمات نامناسب را در keyword_fit بیاور (فله‌ای پیشنهاد نده).',
@@ -438,6 +578,9 @@ add_filter( 'sap_ai_stage_input', function ( $input, $project, $stage, $ctx ) {
 		$facts['secondary']  = array_slice( (array) $r['secondary'], 0, 8 );
 		$facts['checks']     = array_column( $r['checks'], 0 );
 		$facts['clicks28']   = $r['clicks'];
+		if ( $r['wp'] ) {
+			$facts['wordpress'] = sap_site_ai_facts( sap_site_page_details( $project, $r['url'] ) );
+		}
 		$out[]               = $facts;
 	}
 	$focuses = array();
@@ -638,9 +781,10 @@ function sap_cluster_write_sheet( $project, $overwrite = false ) {
 		$by[ $names[ $k ] ?? 'سایر' ][] = $m;
 	}
 	ksort( $by );
-	$head   = array( 'کلاستر', 'زیرکلاستر', 'کلمه کلیدی', 'نقش', 'صفحه هدف', 'اولویت', 'نیت جستجو', 'یادداشت', 'حجم جستجو', 'جایگاه فعلی', 'صفحه رتبه‌گرفته', 'کلیک ۲۸ روز', 'نمایش ۲۸ روز', 'حجم کل کلاستر' );
+	$head   = array( 'کلاستر', 'زیرکلاستر', 'کلمه کلیدی', 'نقش', 'صفحه هدف', 'اولویت', 'نیت جستجو', 'یادداشت', 'حجم جستجو', 'جایگاه فعلی', 'صفحه رتبه‌گرفته', 'کلیک ۲۸ روز', 'نمایش ۲۸ روز', 'حجم کل کلاستر', 'نوع صفحه' );
+	$ctypes = sap_content_types();
 	$values = array( $head );
-	$fmt    = sap_gs_reset( $sid, array( 0 => 140, 1 => 200, 2 => 200, 3 => 70, 4 => 280, 5 => 60, 6 => 90, 7 => 200, 8 => 90, 9 => 90, 10 => 240, 11 => 80, 12 => 90, 13 => 110 ) );
+	$fmt    = sap_gs_reset( $sid, array( 0 => 140, 1 => 200, 2 => 200, 3 => 70, 4 => 280, 5 => 60, 6 => 90, 7 => 200, 8 => 90, 9 => 90, 10 => 240, 11 => 80, 12 => 90, 13 => 110, 14 => 110 ) );
 	$fmt[]  = sap_gs_fmt( $sid, 0, 1, 0, count( $head ), '#1D4ED8', '#FFFFFF', true );
 	$intent = sap_keymap_intents();
 	$kws    = 0;
@@ -675,6 +819,7 @@ function sap_cluster_write_sheet( $project, $overwrite = false ) {
 					$q ? (int) $q['clicks'] : '',
 					$q ? (int) $q['impressions'] : '',
 					$first ? $total : '',
+					0 === $j ? ( $ctypes[ sap_content_type( $m ) ] ?? '' ) : '',
 				);
 				$first = false;
 				++$kws;
@@ -689,7 +834,64 @@ function sap_cluster_write_sheet( $project, $overwrite = false ) {
 	$fmt[] = array( 'updateSheetProperties' => array( 'properties' => array( 'sheetId' => $sid, 'gridProperties' => array( 'frozenRowCount' => 1 ) ), 'fields' => 'gridProperties.frozenRowCount' ) );
 	sap_gs_batch( $sheet, $fmt );
 	sap_project_set_option( $pid, 'cluster_generated', sap_now() );
-	return sprintf( 'کلاسترینگ (%s کلاستر، %s کلمه) در تب «%s» نوشته شد', sap_num( count( $by ) ), sap_num( $kws ), $tab );
+	$inv = sap_inventory_write_sheet( sap_project( $pid ) );
+	return sprintf( 'کلاسترینگ (%s کلاستر، %s کلمه) در تب «%s» نوشته شد', sap_num( count( $by ) ), sap_num( $kws ), $tab ) . ( is_wp_error( $inv ) ? '؛ فهرست محتوا: ' . $inv->get_error_message() : ( $inv ? '؛ ' . $inv : '' ) );
+}
+
+/**
+ * Tab «فهرست محتوا»: every page of the site by type with its keywords,
+ * Search Console numbers, content size, score and issues (tool-owned tab).
+ *
+ * @return string|WP_Error
+ */
+function sap_inventory_write_sheet( $project ) {
+	$sheet = $project['sheet_id'];
+	if ( ! $sheet ) {
+		return '';
+	}
+	$tab  = 'فهرست محتوا';
+	$tabs = null;
+	$sid  = sap_gs_ensure_tab( $sheet, $tab, $tabs );
+	if ( is_wp_error( $sid ) ) {
+		return $sid;
+	}
+	$types  = sap_content_types();
+	$head   = array( 'نوع', 'عنوان', 'آدرس', 'کلمه اصلی', 'منبع کلمه', 'کلمات فرعی', 'پرنمایش‌ترین کوئری', 'جایگاه', 'کلیک ۲۸ روز', 'نمایش ۲۸ روز', 'تعداد کلمات', 'امتیاز', 'مشکلات', 'noindex', 'آخرین بروزرسانی' );
+	$values = array( $head );
+	$src    = array( 'map' => 'نقشه کلمات', 'seo' => 'افزونه سئو' );
+	foreach ( sap_content_inventory( $project ) as $rows ) {
+		foreach ( $rows as $r ) {
+			if ( count( $values ) > 6000 ) {
+				break 2;
+			}
+			$values[] = array(
+				$types[ $r['type'] ] ?? $r['type'],
+				$r['title'],
+				rawurldecode( $r['url'] ),
+				$r['kw'],
+				$src[ $r['kw_src'] ] ?? '',
+				implode( '، ', array_slice( (array) $r['secondary'], 0, 8 ) ),
+				$r['queries'][0][0] ?? '',
+				null === $r['pos'] ? '' : $r['pos'],
+				$r['clicks'],
+				$r['impr'],
+				null === $r['words'] ? '' : $r['words'],
+				$r['score'],
+				implode( ' | ', array_column( $r['checks'], 0 ) ),
+				! empty( $r['wp']['noindex'] ) ? 'بله' : '',
+				! empty( $r['wp']['modified'] ) ? sap_jdate( substr( $r['wp']['modified'], 0, 10 ), 'short' ) : '',
+			);
+		}
+	}
+	$fmt   = sap_gs_reset( $sid, array( 0 => 110, 1 => 240, 2 => 280, 3 => 170, 4 => 90, 5 => 240, 6 => 170, 7 => 60, 8 => 70, 9 => 80, 10 => 70, 11 => 60, 12 => 380, 13 => 60, 14 => 100 ) );
+	$fmt[] = sap_gs_fmt( $sid, 0, 1, 0, count( $head ), '#0F766E', '#FFFFFF', true );
+	$res   = sap_gs_put_tab( $sheet, $tab, $values );
+	if ( is_wp_error( $res ) ) {
+		return $res;
+	}
+	$fmt[] = array( 'updateSheetProperties' => array( 'properties' => array( 'sheetId' => $sid, 'gridProperties' => array( 'frozenRowCount' => 1 ) ), 'fields' => 'gridProperties.frozenRowCount' ) );
+	sap_gs_batch( $sheet, $fmt );
+	return sprintf( '%s صفحه در تب «%s»', sap_num( count( $values ) - 1 ), $tab );
 }
 
 /* ---------------------------------------------------------------------------
@@ -717,6 +919,9 @@ function sap_update_brief( $project, $update ) {
 		}
 	}
 	$facts = sap_ai_page_facts( $ctx, $update['url'], 3500 );
+	if ( sap_site_item( $project['id'], $update['url'] ) ) {
+		$facts['wordpress'] = sap_site_ai_facts( sap_site_page_details( $project, $update['url'] ) );
+	}
 	$group = 'pages';
 	foreach ( sap_content_groups() as $g => $def ) {
 		if ( in_array( $update['content_type'], $def[2], true ) ) {

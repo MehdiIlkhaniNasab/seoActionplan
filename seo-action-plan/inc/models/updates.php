@@ -130,14 +130,15 @@ function sap_update_plan( $project, $url, $period, $args = array() ) {
 			return $u['id'];
 		}
 	}
-	$m = sap_keymap( $project['id'] )[ $k ] ?? null;
+	$m  = sap_keymap( $project['id'] )[ $k ] ?? null;
+	$it = function_exists( 'sap_site_item' ) ? sap_site_item( $project['id'], $url ) : null;
 	return sap_update_save( array(
 		'project_id'   => $project['id'],
 		'focus_id'     => $m ? $m['focus_id'] : 0,
-		'url'          => $url,
-		'title'        => $m ? ( $m['title'] ?: sap_short_url( $url, 60 ) ) : ( sap_page_title( $project['id'], $url ) ?: sap_short_url( $url, 60 ) ),
-		'content_type' => $m ? sap_content_type( $m ) : 'page',
-		'keyword'      => $m ? $m['primary_kw'] : '',
+		'url'          => $it ? $it['url'] : $url,
+		'title'        => $it ? $it['title'] : ( $m ? ( $m['title'] ?: sap_short_url( $url, 60 ) ) : ( sap_page_title( $project['id'], $url ) ?: sap_short_url( $url, 60 ) ) ),
+		'content_type' => $it ? $it['ctype'] : ( $m ? sap_content_type( $m ) : 'page' ),
+		'keyword'      => $m ? $m['primary_kw'] : ( $it ? (string) ( $it['seo']['focus_keyword'] ?? '' ) : '' ),
 		'secondary'    => $m ? $m['secondary'] : array(),
 		'reason'       => (string) ( $args['reason'] ?? '' ),
 		'brief'        => (array) ( $args['brief'] ?? array() ),

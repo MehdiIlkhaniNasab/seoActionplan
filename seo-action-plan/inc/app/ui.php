@@ -286,6 +286,11 @@ function sap_page_title( $project_id, $url ) {
 				$t[ $k ] = $v;
 			}
 		}
+		foreach ( function_exists( 'sap_site_inventory' ) ? sap_site_inventory( $project_id ) : array() as $k => $it ) {
+			if ( '' !== (string) $it['title'] ) {
+				$t[ $k ] = $it['title']; // The title in WordPress itself.
+			}
+		}
 		foreach ( sap_keymap( $project_id ) as $k => $m ) {
 			if ( '' !== $m['title'] ) {
 				$t[ $k ] = $m['title'];
@@ -328,6 +333,20 @@ function sap_full_url( $project, $url ) {
 	}
 	if ( 'صفحه اصلی' === $url ) {
 		$url = '/';
+	}
+	if ( '/' === $url[0] && function_exists( 'sap_site_inventory' ) ) {
+		// A path written by the AI: the real address of that page on the client's WordPress.
+		static $paths = array();
+		if ( ! isset( $paths[ $project['id'] ] ) ) {
+			$paths[ $project['id'] ] = array();
+			foreach ( sap_site_inventory( $project['id'] ) as $it ) {
+				$paths[ $project['id'] ][ untrailingslashit( rawurldecode( (string) wp_parse_url( $it['url'], PHP_URL_PATH ) ) ) ] = $it['url'];
+			}
+		}
+		$path = untrailingslashit( rawurldecode( (string) wp_parse_url( $url, PHP_URL_PATH ) ) );
+		if ( isset( $paths[ $project['id'] ][ $path ] ) ) {
+			return $paths[ $project['id'] ][ $path ];
+		}
 	}
 	$base = $project['site_url'] ? untrailingslashit( $project['site_url'] ) : 'https://' . sap_project_domain( $project );
 	return '/' === $url[0] ? preg_replace( '#^(https?://[^/]+).*$#i', '$1', $base ) . $url : $url;

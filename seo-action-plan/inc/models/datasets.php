@@ -23,6 +23,7 @@ function sap_dataset_labels() {
 		'ss_compare'     => 'سئو سیگنال: مقایسه با رقبا',
 		'ss_questions'   => 'سئو سیگنال: سوالات کاربران (Focusها)',
 		'crawl'          => 'Screaming Frog: آخرین خزش',
+		'site_inventory' => 'وردپرس: فهرست کامل محتوا (افزونه رابط)',
 		'pages'          => 'محتوای صفحات کلیدی (متن، تیترها، اسکیما، لینک‌ها)',
 		'cwv'            => 'Core Web Vitals (PageSpeed Insights)',
 		'robots'         => 'فایل robots.txt',

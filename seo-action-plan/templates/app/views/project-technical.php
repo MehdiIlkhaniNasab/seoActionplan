@@ -41,24 +41,29 @@ $inspect = (array) ( sap_dataset_payload( $pid, 'gsc_inspect' )['rows'] ?? array
 
 <div class="sap-tech-grid">
 	<?php foreach ( $list as $key => $s ) : ?>
-		<a class="sap-tech-card is-<?php echo esc_attr( $s['status'] ); ?><?php echo $open === $key ? ' is-open' : ''; ?>" href="<?php echo esc_url( sap_project_url( $pid, 'technical', array( 'sec' => $key ) ) . '#sec-detail' ); ?>">
+		<a class="sap-tech-card is-<?php echo esc_attr( $s['status'] ); ?><?php echo $open === $key ? ' is-open' : ''; ?>" href="<?php echo esc_url( sap_project_url( $pid, 'technical', array( 'sec' => $key ) ) . ( ! $s['kpis'] && in_array( $key, array( 'crawl', 'pages' ), true ) ? '#sf-wizard' : '#sec-detail' ) ); ?>">
 			<div class="sap-tech-card-head">
 				<span class="sap-tech-ico"><?php echo sap_icon( $s['icon'] ); // phpcs:ignore ?></span>
-				<b><?php echo esc_html( $s['label'] ); ?></b>
-				<span class="sap-tech-badge"><?php echo null === $s['score'] ? '—' : esc_html( sap_num( $s['score'] ) ); ?></span>
+				<div class="sap-tech-name">
+					<b><?php echo esc_html( $s['label'] ); ?></b>
+					<small><?php echo esc_html( $st_txt[ $s['status'] ] ); ?><?php echo $s['items'] ? ' · ' . esc_html( sap_num( count( $s['items'] ) ) ) . ' مشکل' : ''; ?></small>
+				</div>
+				<span class="sap-tech-ring" style="--v:<?php echo esc_attr( (int) $s['score'] ); ?>"><b><?php echo null === $s['score'] ? '—' : esc_html( sap_num( $s['score'] ) ); ?></b></span>
 			</div>
-			<span class="sap-tech-status"><?php echo esc_html( $st_txt[ $s['status'] ] ); ?><?php echo $s['items'] ? ' · ' . esc_html( sap_num( count( $s['items'] ) ) ) . ' مورد' : ''; ?></span>
-			<ul>
-				<?php foreach ( array_slice( $s['facts'], 0, 4, true ) as $fk => $fv ) : ?>
-					<li><span><?php echo esc_html( $fk ); ?></span><b dir="auto"><?php echo esc_html( $fv ); ?></b></li>
-				<?php endforeach; ?>
-				<?php if ( ! $s['facts'] ) : ?><li class="sap-muted"><?php echo esc_html( 'داده: ' . implode( '، ', array_map( function ( $n ) {
-					return sap_dataset_labels()[ $n ] ?? $n;
-				}, $s['needs'] ) ) ); ?></li><?php endif; ?>
-			</ul>
+			<?php if ( $s['kpis'] ) : ?>
+				<div class="sap-tech-kpis">
+					<?php foreach ( $s['kpis'] as $kp ) : ?>
+						<div class="<?php echo $kp[2] ? 'is-' . esc_attr( $kp[2] ) : ''; ?>"><b dir="ltr"><?php echo esc_html( $kp[0] ); ?></b><span><?php echo esc_html( $kp[1] ); ?></span></div>
+					<?php endforeach; ?>
+				</div>
+			<?php else : ?>
+				<p class="sap-tech-empty"><?php echo 'crawl' === $key || 'pages' === $key ? 'Screaming Frog وصل نیست — راهنمای اتصال ←' : 'هنوز داده‌ای دریافت نشده'; ?></p>
+			<?php endif; ?>
 		</a>
 	<?php endforeach; ?>
 </div>
+
+<?php sap_view( 'sf-wizard', array( 'project' => $project, 'open' => in_array( $open, array( 'crawl', 'pages' ), true ) ) ); ?>
 
 <?php if ( $open ) : ?>
 	<?php $s = $list[ $open ]; ?>
@@ -112,8 +117,59 @@ $inspect = (array) ( sap_dataset_payload( $pid, 'gsc_inspect' )['rows'] ?? array
 					<?php endforeach; ?>
 				</tbody>
 			</table></div>
+		<?php elseif ( 'speed' === $open && ( $cwv = (array) ( sap_dataset_payload( $pid, 'cwv' )['pages'] ?? array() ) ) ) : ?>
+			<?php
+			$cv = function ( $v, $good, $poor, $unit = 's', $div = 1000 ) {
+				if ( null === $v ) {
+					return '<span class="sap-muted">—</span>';
+				}
+				$n   = $v / $div;
+				$cls = $n <= $good ? 'is-good' : ( $n <= $poor ? 'is-warn' : 'is-bad' );
+				return '<span class="sap-chip ' . $cls . '" dir="ltr">' . esc_html( sap_num( $n, 's' === $unit ? 1 : ( 'ms' === $unit ? 0 : 2 ) ) . ( '' !== $unit && 'cls' !== $unit ? $unit : '' ) ) . '</span>';
+			};
+			?>
+			<div class="sap-table-wrap"><table class="sap-table is-compact">
+				<thead><tr><th>صفحه</th><th>امتیاز موبایل</th><th>LCP</th><th>INP</th><th>CLS</th><th>منبع</th></tr></thead>
+				<tbody>
+					<?php foreach ( $cwv as $c ) : ?>
+						<?php $fd = ! empty( $c['field']['lcp'] ); ?>
+						<tr>
+							<td><?php echo sap_page_link( $c['url'], sap_page_title( $pid, $c['url'] ) ?: rawurldecode( $c['url'] ) ); // phpcs:ignore ?></td>
+							<td><span class="sap-score-pill <?php echo null === $c['score'] ? '' : ( $c['score'] >= 90 ? 'is-good' : ( $c['score'] >= 50 ? 'is-warn' : 'is-bad' ) ); ?>"><?php echo null === $c['score'] ? '—' : esc_html( sap_num( $c['score'] ) ); ?></span></td>
+							<td><?php echo $cv( $c['field']['lcp']['p75'] ?? ( $c['lab']['lcp'] ?? null ), 2.5, 4 ); // phpcs:ignore ?></td>
+							<td><?php echo $cv( $c['field']['inp']['p75'] ?? null, 200, 500, 'ms', 1 ); // phpcs:ignore ?></td>
+							<td><?php echo $cv( $c['field']['cls']['p75'] ?? ( $c['lab']['cls'] ?? null ), 0.1, 0.25, 'cls', 1 ); // phpcs:ignore ?></td>
+							<td class="sap-small sap-muted"><?php echo $fd ? 'کاربران واقعی (CrUX)' : 'آزمایشگاهی'; ?></td>
+						</tr>
+					<?php endforeach; ?>
+				</tbody>
+			</table></div>
+		<?php elseif ( 'schema' === $open && ( $spages = (array) ( sap_dataset_payload( $pid, 'pages' )['pages'] ?? array() ) ) ) : ?>
+			<?php
+			$stypes = array();
+			$nosch  = array();
+			foreach ( $spages as $sp ) {
+				foreach ( (array) $sp['schema'] as $t ) {
+					$stypes[ $t ] = ( $stypes[ $t ] ?? 0 ) + 1;
+				}
+				if ( ! $sp['schema'] ) {
+					$nosch[] = $sp;
+				}
+			}
+			arsort( $stypes );
+			?>
+			<div class="sap-grid-2">
+				<div>
+					<p class="sap-label">نوع‌های اسکیمای پیدا‌شده (در <?php echo esc_html( sap_num( count( $spages ) ) ); ?> صفحه)</p>
+					<div class="sap-chips"><?php foreach ( $stypes as $t => $n ) : ?><span class="sap-chip" dir="ltr"><?php echo esc_html( $t ); ?> · <?php echo esc_html( sap_num( $n ) ); ?></span><?php endforeach; ?></div>
+				</div>
+				<div>
+					<p class="sap-label">صفحات بدون اسکیما (<?php echo esc_html( sap_num( count( $nosch ) ) ); ?>)</p>
+					<ul class="sap-small"><?php foreach ( array_slice( $nosch, 0, 10 ) as $sp ) : ?><li><?php echo sap_page_link( $sp['url'], $sp['title'] ?: rawurldecode( $sp['url'] ) ); // phpcs:ignore ?></li><?php endforeach; ?></ul>
+				</div>
+			</div>
 		<?php elseif ( 'nodata' === $s['status'] ) : ?>
-			<p class="sap-warn">داده این بخش هنوز دریافت نشده. <?php echo in_array( 'crawl', $s['needs'], true ) ? 'خروجی Screaming Frog را از ایجنت یا تب تنظیمات پروژه ارسال کنید.' : 'دکمه‌های بالای صفحه یا «تحلیل کامل» را بزنید.'; ?></p>
+			<p class="sap-warn">داده این بخش هنوز دریافت نشده. <?php echo in_array( 'crawl', $s['needs'], true ) ? 'مراحل «اتصال Screaming Frog» در بالای همین بخش را دنبال کنید.' : 'دکمه‌های بالای صفحه یا «تحلیل کامل» را بزنید.'; ?></p>
 		<?php endif; ?>
 		<?php if ( ! empty( $ai['payload']['issues'] ) ) : ?>
 			<?php
