@@ -340,6 +340,19 @@ add_action( 'rest_api_init', function () {
 		},
 	) );
 
+	// AI gateway test: key, model list, a tiny request with each configured model.
+	register_rest_route( $ns, '/ai/test', array(
+		'methods'             => 'POST',
+		'permission_callback' => 'sap_can',
+		'callback'            => function () {
+			$t = sap_ai_test();
+			if ( $t['ok'] ) {
+				delete_transient( 'sap_ai_denied' );
+			}
+			return $t;
+		},
+	) );
+
 	// Network reachability test (settings page).
 	register_rest_route( $ns, '/net/test', array(
 		'methods'             => 'POST',

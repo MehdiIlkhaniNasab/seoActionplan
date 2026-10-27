@@ -1035,3 +1035,7 @@ details > .sap-months { margin-top: 12px; }
 	.sap-toolbar .sap-actions .sap-btn { flex: 1 1 auto; }
 	.sap-inline { width: 100%; }
 }
+.sap-ai-test { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--line); }
+.sap-ai-test > div { flex: 1 1 100%; }
+.sap-ai-test details summary { cursor: pointer; font-weight: 700; color: var(--accent-ink); margin: 10px 0; }
+.sap-ai-test .sap-chip { border: 0; cursor: pointer; }

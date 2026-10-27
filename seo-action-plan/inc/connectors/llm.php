@@ -244,6 +244,90 @@ function sap_ai_salvage_json( $text ) {
 }
 
 /**
+ * Why the gateway refused a request (401 / 403 / 404), in plain words, with
+ * the gateway's own message so the real cause is visible.
+ */
+function sap_ai_explain_denied( $code, $raw, $msg, $model ) {
+	$is_html = ! is_array( json_decode( $raw, true ) ) && false !== stripos( $raw, '<html' );
+	$low     = strtolower( $msg );
+	if ( $is_html ) {
+		$why = 'پاسخ یک صفحه HTML بود، نه پاسخ سرویس؛ یعنی فایروال یا محافظ سرویس (مثلاً Cloudflare) درخواست را رد کرده است. معمولاً به خاطر IP است: اگر v2ray/VPN روی کل سیستم روشن است یا حالت پروکسی وردپرس «همه درخواست‌ها» است، آن را خاموش کنید یا در تنظیمات › شبکه حالت «هوشمند» را بگذارید تا GapGPT مستقیم وصل شود.';
+	} elseif ( 404 === $code || false !== strpos( $low, 'model' ) && ( false !== strpos( $low, 'not found' ) || false !== strpos( $low, 'does not exist' ) || false !== strpos( $low, 'not available' ) || false !== strpos( $low, 'access' ) || false !== strpos( $low, 'permission' ) ) ) {
+		$why = sprintf( 'مدل «%s» در حساب این سرویس وجود ندارد یا برای حساب شما فعال نیست. در تنظیمات › هوش مصنوعی دکمه «تست کلید و مدل‌ها» را بزنید تا فهرست مدل‌های قابل استفاده را ببینید و نام دقیق مدل را از آن انتخاب کنید.', $model );
+	} elseif ( 401 === $code ) {
+		$why = 'کلید API رد شد. کلید را دوباره و کامل (بدون فاصله و بدون «Bearer») از پنل سرویس کپی و در تنظیمات وارد کنید.';
+	} else {
+		$why = sprintf( 'سرویس اجازه این درخواست را نداد (مدل «%s»). یا این مدل برای حساب شما فعال نیست، یا IP سرور/پروکسی شما مسدود است. دکمه «تست کلید و مدل‌ها» در تنظیمات علت دقیق را نشان می‌دهد.', $model );
+	}
+	return sprintf( '%s (HTTP %d%s)', $why, $code, '' !== $msg && 'HTTP ' . $code !== $msg ? ' — پیام سرویس: ' . mb_substr( wp_strip_all_tags( $msg ), 0, 200 ) : '' );
+}
+
+/**
+ * Test the gateway: list its models and send a tiny request with each
+ * configured model. Nothing here is billed beyond a few tokens.
+ *
+ * @return array{ok: bool, steps: array, models: string[]}
+ */
+function sap_ai_test() {
+	$base  = untrailingslashit( esc_url_raw( sap_setting( 'ai_base_url', 'https://api.gapgpt.app/v1' ) ) );
+	$key   = trim( (string) sap_setting( 'ai_gateway_key' ) );
+	$steps = array();
+	$list  = array();
+	if ( '' === $key ) {
+		return array( 'ok' => false, 'models' => array(), 'steps' => array( array( 'ok' => false, 'name' => 'کلید API', 'msg' => 'کلید سرویس هوش مصنوعی وارد نشده.' ) ) );
+	}
+	$headers = array( 'Authorization' => 'Bearer ' . $key, 'Content-Type' => 'application/json', 'Accept' => 'application/json' );
+	$res     = sap_http( $base . '/models', array( 'method' => 'GET', 'timeout' => 30, 'headers' => $headers ) );
+	if ( is_wp_error( $res ) ) {
+		$steps[] = array( 'ok' => false, 'name' => 'اتصال به ' . wp_parse_url( $base, PHP_URL_HOST ), 'msg' => sap_net_error( $res ) );
+	} else {
+		$code = (int) wp_remote_retrieve_response_code( $res );
+		$raw  = preg_replace( '/^(?:\xEF\xBB\xBF|\s)+/', '', (string) wp_remote_retrieve_body( $res ) );
+		$data = json_decode( $raw, true );
+		foreach ( (array) ( $data['data'] ?? array() ) as $m ) {
+			if ( ! empty( $m['id'] ) ) {
+				$list[] = (string) $m['id'];
+			}
+		}
+		$steps[] = 200 === $code
+			? array( 'ok' => true, 'name' => 'اتصال و کلید', 'msg' => sprintf( 'موفق؛ %s مدل در دسترس است.', sap_num( count( $list ) ) ) )
+			: array( 'ok' => false, 'name' => 'اتصال و کلید', 'msg' => sap_ai_explain_denied( $code, $raw, (string) ( $data['error']['message'] ?? '' ), '' ) );
+	}
+	$models = array_unique( array_filter( array( sap_setting( 'ai_model' ), sap_setting( 'ai_model_assist' ) ) ) );
+	foreach ( $models as $model ) {
+		$hint = '';
+		if ( $list && ! in_array( $model, $list, true ) ) {
+			$near = array_values( array_filter( $list, function ( $id ) use ( $model ) {
+				return false !== stripos( $id, 'claude' ) || false !== stripos( $id, explode( '-', $model )[0] );
+			} ) );
+			$hint = ' — این نام در فهرست مدل‌های سرویس نیست' . ( $near ? '؛ نام‌های نزدیک: ' . implode( '، ', array_slice( $near, 0, 8 ) ) : '' );
+		}
+		$res = sap_http( $base . '/chat/completions', array(
+			'method'  => 'POST',
+			'timeout' => 60,
+			'headers' => $headers,
+			'body'    => wp_json_encode( array( 'model' => $model, 'max_tokens' => 5, 'messages' => array( array( 'role' => 'user', 'content' => 'سلام' ) ) ) ),
+		) );
+		if ( is_wp_error( $res ) ) {
+			$steps[] = array( 'ok' => false, 'name' => 'مدل ' . $model, 'msg' => sap_net_error( $res ) . $hint );
+			continue;
+		}
+		$code = (int) wp_remote_retrieve_response_code( $res );
+		$raw  = (string) wp_remote_retrieve_body( $res );
+		$data = json_decode( preg_replace( '/^(?:\xEF\xBB\xBF|\s)+/', '', $raw ), true );
+		$msg  = (string) ( $data['error']['message'] ?? ( is_string( $data['error'] ?? null ) ? $data['error'] : '' ) );
+		$steps[] = 200 === $code
+			? array( 'ok' => true, 'name' => 'مدل ' . $model, 'msg' => 'جواب داد؛ آماده استفاده است.' )
+			: array( 'ok' => false, 'name' => 'مدل ' . $model, 'msg' => ( in_array( $code, array( 401, 403, 404 ), true ) ? sap_ai_explain_denied( $code, $raw, $msg, $model ) : 'HTTP ' . $code . ( $msg ? ' — ' . $msg : '' ) ) . $hint );
+	}
+	return array(
+		'ok'     => ! in_array( false, array_column( $steps, 'ok' ), true ),
+		'steps'  => $steps,
+		'models' => $list,
+	);
+}
+
+/**
  * OpenAI-compatible Chat Completions (GapGPT and similar gateways).
  *
  * The answer is streamed (SSE): tokens keep flowing while the model writes, so
@@ -270,7 +354,8 @@ function sap_ai_request_gateway( $model, $system, $user, $schema, $args ) {
 		),
 	);
 	$send = function ( $body ) use ( $base, $args ) {
-		return wp_remote_post( $base . '/chat/completions', array(
+		return sap_http( $base . '/chat/completions', array(
+			'method'  => 'POST',
 			'timeout' => (int) $args['timeout'],
 			'headers' => array(
 				'Authorization' => 'Bearer ' . sap_setting( 'ai_gateway_key' ),
@@ -301,8 +386,8 @@ function sap_ai_request_gateway( $model, $system, $user, $schema, $args ) {
 	if ( 200 !== $code ) {
 		$data = json_decode( $raw, true );
 		$msg  = (string) ( $data['error']['message'] ?? ( is_string( $data['error'] ?? null ) ? $data['error'] : 'HTTP ' . $code ) );
-		if ( 401 === $code || 403 === $code ) {
-			return new WP_Error( 'sap_ai_auth', 'کلید API سرویس هوش مصنوعی نامعتبر است یا به این مدل دسترسی ندارد.' );
+		if ( 401 === $code || 403 === $code || 404 === $code ) {
+			return new WP_Error( 'sap_ai_auth', sap_ai_explain_denied( $code, $raw, $msg, $model ), array( 'code' => $code ) );
 		}
 		if ( 402 === $code || false !== stripos( $msg, 'credit' ) || false !== stripos( $msg, 'balance' ) || false !== stripos( $msg, 'quota' ) ) {
 			return new WP_Error( 'sap_ai_credit', 'اعتبار حساب سرویس هوش مصنوعی کافی نیست؛ حساب را شارژ کنید.' );

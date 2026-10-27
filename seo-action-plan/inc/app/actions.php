@@ -66,6 +66,7 @@ add_action( 'admin_post_sap_save_settings', function () {
 		'proxy_force_hosts'    => sanitize_textarea_field( (string) sap_post( 'proxy_force_hosts' ) ),
 		'ss_auto'              => sap_post( 'ss_auto' ) ? 1 : 0,
 	);
+	delete_transient( 'sap_ai_denied' ); // New key / model: let the next analysis try again.
 	foreach ( array( 'google_client_secret', 'seosignal_key', 'anthropic_key', 'ai_gateway_key', 'psi_key' ) as $k ) {
 		$v = trim( (string) sap_post( $k ) );
 		if ( '' !== $v && false === strpos( $v, '•' ) ) {

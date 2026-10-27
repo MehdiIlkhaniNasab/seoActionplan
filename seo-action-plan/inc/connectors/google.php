@@ -200,7 +200,8 @@ function sap_google_request( $method, $url, $body = null, $timeout = 60 ) {
 		),
 	);
 	if ( null !== $body ) {
-		$args['body'] = wp_json_encode( $body );
+		// An empty PHP array would be sent as "[]"; Google wants an object ("{}").
+		$args['body'] = wp_json_encode( array() === $body ? new stdClass() : $body );
 	}
 	$res = sap_http( $url, $args );
 	if ( is_wp_error( $res ) ) {

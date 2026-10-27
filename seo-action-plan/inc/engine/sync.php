@@ -598,8 +598,16 @@ function sap_ai_stage_step( $project, $stage, $force ) {
 	if ( ! sap_ai_connected() ) {
 		return sap_skip( 'کلید هوش مصنوعی وارد نشده (تنظیمات › هوش مصنوعی).' );
 	}
+	// The gateway refused the key / model a moment ago: don't repeat the same failing call for every stage.
+	$denied = get_transient( 'sap_ai_denied' );
+	if ( $denied ) {
+		return new WP_Error( 'sap_ai_auth', 'انجام نشد؛ همان خطای مرحله قبل: ' . $denied );
+	}
 	$res = sap_ai_stage_run( $project, $stage, $force );
 	if ( is_wp_error( $res ) ) {
+		if ( 'sap_ai_auth' === $res->get_error_code() ) {
+			set_transient( 'sap_ai_denied', $res->get_error_message(), 5 * MINUTE_IN_SECONDS );
+		}
 		return $res;
 	}
 	if ( ! empty( $res['skipped'] ) ) {

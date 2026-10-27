@@ -764,6 +764,29 @@
 		}).catch(function (e) { out.textContent = e.message; out.className = 'sap-bad'; }).then(function () { idle(b); });
 	});
 
+	/* ---- AI gateway test (settings) ---- */
+	var aiTest = document.querySelector('[data-sap-ai-test]');
+	if (aiTest) {
+		aiTest.addEventListener('click', function () {
+			var out = document.querySelector('[data-sap-ai-test-out]');
+			busy(aiTest, 'در حال تست…');
+			post('ai/test').then(function (j) {
+				out.hidden = false;
+				out.innerHTML = '<ol class="sap-ss-steps">' + j.steps.map(function (s) {
+					return '<li class="' + (s.ok ? 'is-done' : 'is-todo is-bad') + '"><i>' + (s.ok ? '✓' : '!') + '</i><div><b dir="auto">' + esc(s.name) + '</b><p class="sap-small">' + esc(s.msg) + '</p></div></li>';
+				}).join('') + '</ol>' + (j.models && j.models.length ? '<details class="sap-small"><summary>مدل‌های حساب شما (' + j.models.length.toLocaleString('fa-IR') + ') — روی هر کدام بزنید تا در «مدل تحلیل پروژه» قرار بگیرد</summary><div class="sap-kw-chips" dir="ltr">' + j.models.map(function (m) { return '<button type="button" class="sap-chip" data-sap-ai-pick="' + esc(m) + '">' + esc(m) + '</button>'; }).join('') + '</div></details>' : '');
+				toast(j.ok ? 'کلید و مدل‌ها سالم‌اند.' : 'مشکل پیدا شد؛ جزئیات زیر دکمه.', !j.ok);
+			}).catch(function (e) { toast(e.message, true); }).then(function () { idle(aiTest); });
+		});
+		document.addEventListener('click', function (ev) {
+			var pick = ev.target.closest('[data-sap-ai-pick]');
+			if (!pick) { return; }
+			var f = document.querySelector('input[name=ai_model]');
+			f.value = pick.getAttribute('data-sap-ai-pick'); f.focus();
+			toast('مدل در فیلد قرار گرفت؛ تنظیمات را ذخیره کنید.');
+		});
+	}
+
 	/* ---- SEO Signal tab ---- */
 	var ssProject = document.querySelector('[data-sap-ss-project]');
 	if (ssProject) {

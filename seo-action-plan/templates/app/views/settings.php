@@ -92,6 +92,13 @@ $auth  = sap_google_auth_url();
 			</label>
 		</div>
 		<?php sap_switch( 'ai_auto', $s['ai_auto'], 'تحلیل هوشمند در همگام‌سازی خودکار هفتگی هم اجرا شود', 'اگر داده‌ها تغییر نکرده باشند، تحلیل قبلی بدون هزینه نگه داشته می‌شود.' ); ?>
+		<?php if ( 'gateway' === $s['ai_provider'] && sap_ai_connected() ) : ?>
+			<div class="sap-ai-test">
+				<button type="button" class="sap-btn is-soft" data-sap-ai-test><?php echo sap_icon( 'refresh' ); // phpcs:ignore ?>تست کلید و مدل‌ها</button>
+				<span class="sap-muted sap-small">کلید، فهرست مدل‌های حساب شما و یک درخواست چندتوکنی با هر دو مدل بالا را امتحان می‌کند (هزینه تقریباً صفر). اگر قبلاً تنظیمات را عوض کرده‌اید، اول ذخیره کنید.</span>
+				<div data-sap-ai-test-out hidden></div>
+			</div>
+		<?php endif; ?>
 	</section>
 
 	<section class="sap-panel">
