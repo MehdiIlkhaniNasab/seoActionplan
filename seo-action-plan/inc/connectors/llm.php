@@ -244,10 +244,28 @@ function sap_ai_salvage_json( $text ) {
 }
 
 /**
+ * Is a gateway error about the account balance (not the key or the model)?
+ */
+function sap_ai_is_credit_error( $code, $msg ) {
+	return 402 === (int) $code || (bool) preg_match( '/insufficient[_ ](user[_ ])?(quota|funds|balance|credit)|quota|credit|balance|billing|اعتبار|موجودی/iu', (string) $msg );
+}
+
+/**
+ * «Top up your account», with the remaining balance the gateway reported.
+ */
+function sap_ai_credit_message( $msg ) {
+	$left = preg_match( '/remaining quota:\s*[＄$]?\s*(-?[\d.]+)/u', (string) $msg, $m ) ? (float) $m[1] : null;
+	return 'اعتبار حساب سرویس هوش مصنوعی (GapGPT) تمام شده است' . ( null !== $left ? sprintf( '؛ موجودی فعلی %s دلار', sap_num( $left, 2 ) ) : '' ) . '. کلید و مدل درست‌اند؛ حساب را در پنل سرویس شارژ کنید و دوباره «تحلیل کامل» را بزنید. (پیام سرویس: ' . mb_substr( wp_strip_all_tags( (string) $msg ), 0, 160 ) . ')';
+}
+
+/**
  * Why the gateway refused a request (401 / 403 / 404), in plain words, with
  * the gateway's own message so the real cause is visible.
  */
 function sap_ai_explain_denied( $code, $raw, $msg, $model ) {
+	if ( sap_ai_is_credit_error( $code, $msg ) ) {
+		return sap_ai_credit_message( $msg );
+	}
 	$is_html = ! is_array( json_decode( $raw, true ) ) && false !== stripos( $raw, '<html' );
 	$low     = strtolower( $msg );
 	if ( $is_html ) {
@@ -386,11 +404,12 @@ function sap_ai_request_gateway( $model, $system, $user, $schema, $args ) {
 	if ( 200 !== $code ) {
 		$data = json_decode( $raw, true );
 		$msg  = (string) ( $data['error']['message'] ?? ( is_string( $data['error'] ?? null ) ? $data['error'] : 'HTTP ' . $code ) );
+		// Balance first: GapGPT answers an empty balance with 403 «insufficient user quota».
+		if ( sap_ai_is_credit_error( $code, $msg ) ) {
+			return new WP_Error( 'sap_ai_auth', sap_ai_credit_message( $msg ), array( 'code' => $code ) );
+		}
 		if ( 401 === $code || 403 === $code || 404 === $code ) {
 			return new WP_Error( 'sap_ai_auth', sap_ai_explain_denied( $code, $raw, $msg, $model ), array( 'code' => $code ) );
-		}
-		if ( 402 === $code || false !== stripos( $msg, 'credit' ) || false !== stripos( $msg, 'balance' ) || false !== stripos( $msg, 'quota' ) ) {
-			return new WP_Error( 'sap_ai_credit', 'اعتبار حساب سرویس هوش مصنوعی کافی نیست؛ حساب را شارژ کنید.' );
 		}
 		if ( 429 === $code ) {
 			return new WP_Error( 'sap_ai_rate', 'سقف درخواست سرویس هوش مصنوعی پر شده؛ چند دقیقه بعد دوباره امتحان کنید.' );

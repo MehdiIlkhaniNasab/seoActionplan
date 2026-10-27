@@ -143,6 +143,9 @@ function sap_ss_request( $endpoint, $body = array(), $metered = true ) {
 	}
 	if ( 200 === $code && ! empty( $data['ok'] ) ) {
 		sap_ss_log( $endpoint, $code, true, '', $ms );
+		if ( '' !== (string) sap_ss_usage()['last_error'] ) {
+			sap_ss_usage_bump( array( 'last_error' => '' ) ); // Working again: drop the old error.
+		}
 		return $data;
 	}
 	$err  = is_array( $data ) ? ( $data['error'] ?? array() ) : array();
