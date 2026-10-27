@@ -110,6 +110,12 @@ add_action( 'template_redirect', function () {
 	show_admin_bar( false );
 
 	$route = trim( (string) get_query_var( 'sap_route' ), '/' );
+	// phpcs:ignore WordPress.Security.NonceVerification
+	if ( is_user_logged_in() && isset( $_GET['sap_mode'] ) && in_array( $_GET['sap_mode'], array( 'simple', 'pro' ), true ) ) {
+		update_user_meta( get_current_user_id(), 'sap_mode', sanitize_key( $_GET['sap_mode'] ) ); // phpcs:ignore
+		wp_safe_redirect( remove_query_arg( 'sap_mode' ) );
+		exit;
+	}
 	if ( ! is_user_logged_in() ) {
 		sap_render( 'login', array( 'redirect' => sap_url( $route ) ) );
 	}
@@ -145,7 +151,10 @@ function sap_resolve_route( $route ) {
 			if ( $project ) {
 				$tabs = sap_project_tabs();
 				$tab  = sanitize_key( $parts[2] ?? 'overview' );
-				$all  = $tabs + array( 'content' => array( 'تحلیل و بازنویسی محتوا', 'log' ) ); // Pages reached from a task, not in the tab bar.
+				$all  = sap_project_tabs_all(); // Tabs hidden in simple mode still open by URL.
+				if ( ! isset( $tabs[ $tab ] ) && isset( $all[ $tab ] ) ) {
+					$tabs[ $tab ] = $all[ $tab ];
+				}
 				$tab  = array_key_exists( $tab, $all ) ? $tab : 'overview';
 				return array_merge( $out, array(
 					'view'    => 'project',

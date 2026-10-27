@@ -119,6 +119,215 @@ add_action( 'rest_api_init', function () {
 		},
 	) );
 
+	// Comments (your own notes) on tasks, findings, ideas, revisions.
+	register_rest_route( $ns, '/comment', array(
+		'methods'             => 'POST',
+		'permission_callback' => 'sap_can_work',
+		'callback'            => function ( WP_REST_Request $req ) {
+			$type = sanitize_key( (string) $req->get_param( 'type' ) );
+			$id   = sap_comment_add( absint( $req->get_param( 'project' ) ), $type, absint( $req->get_param( 'id' ) ), (string) $req->get_param( 'body' ) );
+			if ( ! $id ) {
+				return new WP_Error( 'sap_comment', 'متن یادداشت خالی است.', array( 'status' => 400 ) );
+			}
+			$c = sap_comment( $id );
+			return array( 'ok' => true, 'id' => $id, 'meta' => sap_user_name( (int) $c['user_id'] ) . ' · ' . sap_jdate( $c['created_at'] ) );
+		},
+	) );
+	register_rest_route( $ns, '/comment/(?P<id>\d+)', array(
+		'methods'             => 'DELETE',
+		'permission_callback' => 'sap_can_work',
+		'callback'            => function ( WP_REST_Request $req ) {
+			$c = sap_comment( (int) $req['id'] );
+			if ( ! $c ) {
+				return new WP_Error( 'sap_comment', 'یادداشت پیدا نشد.', array( 'status' => 404 ) );
+			}
+			if ( ! sap_can() && (int) $c['user_id'] !== get_current_user_id() ) {
+				return new WP_Error( 'sap_forbidden', 'فقط یادداشت خودتان را می‌توانید حذف کنید.', array( 'status' => 403 ) );
+			}
+			sap_comment_delete( (int) $c['id'] );
+			return array( 'ok' => true );
+		},
+	) );
+
+	// Delete one task / bulk actions on many.
+	register_rest_route( $ns, '/task/(?P<id>\d+)', array(
+		'methods'             => 'DELETE',
+		'permission_callback' => 'sap_can',
+		'callback'            => function ( WP_REST_Request $req ) {
+			if ( ! sap_task( (int) $req['id'] ) ) {
+				return new WP_Error( 'sap_task', 'کار یافت نشد.', array( 'status' => 404 ) );
+			}
+			sap_task_delete( (int) $req['id'] );
+			return array( 'ok' => true, 'msg' => 'کار حذف شد' );
+		},
+	) );
+	register_rest_route( $ns, '/tasks/bulk', array(
+		'methods'             => 'POST',
+		'permission_callback' => 'sap_can',
+		'callback'            => function ( WP_REST_Request $req ) {
+			$ids = array_filter( array_map( 'absint', (array) $req->get_param( 'ids' ) ) );
+			$do  = sanitize_key( (string) $req->get_param( 'do' ) );
+			$val = sanitize_text_field( (string) $req->get_param( 'value' ) );
+			$n   = 0;
+			foreach ( $ids as $id ) {
+				if ( ! sap_task( $id ) ) {
+					continue;
+				}
+				if ( 'delete' === $do ) {
+					sap_task_delete( $id );
+				} elseif ( 'status' === $do && array_key_exists( $val, sap_task_statuses() ) ) {
+					sap_task_save( array( 'status' => $val ), $id );
+				} elseif ( 'period' === $do ) {
+					sap_task_save( array( 'period' => sap_period_sanitize( $val ) ), $id );
+				} else {
+					continue;
+				}
+				++$n;
+			}
+			return array( 'ok' => true, 'msg' => sprintf( '%s کار %s', sap_num( $n ), 'delete' === $do ? 'حذف شد' : 'بروز شد' ) );
+		},
+	) );
+
+	// Content ideas and the content calendar.
+	register_rest_route( $ns, '/ideas/(?P<project>\d+)/generate', array(
+		'methods'             => 'POST',
+		'permission_callback' => 'sap_can',
+		'callback'            => function ( WP_REST_Request $req ) {
+			$project = sap_project( (int) $req['project'] );
+			if ( ! $project ) {
+				return new WP_Error( 'sap_project', 'پروژه یافت نشد.', array( 'status' => 404 ) );
+			}
+			$period = (string) $req->get_param( 'period' );
+			$res    = $period ? sap_calendar_fill_month( $project, sap_period_sanitize( $period ), max( 1, absint( $req->get_param( 'target' ) ?: 8 ) ) ) : sap_ideas_generate( $project, absint( $req->get_param( 'count' ) ?: 10 ) );
+			if ( is_wp_error( $res ) ) {
+				return $res;
+			}
+			$u = sap_ai_usage();
+			return array( 'ok' => true, 'msg' => ( $res['msg'] ?? sprintf( '%s ایده جدید آماده بررسی است.', sap_num( $res['added'] ) ) ) . sprintf( ' (هزینه حدود %s دلار)', sap_num( $u['last_cost'], 3 ) ) );
+		},
+	) );
+	register_rest_route( $ns, '/idea/(?P<id>\d+)', array(
+		'methods'             => 'POST',
+		'permission_callback' => 'sap_can',
+		'callback'            => function ( WP_REST_Request $req ) {
+			$idea = sap_idea( (int) $req['id'] );
+			if ( ! $idea ) {
+				return new WP_Error( 'sap_idea', 'ایده پیدا نشد.', array( 'status' => 404 ) );
+			}
+			$do = sanitize_key( (string) $req->get_param( 'do' ) );
+			switch ( $do ) {
+				case 'schedule':
+					sap_calendar_schedule( $idea['project_id'], array( $idea['id'] ), (string) $req->get_param( 'period' ) ?: sap_period_current() );
+					return array( 'ok' => true, 'msg' => 'به تقویم ' . sap_period_label( sap_period_sanitize( (string) $req->get_param( 'period' ) ?: sap_period_current() ) ) . ' اضافه شد' );
+				case 'approve':
+					sap_idea_save( array( 'status' => 'approved' ), $idea['id'] );
+					return array( 'ok' => true, 'msg' => 'تأیید شد' );
+				case 'reject':
+					sap_idea_save( array( 'status' => 'rejected' ), $idea['id'] );
+					return array( 'ok' => true, 'msg' => 'رد شد؛ هوش مصنوعی دیگر آن را پیشنهاد نمی‌دهد' );
+				case 'unschedule':
+					sap_idea_save( array( 'status' => 'approved', 'period' => '', 'slot' => 0, 'planned_date' => null ), $idea['id'] );
+					sap_calendar_spread_dates( $idea['project_id'], $idea['period'] );
+					return array( 'ok' => true, 'msg' => 'از تقویم خارج شد' );
+				case 'published':
+					sap_idea_save( array( 'status' => 'published', 'published_url' => (string) $req->get_param( 'url' ) ), $idea['id'] );
+					return array( 'ok' => true, 'msg' => 'منتشرشده ثبت شد' );
+				case 'delete':
+					sap_idea_delete( $idea['id'] );
+					return array( 'ok' => true, 'msg' => 'حذف شد' );
+				case 'edit':
+					$data = array();
+					foreach ( array( 'keyword', 'title', 'brief', 'goal', 'source_note' ) as $k ) {
+						if ( null !== $req->get_param( $k ) ) {
+							$data[ $k ] = (string) $req->get_param( $k );
+						}
+					}
+					if ( null !== $req->get_param( 'secondary' ) ) {
+						$old = array();
+						foreach ( sap_idea_secondary( $idea ) as $s ) {
+							$old[ sap_kw_key( $s[0] ) ] = $s[1];
+						}
+						$data['secondary'] = array_map( function ( $k ) use ( $old ) {
+							return array( $k, (int) ( $old[ sap_kw_key( $k ) ] ?? 0 ) );
+						}, sap_list( (string) $req->get_param( 'secondary' ) ) );
+					}
+					sap_idea_save( $data, $idea['id'] );
+					return array( 'ok' => true, 'msg' => 'ذخیره شد' );
+				case 'move':
+					$dir   = 'up' === $req->get_param( 'dir' ) ? -1 : 1;
+					$items = sap_calendar_items( $idea['project_id'], $idea['period'] );
+					$pos   = array_search( $idea['id'], array_column( $items, 'id' ), true );
+					$swap  = $items[ $pos + $dir ] ?? null;
+					if ( false !== $pos && $swap ) {
+						sap_idea_save( array( 'slot' => $swap['slot'] ), $idea['id'] );
+						sap_idea_save( array( 'slot' => $idea['slot'] ), $swap['id'] );
+						sap_calendar_spread_dates( $idea['project_id'], $idea['period'] );
+					}
+					return array( 'ok' => true, 'msg' => 'جابه‌جا شد' );
+				case 'task':
+					$tid = sap_task_save( array(
+						'project_id' => $idea['project_id'],
+						'focus_id'   => $idea['focus_id'],
+						'title'      => 'تولید محتوا: ' . ( $idea['title'] ?: $idea['keyword'] ),
+						'notes'      => trim( "کلمه اصلی: {$idea['keyword']}\nکلمات فرعی: " . implode( '، ', array_column( sap_idea_secondary( $idea ), 0 ) ) . "\nهدف: {$idea['goal']}\n\n{$idea['brief']}\n\nساختار:\n• " . implode( "\n• ", $idea['outline'] ) ),
+						'context'    => 'content_new',
+						'status'     => 'next',
+						'period'     => $idea['period'] ?: sap_period_current(),
+						'due_date'   => $idea['planned_date'],
+						'effort'     => 3,
+						'keyword'    => $idea['keyword'],
+						'source'     => 'ai',
+					) );
+					sap_idea_save( array( 'task_id' => $tid ), $idea['id'] );
+					return array( 'ok' => true, 'msg' => 'به اکشن پلن اضافه شد' );
+			}
+			return new WP_Error( 'sap_do', 'عملیات نامعتبر.', array( 'status' => 400 ) );
+		},
+	) );
+	register_rest_route( $ns, '/calendar/(?P<project>\d+)/sheet', array(
+		'methods'             => 'POST',
+		'permission_callback' => 'sap_can',
+		'callback'            => function ( WP_REST_Request $req ) {
+			$project = sap_project( (int) $req['project'] );
+			if ( ! $project ) {
+				return new WP_Error( 'sap_project', 'پروژه یافت نشد.', array( 'status' => 404 ) );
+			}
+			if ( $req->get_param( 'create' ) ) {
+				$res = sap_project_sheet_create( $project, (string) $req->get_param( 'existing' ) );
+				return is_wp_error( $res ) ? $res : array( 'ok' => true ) + $res;
+			}
+			$res = sap_calendar_write_sheet( $project );
+			return is_wp_error( $res ) ? $res : array( 'ok' => true, 'msg' => $res );
+		},
+	) );
+
+	// Client site connector: test, apply a revision as draft, publish, roll back.
+	register_rest_route( $ns, '/site/(?P<project>\d+)/test', array(
+		'methods'             => 'POST',
+		'permission_callback' => 'sap_can',
+		'callback'            => function ( WP_REST_Request $req ) {
+			$project = sap_project( (int) $req['project'] );
+			$ping    = $project ? sap_site_request( $project, 'GET', 'ping' ) : new WP_Error( 'sap_project', 'پروژه یافت نشد.' );
+			if ( is_wp_error( $ping ) ) {
+				return $ping;
+			}
+			$seo = array( 'rank_math' => 'Rank Math', 'yoast' => 'Yoast' )[ $ping['seo_plugin'] ?? '' ] ?? 'بدون افزونه سئو';
+			return array( 'ok' => true, 'msg' => sprintf( 'متصل: %s · افزونه رابط %s · %s · %s · لاگ از %s', $ping['site'], $ping['version'], $seo, ! empty( $ping['write'] ) ? 'اعمال تغییرات فعال' : 'فقط خواندن', $ping['since'] ) );
+		},
+	) );
+	register_rest_route( $ns, '/revision/(?P<id>\d+)/site', array(
+		'methods'             => 'POST',
+		'permission_callback' => 'sap_can',
+		'callback'            => function ( WP_REST_Request $req ) {
+			$rev = sap_revision( (int) $req['id'] );
+			if ( ! $rev ) {
+				return new WP_Error( 'sap_rev', 'نسخه پیدا نشد.', array( 'status' => 404 ) );
+			}
+			$res = sap_content_site_action( $rev, sanitize_key( (string) $req->get_param( 'do' ) ), (array) $req->get_param( 'extra' ) );
+			return is_wp_error( $res ) ? $res : array( 'ok' => true ) + $res;
+		},
+	) );
+
 	// Content audit & rewrite: start, run the next step, approve.
 	register_rest_route( $ns, '/content/(?P<project>\d+)/start', array(
 		'methods'             => 'POST',

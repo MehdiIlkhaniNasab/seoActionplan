@@ -403,3 +403,79 @@ function sap_keymap_index( $map ) {
 	}
 	return $idx;
 }
+
+/**
+ * Keyword cloud of a project: page keywords, Search Console queries and the
+ * calendar / idea keywords, each with its weight and ranking state.
+ *
+ * @return array list of {kw, weight, impr, volume, pos, page, kind, state}
+ */
+function sap_keyword_cloud( $project ) {
+	$pid   = $project['id'];
+	$best  = array(); // kw_key => best GSC row.
+	$sum   = array();
+	foreach ( (array) ( sap_dataset_payload( $pid, 'gsc_qp' )['rows'] ?? array() ) as $r ) {
+		$k         = sap_kw_key( $r['query'] );
+		$sum[ $k ] = ( $sum[ $k ] ?? 0 ) + $r['impressions'];
+		if ( ! isset( $best[ $k ] ) || $r['position'] < $best[ $k ]['position'] ) {
+			$best[ $k ] = $r;
+		}
+	}
+	$volumes = (array) ( sap_dataset_payload( $pid, 'ss_volumes' )['volumes'] ?? array() );
+	$words   = array();
+	$add     = function ( $kw, $kind, $page = '', $volume = 0 ) use ( &$words, $best, $sum, $volumes ) {
+		$k = sap_kw_key( $kw );
+		if ( '' === $k ) {
+			return;
+		}
+		$order = array( 'primary' => 4, 'planned' => 3, 'secondary' => 2, 'query' => 1 );
+		if ( isset( $words[ $k ] ) && $order[ $words[ $k ]['kind'] ] >= $order[ $kind ] ) {
+			return;
+		}
+		$pos        = isset( $best[ $k ] ) ? (float) $best[ $k ]['position'] : 0;
+		$vol        = $volume ?: (int) ( $volumes[ $k ]['volume'] ?? 0 );
+		$words[ $k ] = array(
+			'kw'     => $kw,
+			'impr'   => (int) ( $sum[ $k ] ?? 0 ),
+			'volume' => $vol,
+			'pos'    => $pos,
+			'page'   => $page ?: ( $best[ $k ]['page'] ?? '' ),
+			'kind'   => $kind,
+			'state'  => 'planned' === $kind && ! $pos ? 'planned' : ( ! $pos ? 'none' : ( $pos <= 3 ? 'top3' : ( $pos <= 10 ? 'top10' : ( $pos <= 20 ? 'near' : 'far' ) ) ) ),
+		);
+	};
+	foreach ( sap_keymap( $pid ) as $m ) {
+		if ( '' !== $m['primary_kw'] && 'home' !== $m['page_type'] ) {
+			$add( $m['primary_kw'], 'primary', $m['url'] );
+		}
+		foreach ( $m['secondary'] as $s ) {
+			$add( $s, 'secondary', $m['url'] );
+		}
+	}
+	foreach ( sap_ideas( $pid, array( 'status' => array( 'scheduled', 'approved', 'published' ) ) ) as $i ) {
+		$add( $i['keyword'], 'planned', $i['published_url'], $i['kp'] );
+	}
+	arsort( $sum );
+	$n = 0;
+	foreach ( $sum as $k => $impr ) {
+		if ( $n++ >= 120 || $impr < 10 ) {
+			break;
+		}
+		if ( ! sap_is_brand( $best[ $k ]['query'], $project ) ) {
+			$add( $best[ $k ]['query'], 'query' );
+		}
+	}
+	$max = 1;
+	foreach ( $words as $w ) {
+		$max = max( $max, $w['impr'], $w['volume'] );
+	}
+	foreach ( $words as &$w ) {
+		$w['weight'] = round( log( 1 + max( $w['impr'], $w['volume'] ) ) / log( 1 + $max ), 3 );
+	}
+	unset( $w );
+	$words = array_values( $words );
+	usort( $words, function ( $a, $b ) {
+		return strcmp( $a['kw'], $b['kw'] );
+	} );
+	return $words;
+}

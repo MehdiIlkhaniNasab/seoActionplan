@@ -98,6 +98,7 @@ $here     = sap_project_url( $pid, 'findings', array_filter( array( 'fstatus' =>
 						<p class="sap-finding-page">صفحه: <?php echo sap_page_link( $f['url'], sap_page_title( $pid, $f['url'] ) ); // phpcs:ignore ?></p>
 					<?php endif; ?>
 					<?php sap_evidence_table( $f['evidence'], $project['id'] ); ?>
+					<?php sap_view( 'comments', array( 'type' => 'finding', 'object_id' => $f['id'], 'project_id' => $pid ) ); ?>
 					<div class="sap-finding-actions">
 						<?php if ( 'open' === $f['status'] || 'dismissed' === $f['status'] || 'resolved' === $f['status'] ) : ?>
 							<button class="sap-btn is-small is-primary" name="quick" value="plan:<?php echo esc_attr( $f['id'] ); ?>">افزودن به اکشن پلن <?php echo esc_html( sap_period_label( $period ) ); ?></button>

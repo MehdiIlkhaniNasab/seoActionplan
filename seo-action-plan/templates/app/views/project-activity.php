@@ -42,6 +42,11 @@ $sources = sap_activity_sources();
 		</select>
 	</form>
 	<div class="sap-actions">
+		<?php if ( sap_site_connected( $project ) ) : ?>
+			<button type="button" class="sap-btn" data-sap-step="site_log" data-project="<?php echo esc_attr( $pid ); ?>"><?php echo sap_icon( 'refresh' ); // phpcs:ignore ?>دریافت تغییرات سایت</button>
+		<?php else : ?>
+			<a class="sap-btn is-ghost" href="<?php echo esc_url( sap_project_url( $pid, 'settings' ) . '#site-connector' ); ?>" title="تغییراتی که روی سایت کارفرما انجام می‌شود خودکار اینجا می‌آید">اتصال لاگ سایت کارفرما</a>
+		<?php endif; ?>
 		<a class="sap-btn" href="<?php echo esc_url( $csv ); ?>"><?php echo sap_icon( 'download' ); // phpcs:ignore ?>خروجی CSV</a>
 	</div>
 </div>

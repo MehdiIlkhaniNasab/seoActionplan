@@ -465,3 +465,22 @@ add_action( 'admin_post_sap_ai_focus_apply', function () {
 	sap_focus_save( $pid, $data + (array) ( $rec['def'] ?? array() ) );
 	sap_back( $back, sprintf( 'Focus «%s» با هدف و شاخص پیشنهادی ساخته شد. برای اعمال روی یافته‌ها، تحلیل را دوباره اجرا کنید.', $rec['name'] ) );
 } );
+
+/**
+ * Client site connection (connector plugin URL + Sokan key).
+ */
+add_action( 'admin_post_sap_site_save', function () {
+	sap_guard( 'sap_site_save' );
+	$pid = absint( sap_post( 'project_id' ) );
+	sap_project_set_option( $pid, 'site_url', esc_url_raw( trim( (string) sap_post( 'site_conn_url' ) ) ) );
+	$key = trim( (string) sap_post( 'site_conn_key' ) );
+	if ( '' !== $key ) {
+		sap_project_set_option( $pid, 'site_key', sap_encrypt( $key ) );
+	}
+	$project = sap_project( $pid );
+	$ping    = sap_site_connected( $project ) ? sap_site_request( $project, 'GET', 'ping' ) : null;
+	if ( is_wp_error( $ping ) ) {
+		sap_back( sap_project_url( $pid, 'settings' ) . '#site-connector', 'ذخیره شد، اما اتصال برقرار نشد: ' . $ping->get_error_message(), false );
+	}
+	sap_back( sap_project_url( $pid, 'settings' ) . '#site-connector', $ping ? sprintf( 'اتصال به «%s» برقرار شد (افزونه رابط %s%s).', $ping['site'] ?? '', $ping['version'] ?? '', empty( $ping['write'] ) ? '، اعمال تغییرات غیرفعال' : '' ) : 'ذخیره شد.' );
+} );

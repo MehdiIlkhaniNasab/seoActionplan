@@ -552,4 +552,172 @@
 		});
 	}
 
+	/* ---- Comments (your own notes) ---- */
+	function esc(t) { var d = document.createElement('div'); d.textContent = t; return d.innerHTML; }
+	document.addEventListener('click', function (ev) {
+		var add = ev.target.closest('[data-sap-comment-add]');
+		var del = ev.target.closest('[data-sap-comment-del]');
+		if (!add && !del) { return; }
+		var box = ev.target.closest('[data-sap-comments]');
+		if (add) {
+			var ta = box.querySelector('textarea');
+			var body = ta.value.trim();
+			if (!body) { ta.focus(); return; }
+			var p = box.getAttribute('data-sap-comments').split(':');
+			add.disabled = true;
+			post('comment', { type: p[0], id: p[1], project: p[2], body: body }).then(function (res) {
+				var li = document.createElement('li');
+				li.setAttribute('data-id', res.id);
+				li.innerHTML = '<p>' + esc(body).replace(/\n/g, '<br>') + '</p><small class="sap-muted">' + esc(res.meta) + '</small><button type="button" class="sap-icon-btn" data-sap-comment-del title="حذف">✕</button>';
+				box.querySelector('.sap-comment-list').appendChild(li);
+				ta.value = '';
+				toast('یادداشت ثبت شد');
+			}).catch(function (e) { toast(e.message, true); }).then(function () { add.disabled = false; });
+		} else {
+			var li2 = del.closest('li');
+			if (!window.confirm('این یادداشت حذف شود؟')) { return; }
+			api('comment/' + li2.getAttribute('data-id'), { method: 'DELETE' }).then(function () { fadeOut(li2); }).catch(function (e) { toast(e.message, true); });
+		}
+	});
+
+	/* ---- Delete a task card / bulk actions on the plan board ---- */
+	document.addEventListener('click', function (ev) {
+		var btn = ev.target.closest('[data-sap-task-del]');
+		if (!btn) { return; }
+		ev.preventDefault();
+		ev.stopPropagation();
+		if (!window.confirm('این کار حذف شود؟ (یافته مرتبط به صندوق ورودی برمی‌گردد)')) { return; }
+		var card = btn.closest('.sap-task') || document.querySelector('.sap-task.is-active');
+		api('task/' + btn.getAttribute('data-sap-task-del'), { method: 'DELETE' }).then(function (res) {
+			toast(res.msg);
+			document.dispatchEvent(new Event('sap:task-moved'));
+			fadeOut(card);
+			setTimeout(refreshCounts, 300);
+		}).catch(function (e) { toast(e.message, true); });
+	});
+	var bulk = document.querySelector('[data-sap-bulkbar]');
+	if (bulk) {
+		var tools = bulk.querySelector('.sap-bulk-tools');
+		var picks = function () { return Array.prototype.slice.call(document.querySelectorAll('.sap-board .sap-task-pick, .sap-stack .sap-task-pick')); };
+		var count = function () { bulk.querySelector('[data-sap-bulk-n]').textContent = picks().filter(function (c) { return c.checked; }).length.toLocaleString('fa-IR'); };
+		bulk.querySelector('[data-sap-bulk-toggle]').addEventListener('change', function (ev) {
+			document.body.classList.toggle('is-picking', ev.target.checked);
+			tools.hidden = !ev.target.checked;
+			if (!ev.target.checked) { picks().forEach(function (c) { c.checked = false; }); count(); }
+		});
+		bulk.querySelector('[data-sap-bulk-all]').addEventListener('change', function (ev) {
+			document.querySelectorAll('.sap-board .sap-task-pick').forEach(function (c) { c.checked = ev.target.checked; });
+			count();
+		});
+		document.addEventListener('change', function (ev) { if (ev.target.classList.contains('sap-task-pick')) { count(); } });
+		document.addEventListener('click', function (ev) { if (ev.target.classList.contains('sap-task-pick')) { ev.stopPropagation(); } }, true);
+		bulk.querySelector('[data-sap-bulk-go]').addEventListener('click', function () {
+			var ids = picks().filter(function (c) { return c.checked; }).map(function (c) { return c.value; });
+			var v = bulk.querySelector('[data-sap-bulk-do]').value;
+			if (!ids.length || !v) { toast('کارها و اقدام را انتخاب کنید', true); return; }
+			var parts = v.split(':');
+			if (parts[0] === 'delete' && !window.confirm(ids.length.toLocaleString('fa-IR') + ' کار حذف شود؟')) { return; }
+			post('tasks/bulk', { ids: ids, do: parts[0], value: parts[1] || '' }).then(function (res) {
+				toast(res.msg);
+				setTimeout(function () { location.reload(); }, 600);
+			}).catch(function (e) { toast(e.message, true); });
+		});
+	}
+
+	/* ---- Content ideas & calendar ---- */
+	function busy(btn, text) { btn.disabled = true; btn.classList.add('is-loading'); if (text) { btn.dataset.label = btn.innerHTML; btn.textContent = text; } }
+	function idle(btn) { btn.disabled = false; btn.classList.remove('is-loading'); if (btn.dataset.label) { btn.innerHTML = btn.dataset.label; } }
+	document.addEventListener('click', function (ev) {
+		var gen = ev.target.closest('[data-sap-ideas-gen]');
+		var fill = ev.target.closest('[data-sap-cal-fill]');
+		var sheet = ev.target.closest('[data-sap-cal-sheet]');
+		var create = ev.target.closest('[data-sap-sheet-create]');
+		var act = ev.target.closest('[data-sap-idea-do]');
+		if (gen) {
+			busy(gen, 'هوش مصنوعی در حال بررسی داده‌ها… (۳۰ تا ۹۰ ثانیه)');
+			var n = document.querySelector('[data-sap-ideas-count]');
+			post('ideas/' + gen.getAttribute('data-sap-ideas-gen') + '/generate', { count: n ? n.value : 10 }).then(function (res) {
+				toast(res.msg); setTimeout(function () { location.reload(); }, 900);
+			}).catch(function (e) { toast(e.message, true); idle(gen); });
+		} else if (fill) {
+			var t = document.querySelector('[data-sap-cal-target]');
+			busy(fill, 'در حال ساخت ایده‌ها و تکمیل ماه…');
+			post('ideas/' + fill.getAttribute('data-sap-cal-fill') + '/generate', { period: fill.getAttribute('data-period'), target: t ? t.value : 8 }).then(function (res) {
+				toast(res.msg); setTimeout(function () { location.reload(); }, 900);
+			}).catch(function (e) { toast(e.message, true); idle(fill); });
+		} else if (sheet) {
+			busy(sheet, 'در حال نوشتن در شیت…');
+			post('calendar/' + sheet.getAttribute('data-sap-cal-sheet') + '/sheet').then(function (res) { toast(res.msg); idle(sheet); })
+				.catch(function (e) { toast(e.message, true); idle(sheet); });
+		} else if (create) {
+			var existing = create.hasAttribute('data-existing') ? (document.querySelector('[data-sap-sheet-existing]') || {}).value : '';
+			if (create.hasAttribute('data-existing') && !existing) { toast('لینک گوگل شیت را وارد کنید', true); return; }
+			if (!window.confirm(existing ? 'تب‌های Blog، B keyword، کلاسترینگ، نقشه کلمات و لاگ تغییرات به این شیت اضافه و پر شوند؟' : 'گوگل شیت پروژه در حساب گوگل متصل ساخته و به پروژه وصل شود؟')) { return; }
+			busy(create, 'در حال ساخت و پر کردن شیت…');
+			post('calendar/' + create.getAttribute('data-sap-sheet-create') + '/sheet', { create: 1, existing: existing }).then(function (res) {
+				toast(res.msg);
+				if (res.url) { window.open(res.url, '_blank'); }
+				setTimeout(function () { location.reload(); }, 1200);
+			}).catch(function (e) { toast(e.message, true); idle(create); });
+		} else if (act) {
+			var box = act.closest('[data-sap-idea]');
+			var id = box.getAttribute('data-sap-idea');
+			var doing = act.getAttribute('data-sap-idea-do');
+			var data = { do: doing };
+			if (doing === 'schedule') { var m = box.querySelector('[data-sap-idea-month]'); data.period = m ? m.value : ''; }
+			if (doing === 'move') { data.dir = act.getAttribute('data-dir'); }
+			if (doing === 'published') { var u = window.prompt('لینک مقاله منتشرشده:'); if (u === null) { return; } data.url = u; }
+			if (doing === 'delete' && !window.confirm('این ایده کامل حذف شود؟')) { return; }
+			act.disabled = true;
+			post('idea/' + id, data).then(function (res) {
+				toast(res.msg);
+				if (['schedule', 'approve', 'reject', 'delete'].indexOf(doing) !== -1 && box.classList.contains('sap-idea')) { fadeOut(box); return; }
+				setTimeout(function () { location.reload(); }, 500);
+			}).catch(function (e) { toast(e.message, true); act.disabled = false; });
+		}
+	});
+	document.addEventListener('submit', function (ev) {
+		var f = ev.target.closest('[data-sap-idea-edit]');
+		if (!f) { return; }
+		ev.preventDefault();
+		var data = { do: 'edit' };
+		new FormData(f).forEach(function (v, k) { data[k] = v; });
+		post('idea/' + f.closest('[data-sap-idea]').getAttribute('data-sap-idea'), data).then(function (res) { toast(res.msg); setTimeout(function () { location.reload(); }, 500); })
+			.catch(function (e) { toast(e.message, true); });
+	});
+
+	/* ---- Keyword cloud filter ---- */
+	document.querySelectorAll('[data-sap-cloud-kind] a').forEach(function (a) {
+		a.addEventListener('click', function (ev) {
+			ev.preventDefault();
+			var kind = a.getAttribute('data-kind');
+			a.parentNode.querySelectorAll('a').forEach(function (x) { x.classList.toggle('is-active', x === a); });
+			a.closest('[data-sap-cloud]').querySelectorAll('.sap-cloud-w').forEach(function (w) { w.classList.toggle('is-hidden', kind !== 'all' && w.getAttribute('data-kind') !== kind); });
+		});
+	});
+
+	/* ---- Client site: test connection, revision draft / publish / rollback ---- */
+	document.addEventListener('click', function (ev) {
+		var test = ev.target.closest('[data-sap-site-test]');
+		var act = ev.target.closest('[data-sap-site-do]');
+		if (test) {
+			var st = document.querySelector('[data-sap-site-status]');
+			busy(test, 'در حال تست…');
+			post('site/' + test.getAttribute('data-sap-site-test') + '/test').then(function (res) { st.textContent = res.msg; st.className = 'sap-ok'; })
+				.catch(function (e) { st.textContent = e.message; st.className = 'sap-bad'; }).then(function () { idle(test); });
+		} else if (act) {
+			var box = act.closest('[data-sap-rev-site]');
+			var doing = act.getAttribute('data-sap-site-do');
+			var msgs = { publish: 'تغییرات روی سایت کارفرما منتشر شود؟', rollback: 'محتوا به نسخه قبل از انتشار برگردد؟', discard: 'پیش‌نویس روی سایت حذف شود؟' };
+			if (msgs[doing] && !window.confirm(msgs[doing])) { return; }
+			var seo = box.querySelector('[data-sap-site-seo]');
+			busy(act, 'در حال ارتباط با سایت…');
+			post('revision/' + box.getAttribute('data-sap-rev-site') + '/site', { do: doing, extra: { seo: seo && seo.checked ? 1 : 0 } }).then(function (res) {
+				toast(res.msg);
+				if (res.preview_url) { window.open(res.preview_url, '_blank'); }
+				setTimeout(function () { location.reload(); }, 900);
+			}).catch(function (e) { toast(e.message, true); idle(act); });
+		}
+	});
+
 })();

@@ -198,6 +198,7 @@ function sap_task_delete( $id ) {
 		sap_finding_set_status( $t['finding_id'], 'open', 0 );
 	}
 	sap_activity_delete_ref( $t['project_id'], 'task:' . $t['id'] );
+	sap_comments_purge( 'task', $t['id'] );
 	$wpdb->delete( sap_table( 'tasks' ), array( 'id' => (int) $id ) );
 }
 

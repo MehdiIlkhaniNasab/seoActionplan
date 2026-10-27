@@ -18,6 +18,32 @@ $site     = $project['site_url'] ?: 'https://' . sap_project_domain( $project ) 
 ?>
 <?php sap_view( 'project-form', array( 'project' => $project ) ); ?>
 
+<?php $conn = sap_site_conn( $project ); ?>
+<section class="sap-panel" id="site-connector">
+	<h2><?php echo sap_icon( 'link' ); // phpcs:ignore ?>اتصال به سایت کارفرما (افزونه رابط)</h2>
+	<p class="sap-muted">افزونه «SeoReport Connector» نسخه ۱٫۲ به بالا را روی سایت کارفرما نصب کنید (همان افزونه رابط SeoReport؛ یک افزونه با دو کلید جدا). در پیشخوان سایت کارفرما › تنظیمات › SeoReport Connector، بخش «سکان»، آدرس سایت و «کلید سکان» را بردارید و اینجا وارد کنید. با این اتصال:</p>
+	<ul class="sap-small">
+		<li>هر تغییری که روی سایت انجام شود (تایتل، متا، کلمه کانونی، محتوا، نامک، دسته‌ها، ویژگی محصول، انتشار) با «قبل ← بعد» در لاگ اقدامات می‌آید.</li>
+		<li>تحلیل محتوا، متن دقیق نوشته را از خود وردپرس می‌خواند (نه HTML صفحه).</li>
+		<li>تغییرات تأییدشده محتوا اول به‌صورت پیش‌نویس با لینک پیش‌نمایش روی سایت ساخته و بعد از تأیید شما منتشر می‌شوند (با امکان برگشت).</li>
+	</ul>
+	<form method="post" action="<?php echo $post; // phpcs:ignore ?>" class="sap-form">
+		<?php sap_form_fields( 'sap_site_save', array( 'project_id' => $pid ) ); ?>
+		<div class="sap-grid-2">
+			<label>آدرس سایت کارفرما<input type="url" name="site_conn_url" dir="ltr" value="<?php echo esc_attr( (string) ( $project['options']['site_url'] ?? '' ) ?: $site ); ?>"></label>
+			<label>کلید سکان<input type="password" name="site_conn_key" dir="ltr" autocomplete="off" placeholder="<?php echo $conn ? esc_attr( sap_mask( $conn['key'] ) . ' (ذخیره شده — برای تغییر، کلید جدید را وارد کنید)' ) : ''; ?>"></label>
+		</div>
+		<div class="sap-form-foot">
+			<button class="sap-btn is-primary" type="submit">ذخیره اتصال</button>
+			<?php if ( $conn ) : ?>
+				<button type="button" class="sap-btn" data-sap-site-test="<?php echo esc_attr( $pid ); ?>">تست اتصال</button>
+				<button type="button" class="sap-btn" data-sap-step="site_log" data-project="<?php echo esc_attr( $pid ); ?>">دریافت لاگ تغییرات سایت</button>
+				<span class="sap-muted" data-sap-site-status></span>
+			<?php endif; ?>
+		</div>
+	</form>
+</section>
+
 <section class="sap-panel">
 	<h2><?php echo sap_icon( 'link' ); // phpcs:ignore ?>اتصال‌ها و API پروژه</h2>
 	<div class="sap-kv">

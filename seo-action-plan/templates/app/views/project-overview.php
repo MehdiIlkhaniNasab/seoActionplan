@@ -109,6 +109,51 @@ foreach ( $tasks as $t ) {
 	</div>
 </section>
 
+<?php
+// «Start here»: only the three most important open tasks, so a beginner is not lost in the analysis.
+$today = current_time( 'Y-m-d' );
+$open  = array_values( array_filter( $tasks, function ( $t ) {
+	return in_array( $t['status'], array( 'doing', 'next', 'inbox' ), true );
+} ) );
+usort( $open, function ( $a, $b ) use ( $today ) {
+	$ra = ( 'doing' === $a['status'] ? 0 : 2 ) - ( $a['due_date'] && $a['due_date'] < $today ? 1 : 0 );
+	$rb = ( 'doing' === $b['status'] ? 0 : 2 ) - ( $b['due_date'] && $b['due_date'] < $today ? 1 : 0 );
+	return $ra <=> $rb ?: $b['score'] <=> $a['score'];
+} );
+$top3 = array_slice( $open, 0, 3 );
+?>
+<?php if ( $top3 ) : ?>
+	<section class="sap-panel sap-start">
+		<div class="sap-panel-head">
+			<h2><?php echo sap_icon( 'target' ); // phpcs:ignore ?>از اینجا شروع کن</h2>
+			<small class="sap-muted">بقیه کارها را فعلاً نادیده بگیر؛ با تمام شدن هر کدام، کار بعدی اینجا می‌آید.</small>
+		</div>
+		<ol class="sap-start-list">
+			<?php foreach ( $top3 as $n => $t ) : ?>
+				<?php
+				$why = '';
+				foreach ( preg_split( '/\r?\n/', (string) $t['notes'] ) as $line ) {
+					$line = trim( preg_replace( '/^چرا:\s*/u', '', $line ) );
+					if ( '' !== $line ) {
+						$why = $line;
+						break;
+					}
+				}
+				?>
+				<li class="is-<?php echo esc_attr( $t['status'] ); ?>">
+					<span class="sap-start-n"><?php echo esc_html( sap_fa( $n + 1 ) ); ?></span>
+					<div>
+						<b><?php echo esc_html( $t['title'] ); ?></b>
+						<?php if ( $why ) : ?><p class="sap-small"><span class="sap-muted">چرا اول این؟</span> <?php echo esc_html( mb_substr( $why, 0, 220 ) ); ?></p><?php endif; ?>
+						<small class="sap-muted"><?php echo esc_html( sap_context_label( $t['context'] ) . ' · ' . sap_num( $t['effort'], 1 ) . ' ساعت' . ( $t['due_date'] ? ' · سررسید ' . sap_jdate( $t['due_date'], 'day' ) : '' ) . ( 'doing' === $t['status'] ? ' · در حال انجام' : '' ) ); ?></small>
+					</div>
+					<a class="sap-btn is-small <?php echo 0 === $n ? 'is-primary' : ''; ?>" href="<?php echo esc_url( sap_project_url( $pid, 'plan', array( 'task' => $t['id'] ) ) ); ?>"><?php echo 'doing' === $t['status'] ? 'ادامه' : 'شروع'; ?></a>
+				</li>
+			<?php endforeach; ?>
+		</ol>
+	</section>
+<?php endif; ?>
+
 <?php if ( $ai ) : ?>
 	<section class="sap-panel sap-ai">
 		<div class="sap-panel-head">

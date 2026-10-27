@@ -155,6 +155,8 @@ endif;
 	<?php endif; ?>
 </section>
 
+<section class="sap-panel"><?php sap_view( 'comments', array( 'type' => 'revision', 'object_id' => $rev['id'], 'project_id' => $pid ) ); ?></section>
+
 <?php
 $by_block = array();
 foreach ( $rev['edits'] as $e ) {
@@ -231,10 +233,53 @@ $locked = in_array( $rev['status'], array( 'approved', 'published', 'rejected' )
 			<span class="sap-chip is-rev-<?php echo esc_attr( $rev['status'] ); ?>"><?php echo esc_html( $statuses[ $rev['status'] ] ); ?></span>
 		<?php endif; ?>
 		<button type="button" class="sap-btn" data-sap-copy-html><?php echo sap_icon( 'log', 16 ); // phpcs:ignore ?>کپی HTML نهایی</button>
-		<button type="button" class="sap-btn" disabled title="بعد از اتصال افزونه رابط سایت کارفرما (فاز ۳): ساخت پیش‌نویس روی سایت، پیش‌نمایش و انتشار">انتشار روی سایت (به‌زودی)</button>
 		<?php $start( $rev['url'], 'تحلیل دوباره', '' ); ?>
 	</div>
 	<textarea hidden data-sap-final-html><?php echo esc_textarea( sap_content_merge( $rev ) ); ?></textarea>
 	<script type="application/json" data-sap-rev-edits><?php echo wp_json_encode( array_map( function ( $e ) { return array( 'id' => $e['id'], 'block' => $e['block'], 'op' => $e['op'], 'html' => $e['html'] ); }, $rev['edits'] ) ); ?></script>
 	<script type="application/json" data-sap-rev-blocks><?php echo wp_json_encode( array_map( function ( $b ) { return array( 'id' => $b['id'], 'html' => $b['html'] ); }, $blocks ) ); ?></script>
 </form>
+
+<?php
+$site_state = $rev['progress']['site'] ?? array();
+$connected  = sap_site_connected( $project );
+?>
+<section class="sap-panel sap-publish" data-sap-rev-site="<?php echo esc_attr( $rev['id'] ); ?>">
+	<h3><?php echo sap_icon( 'link' ); // phpcs:ignore ?>انتشار روی سایت</h3>
+	<?php if ( ! $connected ) : ?>
+		<p class="sap-muted">برای انتشار مستقیم، افزونه رابط (نسخه ۱٫۲) را روی سایت کارفرما نصب و در <a href="<?php echo esc_url( sap_project_url( $pid, 'settings' ) . '#site-connector' ); ?>">تنظیمات پروژه</a> وصل کنید. تا آن موقع «کپی HTML نهایی» را بزنید و در ویرایشگر وردپرس جایگزین کنید.</p>
+	<?php elseif ( 'site' !== ( $rev['original']['source'] ?? '' ) ) : ?>
+		<p class="sap-warn">این تحلیل از HTML صفحه انجام شده است. «تحلیل دوباره» را بزنید تا متن دقیق از خود وردپرس خوانده شود؛ بعد می‌توانید مستقیم منتشر کنید.</p>
+	<?php elseif ( ! in_array( $rev['status'], array( 'approved', 'published' ), true ) ) : ?>
+		<p class="sap-muted">اول تغییرات موردنظر را انتخاب و «تأیید» کنید؛ بعد اینجا پیش‌نویس روی سایت ساخته می‌شود.</p>
+	<?php else : ?>
+		<ol class="sap-publish-steps">
+			<li class="<?php echo $site_state ? 'is-done' : 'is-current'; ?>">
+				<b>۱. ساخت پیش‌نویس روی سایت</b>
+				<span class="sap-muted">محتوا منتشر نمی‌شود؛ فقط یک لینک پیش‌نمایش ساخته می‌شود.</span>
+				<?php if ( ! empty( $rev['audit']['title'] ) || ! empty( $rev['audit']['meta'] ) ) : ?>
+					<label class="sap-check"><input type="checkbox" data-sap-site-seo> تایتل و متای پیشنهادی هم اعمال شود</label>
+				<?php endif; ?>
+				<button type="button" class="sap-btn is-small <?php echo $site_state ? '' : 'is-primary'; ?>" data-sap-site-do="draft"><?php echo $site_state ? 'ساخت دوباره پیش‌نویس' : 'ساخت پیش‌نویس'; ?></button>
+			</li>
+			<li class="<?php echo 'draft' === ( $site_state['state'] ?? '' ) ? 'is-current' : ( in_array( $site_state['state'] ?? '', array( 'published', 'rolled_back' ), true ) ? 'is-done' : '' ); ?>">
+				<b>۲. بررسی پیش‌نمایش و انتشار</b>
+				<?php if ( ! empty( $site_state['preview'] ) && 'draft' === $site_state['state'] ) : ?>
+					<a class="sap-btn is-small" href="<?php echo esc_url( $site_state['preview'] ); ?>" target="_blank" rel="noopener">مشاهده پیش‌نمایش</a>
+					<button type="button" class="sap-btn is-small is-primary" data-sap-site-do="publish">تأیید و انتشار</button>
+					<button type="button" class="sap-btn is-small is-ghost" data-sap-site-do="discard">حذف پیش‌نویس</button>
+				<?php elseif ( 'published' === ( $site_state['state'] ?? '' ) ) : ?>
+					<span class="sap-chip is-src-manual">منتشر شد · <?php echo esc_html( sap_jdate( $site_state['published_at'] ?? '' ) ); ?></span>
+				<?php endif; ?>
+			</li>
+			<?php if ( 'published' === ( $site_state['state'] ?? '' ) ) : ?>
+				<li>
+					<b>برگشت</b>
+					<span class="sap-muted">اگر نتیجه مطلوب نبود، محتوا و فیلدهای تغییرکرده به نسخه قبل برمی‌گردند.</span>
+					<button type="button" class="sap-btn is-small is-ghost is-danger" data-sap-site-do="rollback">برگشت به نسخه قبل</button>
+				</li>
+			<?php endif; ?>
+		</ol>
+	<?php endif; ?>
+</section>
+

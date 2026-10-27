@@ -23,9 +23,32 @@ function sap_flash() {
 }
 
 /**
- * Project tabs.
+ * Display mode of the current user: «simple» (guided, fewer tabs) or «pro».
  */
-function sap_project_tabs() {
+function sap_ui_mode() {
+	$m = get_user_meta( get_current_user_id(), 'sap_mode', true );
+	return 'pro' === $m ? 'pro' : 'simple';
+}
+
+/**
+ * Project tabs. In simple mode only the everyday ones are shown; the others stay
+ * reachable by URL and from the links that point to them.
+ *
+ * @param string $mode simple|pro|all (default: the user's mode).
+ */
+function sap_project_tabs( $mode = '' ) {
+	$mode = $mode ?: sap_ui_mode();
+	$all  = sap_project_tabs_all();
+	if ( 'simple' !== $mode ) {
+		return $all;
+	}
+	return array_intersect_key( $all, array_flip( array( 'overview', 'plan', 'calendar', 'ideas', 'keywords', 'activity', 'settings' ) ) );
+}
+
+/**
+ * Every project tab.
+ */
+function sap_project_tabs_all() {
 	return array(
 		'overview' => array( 'نمای کلی', 'grid' ),
 		'insights' => array( 'تحلیل هوشمند', 'spark' ),
@@ -33,6 +56,8 @@ function sap_project_tabs() {
 		'keywords' => array( 'نقشه کلمات', 'research' ),
 		'content'  => array( 'بازنویسی محتوا', 'log' ),
 		'plan'     => array( 'اکشن پلن ماهانه', 'list' ),
+		'calendar' => array( 'تقویم محتوا', 'clock' ),
+		'ideas'    => array( 'ایده‌های محتوا', 'spark' ),
 		'activity' => array( 'لاگ اقدامات', 'log' ),
 		'focuses'  => array( 'Focus و اهداف', 'target' ),
 		'settings' => array( 'تنظیمات پروژه', 'settings' ),

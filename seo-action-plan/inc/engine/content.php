@@ -225,8 +225,13 @@ function sap_content_step( $rev ) {
 		$in     = array_flip( $ids );
 		$part   = array();
 		foreach ( $blocks as $b ) {
-			if ( isset( $in[ $b['id'] ] ) ) {
+			if ( isset( $in[ $b['id'] ] ) && empty( $b['locked'] ) ) {
 				$part[] = array( 'id' => $b['id'], 'tag' => $b['tag'], 'html' => $b['html'] );
+			}
+		}
+		foreach ( $blocks as $b ) {
+			if ( ! empty( $b['locked'] ) ) {
+				unset( $in[ $b['id'] ] ); // Gallery, columns, shortcodes…: not editable from here.
 			}
 		}
 		$issues  = array_values( array_filter( (array) $audit['issues'], function ( $i ) use ( $in ) {
@@ -467,4 +472,102 @@ function sap_content_approve( $rev, $accepted ) {
 		sap_task_save( array( 'result' => sprintf( 'محتوای صفحه ممیزی و بازنویسی شد: %s تغییر تأیید شد (%s).', sap_num( count( $on ) ), implode( '، ', $parts ) ) ), $task['id'] );
 	}
 	return count( $on );
+}
+
+/**
+ * Put an approved revision on the client site through the connector:
+ * draft (with preview link) → publish → (optional) roll back.
+ *
+ * @param string $do    draft|publish|discard|rollback.
+ * @param array  $extra seo => also apply the suggested SEO title and meta.
+ * @return array|WP_Error {msg, preview_url?}
+ */
+function sap_content_site_action( $rev, $do, $extra = array() ) {
+	$project = sap_project( $rev['project_id'] );
+	if ( ! sap_site_connected( $project ) ) {
+		return new WP_Error( 'sap_site', 'اتصال به سایت کارفرما (افزونه رابط) در تنظیمات پروژه تنظیم نشده.' );
+	}
+	if ( 'site' !== ( $rev['original']['source'] ?? '' ) ) {
+		return new WP_Error( 'sap_site_source', 'این تحلیل از HTML صفحه انجام شده، نه از متن خود وردپرس. «تحلیل دوباره» را بزنید تا متن دقیق از افزونه رابط خوانده شود، بعد منتشر کنید.' );
+	}
+	$prog = $rev['progress'];
+	$site = (array) ( $prog['site'] ?? array() );
+	$ref  = 'rev' . $rev['id'];
+	$url  = $rev['url'];
+	switch ( $do ) {
+		case 'draft':
+			if ( ! in_array( $rev['status'], array( 'approved', 'published' ), true ) ) {
+				return new WP_Error( 'sap_rev_state', 'اول تغییرات را تأیید کنید.' );
+			}
+			$changes = array( 'content' => sap_content_final_raw( $rev ) );
+			if ( ! empty( $extra['seo'] ) ) {
+				if ( '' !== ( $rev['audit']['title'] ?? '' ) ) {
+					$changes['seo_title'] = $rev['audit']['title'];
+				}
+				if ( '' !== ( $rev['audit']['meta'] ?? '' ) ) {
+					$changes['meta_description'] = $rev['audit']['meta'];
+				}
+			}
+			$res = sap_site_request( $project, 'POST', 'apply', array( 'url' => $url, 'changes' => $changes, 'mode' => 'draft', 'ref' => $ref, 'note' => $rev['title'] ) );
+			if ( is_wp_error( $res ) ) {
+				return $res;
+			}
+			$prog['site'] = array( 'state' => 'draft', 'ref' => $ref, 'preview' => (string) ( $res['preview_url'] ?? '' ), 'fields' => array_keys( $changes ), 'at' => sap_now() );
+			sap_revision_save( array( 'progress' => $prog ), $rev['id'] );
+			return array( 'msg' => 'پیش‌نویس روی سایت ساخته شد؛ پیش‌نمایش را ببینید و بعد منتشر کنید.', 'preview_url' => $prog['site']['preview'] );
+		case 'publish':
+			if ( 'draft' !== ( $site['state'] ?? '' ) ) {
+				return new WP_Error( 'sap_rev_state', 'اول پیش‌نویس روی سایت بسازید.' );
+			}
+			$res = sap_site_request( $project, 'POST', 'publish', array( 'url' => $url ) );
+			if ( is_wp_error( $res ) ) {
+				return $res;
+			}
+			$prog['site']['state']        = 'published';
+			$prog['site']['published_at'] = sap_now();
+			sap_revision_save( array( 'progress' => $prog, 'status' => 'published' ), $rev['id'] );
+			$task = $rev['task_id'] ? sap_task( $rev['task_id'] ) : null;
+			sap_activity_add( $rev['project_id'], array(
+				'focus_id'     => $task['focus_id'] ?? 0,
+				'task_id'      => $rev['task_id'],
+				'category'     => 'content_update',
+				'action'       => 'content_publish',
+				'title'        => sprintf( 'انتشار بروزرسانی محتوای «%s» روی سایت', $rev['title'] ),
+				'url'          => $url,
+				'before_value' => sprintf( '%s بلوک محتوای قبلی', sap_num( count( (array) $rev['original']['blocks'] ) ) ),
+				'after_value'  => sprintf( '%s تغییر منتشر شد%s', sap_num( count( array_filter( $rev['edits'], function ( $e ) {
+					return ! empty( $e['accept'] );
+				} ) ) ), in_array( 'seo_title', (array) ( $site['fields'] ?? array() ), true ) ? ' + تایتل و متای جدید' : '' ),
+				'source'       => 'tool',
+				'ref'          => 'pub:' . $rev['id'],
+				'meta'         => array( 'revision' => $rev['id'] ),
+			) );
+			return array( 'msg' => 'روی سایت منتشر شد و در لاگ اقدامات ثبت شد. بعد از حدود ۱۴ روز اثرش را بررسی کنید.' );
+		case 'discard':
+			$res = sap_site_request( $project, 'POST', 'discard', array( 'url' => $url ) );
+			if ( is_wp_error( $res ) ) {
+				return $res;
+			}
+			unset( $prog['site'] );
+			sap_revision_save( array( 'progress' => $prog ), $rev['id'] );
+			return array( 'msg' => 'پیش‌نویس روی سایت حذف شد.' );
+		case 'rollback':
+			$res = sap_site_request( $project, 'POST', 'rollback', array( 'url' => $url, 'ref' => $site['ref'] ?? $ref ) );
+			if ( is_wp_error( $res ) ) {
+				return $res;
+			}
+			$prog['site']['state'] = 'rolled_back';
+			sap_revision_save( array( 'progress' => $prog, 'status' => 'approved' ), $rev['id'] );
+			sap_activity_add( $rev['project_id'], array(
+				'task_id'  => $rev['task_id'],
+				'category' => 'content_update',
+				'action'   => 'content_rollback',
+				'title'    => sprintf( 'برگرداندن محتوای «%s» به نسخه قبل', $rev['title'] ),
+				'url'      => $url,
+				'source'   => 'tool',
+				'meta'     => array( 'revision' => $rev['id'] ),
+			) );
+			return array( 'msg' => 'محتوا به نسخه قبل برگشت.' );
+	}
+	return new WP_Error( 'sap_do', 'عملیات نامعتبر.' );
 }

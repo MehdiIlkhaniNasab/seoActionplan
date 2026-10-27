@@ -193,6 +193,49 @@ function sap_install() {
 		KEY project_id (project_id)
 	) $c;" );
 
+	dbDelta( 'CREATE TABLE ' . sap_table( 'comments' ) . " (
+		id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+		project_id bigint(20) unsigned NOT NULL DEFAULT 0,
+		object_type varchar(20) NOT NULL DEFAULT '',
+		object_id bigint(20) unsigned NOT NULL DEFAULT 0,
+		user_id bigint(20) unsigned NOT NULL DEFAULT 0,
+		body text NULL,
+		created_at datetime NOT NULL DEFAULT '0000-00-00 00:00:00',
+		PRIMARY KEY  (id),
+		KEY object (object_type,object_id)
+	) $c;" );
+
+	dbDelta( 'CREATE TABLE ' . sap_table( 'ideas' ) . " (
+		id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+		project_id bigint(20) unsigned NOT NULL DEFAULT 0,
+		focus_id bigint(20) unsigned NOT NULL DEFAULT 0,
+		keyword varchar(190) NOT NULL DEFAULT '',
+		secondary text NULL,
+		title varchar(255) NOT NULL DEFAULT '',
+		brief text NULL,
+		goal text NULL,
+		intent varchar(20) NOT NULL DEFAULT '',
+		cluster varchar(190) NOT NULL DEFAULT '',
+		volume int(11) NOT NULL DEFAULT 0,
+		kp int(11) NOT NULL DEFAULT 0,
+		priority varchar(10) NOT NULL DEFAULT 'medium',
+		links longtext NULL,
+		outline longtext NULL,
+		source_note text NULL,
+		evidence text NULL,
+		origin varchar(10) NOT NULL DEFAULT 'ai',
+		status varchar(20) NOT NULL DEFAULT 'new',
+		period varchar(7) NOT NULL DEFAULT '',
+		slot int(11) NOT NULL DEFAULT 0,
+		planned_date date NULL,
+		published_url text NULL,
+		task_id bigint(20) unsigned NOT NULL DEFAULT 0,
+		created_at datetime NOT NULL DEFAULT '0000-00-00 00:00:00',
+		updated_at datetime NOT NULL DEFAULT '0000-00-00 00:00:00',
+		PRIMARY KEY  (id),
+		KEY project_status (project_id,status)
+	) $c;" );
+
 	foreach ( array( 'administrator' ) as $role_name ) {
 		$role = get_role( $role_name );
 		if ( $role ) {

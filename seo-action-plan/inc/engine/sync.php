@@ -16,6 +16,7 @@ defined( 'ABSPATH' ) || exit;
  */
 function sap_sync_steps() {
 	return array(
+		'site_log'     => 'سایت کارفرما: لاگ تغییرات (افزونه رابط)',
 		'gsc_qp'       => 'سرچ کنسول: کوئری‌ها و صفحات',
 		'gsc_pages'    => 'سرچ کنسول: مقایسه صفحات با ۲۸ روز قبل',
 		'gsc_sitemaps' => 'سرچ کنسول: سایت‌مپ‌ها',
@@ -27,13 +28,14 @@ function sap_sync_steps() {
 		'pages'        => 'خواندن محتوای صفحات کلیدی',
 		'cwv'          => 'Core Web Vitals (PageSpeed)',
 		'keymap'       => 'نقشه کلمات: کلمه اصلی هر صفحه (شیت و سرچ کنسول)',
-		'ai_keymap'    => 'هوش مصنوعی ۱/۶: تشخیص کلمه اصلی صفحات',
+		'ai_keymap'    => 'هوش مصنوعی ۱/۷: تشخیص کلمه اصلی صفحات',
 		'analyze'      => 'قوانین تحلیل: کشف ایرادها و فرصت‌ها',
-		'ai_cannibal'  => 'هوش مصنوعی ۲/۶: کنیبالیزیشن هوشمند',
-		'ai_content'   => 'هوش مصنوعی ۳/۶: تحلیل صفحات و محتوا',
-		'ai_links'     => 'هوش مصنوعی ۴/۶: لینک‌سازی داخلی',
-		'ai_technical' => 'هوش مصنوعی ۵/۶: تکنیکال، سایت‌مپ، اسکیما و سرعت',
-		'ai_plan'      => 'هوش مصنوعی ۶/۶: جمع‌بندی و اکشن پلن',
+		'ai_cannibal'  => 'هوش مصنوعی ۲/۷: کنیبالیزیشن هوشمند',
+		'ai_content'   => 'هوش مصنوعی ۳/۷: تحلیل صفحات و محتوا',
+		'ai_links'     => 'هوش مصنوعی ۴/۷: لینک‌سازی داخلی',
+		'ai_technical' => 'هوش مصنوعی ۵/۷: تکنیکال، سایت‌مپ، اسکیما و سرعت',
+		'ai_ideas'     => 'هوش مصنوعی ۶/۷: ایده‌ها و کلمات کلیدی محتوای جدید',
+		'ai_plan'      => 'هوش مصنوعی ۷/۷: جمع‌بندی و اکشن پلن',
 		'writeback'    => 'نوشتن ستون‌های خودکار در گوگل شیت',
 	);
 }
@@ -87,6 +89,19 @@ function sap_sync_all( $project_id, $force = false, $scheduled = false ) {
  */
 function sap_skip( $msg ) {
 	return array( 'ok' => true, 'skipped' => true, 'msg' => $msg );
+}
+
+/* ---- Client site ------------------------------------------------------- */
+
+function sap_step_site_log( $project ) {
+	if ( ! sap_site_connected( $project ) ) {
+		return sap_skip( 'اتصال به سایت کارفرما (افزونه رابط) تنظیم نشده — تنظیمات پروژه.' );
+	}
+	$res = sap_site_pull_changes( $project );
+	if ( is_wp_error( $res ) ) {
+		return $res;
+	}
+	return $res['added'] ? array( 'msg' => sprintf( '%s تغییر جدید سایت در لاگ اقدامات ثبت شد.', sap_num( $res['added'] ) ) ) : sap_skip( 'تغییر جدیدی در سایت ثبت نشده.' );
 }
 
 /* ---- Search Console ---------------------------------------------------- */
@@ -150,13 +165,23 @@ function sap_step_sheets( $project ) {
 	}
 	$msgs   = array();
 	$errors = array();
-	$cal    = sap_sheet_read( $project['sheet_id'], $project['sheet_calendar_tab'], 'calendar' );
+	// The agency's «Blog» layout (monthly blocks) or the standard one-row-per-article table.
+	$raw = sap_sheet_values( $project['sheet_id'], $project['sheet_calendar_tab'] );
+	if ( ! is_wp_error( $raw ) && sap_is_blog_layout( $raw ) ) {
+		$items    = sap_blog_parse( $raw );
+		$kw_vals  = sap_sheet_values( $project['sheet_id'], SAP_TAB_BKEYWORD );
+		$related  = is_wp_error( $kw_vals ) ? array() : sap_bkeyword_parse( $kw_vals );
+		$imported = sap_calendar_import_sheet( $project, $items );
+		$cal      = array( 'rows' => sap_blog_calendar_rows( $items, $related ), 'header' => array(), 'map' => array(), 'tab' => $project['sheet_calendar_tab'], 'layout' => 'blog' );
+	} else {
+		$cal = sap_sheet_read( $project['sheet_id'], $project['sheet_calendar_tab'], 'calendar' );
+	}
 	if ( is_wp_error( $cal ) ) {
 		$errors[] = $cal->get_error_message();
 	} else {
 		$logged = sap_log_published_content( $project, $cal['rows'] );
 		sap_dataset_put( $project['id'], 'sheet_calendar', $cal, array( 'count' => count( $cal['rows'] ) ) );
-		$msgs[] = sprintf( 'تقویم محتوا: %s ردیف', sap_num( count( $cal['rows'] ) ) ) . ( $logged ? sprintf( ' (%s انتشار جدید در لاگ ثبت شد)', sap_num( $logged ) ) : '' );
+		$msgs[] = sprintf( 'تقویم محتوا: %s ردیف', sap_num( count( $cal['rows'] ) ) ) . ( $logged ? sprintf( ' (%s انتشار جدید در لاگ ثبت شد)', sap_num( $logged ) ) : '' ) . ( ! empty( $imported ) ? sprintf( ' · %s مقاله از شیت وارد تقویم ابزار شد', sap_num( $imported ) ) : '' );
 	}
 	$cl = sap_sheet_read( $project['sheet_id'], $project['sheet_cluster_tab'], 'clusters' );
 	if ( is_wp_error( $cl ) ) {
@@ -534,6 +559,21 @@ function sap_step_ai_links( $project, $force = false ) {
 function sap_step_ai_technical( $project, $force = false ) {
 	return sap_ai_stage_step( $project, 'technical', $force );
 }
+function sap_step_ai_ideas( $project, $force = false ) {
+	if ( ! sap_ai_connected() ) {
+		return sap_skip( 'کلید هوش مصنوعی وارد نشده.' );
+	}
+	$pending = count( sap_ideas( $project['id'], array( 'status' => 'new' ) ) );
+	if ( ! $force && $pending >= 5 ) {
+		return sap_skip( sprintf( '%s ایده هنوز منتظر بررسی شماست (تب «ایده‌های محتوا»)؛ ایده جدید ساخته نشد.', sap_num( $pending ) ) );
+	}
+	$res = sap_ideas_generate( $project, 8 );
+	if ( is_wp_error( $res ) ) {
+		return $res;
+	}
+	$u = sap_ai_usage();
+	return array( 'msg' => sprintf( '%s ایده محتوای جدید (کلمه اصلی، فرعی، هدف و ساختار) در تب «ایده‌های محتوا»', sap_num( $res['added'] ) ) . sprintf( ' · هزینه حدود %s دلار.', sap_num( $u['last_cost'], 3 ) ) );
+}
 function sap_step_ai_plan( $project, $force = false ) {
 	return sap_ai_stage_step( $project, 'plan', $force );
 }
@@ -573,7 +613,7 @@ function sap_step_writeback( $project ) {
 	$today = sap_jdate( current_time( 'Y-m-d' ), 'short' );
 	$msgs  = array();
 	$fail  = false;
-	if ( ! empty( $ctx['sheet_calendar']['rows'] ) ) {
+	if ( ! empty( $ctx['sheet_calendar']['rows'] ) && 'blog' !== ( $ctx['sheet_calendar']['layout'] ?? '' ) ) {
 		$cols = array_fill_keys( array( 'a_volume', 'a_position', 'a_clicks', 'a_impr', 'a_missing', 'a_updated' ), array() );
 		foreach ( $ctx['sheet_calendar']['rows'] as $r ) {
 			$row  = $r['_row'];
@@ -615,9 +655,20 @@ function sap_step_writeback( $project ) {
 		$fail   = $fail || is_wp_error( $res );
 		$msgs[] = is_wp_error( $res ) ? 'کلاسترینگ: ' . $res->get_error_message() : 'کلاسترینگ بروز شد';
 	}
-	if ( ! $msgs ) {
-		return sap_skip( 'داده شیتی برای نوشتن نیست.' );
+	// Content calendar (Blog + B keyword), keyword map and change log tabs.
+	if ( sap_calendar_months( $project['id'] ) ) {
+		$res    = sap_calendar_write_sheet( $project );
+		$fail   = $fail || is_wp_error( $res );
+		$msgs[] = is_wp_error( $res ) ? 'تقویم Blog: ' . $res->get_error_message() : $res;
 	}
+	if ( sap_keymap( $project['id'] ) ) {
+		$res    = sap_keymap_write_sheet( $project );
+		$fail   = $fail || is_wp_error( $res );
+		$msgs[] = is_wp_error( $res ) ? 'نقشه کلمات: ' . $res->get_error_message() : $res;
+	}
+	$res    = sap_log_write_sheet( sap_project( $project['id'] ) );
+	$fail   = $fail || is_wp_error( $res );
+	$msgs[] = is_wp_error( $res ) ? 'لاگ تغییرات: ' . $res->get_error_message() : $res;
 	return array( 'ok' => ! $fail, 'msg' => implode( ' · ', $msgs ) );
 }
 

@@ -24,6 +24,10 @@ $log = (array) ( $project['options']['sync_log'] ?? array() );
 		</p>
 	</div>
 	<div class="sap-actions">
+		<div class="sap-mode" title="حالت ساده فقط بخش‌های روزمره را نشان می‌دهد">
+			<a class="<?php echo 'simple' === sap_ui_mode() ? 'is-active' : ''; ?>" href="<?php echo esc_url( add_query_arg( 'sap_mode', 'simple' ) ); ?>">ساده</a>
+			<a class="<?php echo 'pro' === sap_ui_mode() ? 'is-active' : ''; ?>" href="<?php echo esc_url( add_query_arg( 'sap_mode', 'pro' ) ); ?>">حرفه‌ای</a>
+		</div>
 		<button type="button" class="sap-btn is-primary" data-sap-sync="<?php echo esc_attr( $project['id'] ); ?>"><?php echo sap_icon( 'spark' ); // phpcs:ignore ?>تحلیل کامل</button>
 		<button type="button" class="sap-btn" data-sap-sync="<?php echo esc_attr( $project['id'] ); ?>" data-force="1" title="داده‌های سئو سیگنال را هم با وجود کش تازه دوباره می‌گیرد (مصرف سهمیه)"><?php echo sap_icon( 'refresh' ); // phpcs:ignore ?>بدون کش</button>
 	</div>

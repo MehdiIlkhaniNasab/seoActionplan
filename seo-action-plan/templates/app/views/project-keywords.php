@@ -61,6 +61,39 @@ $base = sap_project_url( $pid, 'keywords' );
 	</div>
 </section>
 
+<?php
+$cloud  = sap_keyword_cloud( $project );
+$states = array( 'top3' => 'رتبه ۱ تا ۳', 'top10' => 'صفحه اول', 'near' => 'نزدیک صفحه اول (۱۱ تا ۲۰)', 'far' => 'دورتر از ۲۰', 'none' => 'بدون رتبه', 'planned' => 'در تقویم محتوا' );
+$kinds  = array( 'all' => 'همه', 'primary' => 'کلمات اصلی صفحات', 'secondary' => 'کلمات فرعی', 'query' => 'کوئری‌های سرچ کنسول', 'planned' => 'تقویم و ایده‌ها' );
+?>
+<?php if ( $cloud ) : ?>
+	<section class="sap-panel sap-cloud-box" data-sap-cloud>
+		<div class="sap-panel-head">
+			<h2><?php echo sap_icon( 'spark' ); // phpcs:ignore ?>ابر کلمات کلیدی پروژه</h2>
+			<div class="sap-seg is-small" data-sap-cloud-kind>
+				<?php foreach ( $kinds as $k => $l ) : ?>
+					<a href="#" data-kind="<?php echo esc_attr( $k ); ?>" class="<?php echo 'all' === $k ? 'is-active' : ''; ?>"><?php echo esc_html( $l ); ?></a>
+				<?php endforeach; ?>
+			</div>
+		</div>
+		<p class="sap-muted sap-small">اندازه هر کلمه = نمایش در سرچ کنسول (یا حجم جستجو)؛ رنگ = وضعیت رتبه. روی کلمه بروید تا جزئیات را ببینید.</p>
+		<div class="sap-cloud">
+			<?php foreach ( $cloud as $w ) : ?>
+				<?php
+				$tip = $w['kw'] . ( $w['impr'] ? ' · ' . sap_num( $w['impr'] ) . ' نمایش' : '' ) . ( $w['volume'] ? ' · حجم ' . sap_num( $w['volume'] ) : '' ) . ( $w['pos'] ? ' · جایگاه ' . sap_num( $w['pos'], 1 ) : '' ) . ( $w['page'] ? ' · ' . sap_page_title( $pid, $w['page'] ) : '' );
+				$tag = $w['page'] ? 'a' : 'span';
+				?>
+				<<?php echo esc_attr( $tag ); ?> class="sap-cloud-w is-<?php echo esc_attr( $w['state'] ); ?> is-k-<?php echo esc_attr( $w['kind'] ); ?>" data-kind="<?php echo esc_attr( $w['kind'] ); ?>" style="--w:<?php echo esc_attr( $w['weight'] ); ?>" title="<?php echo esc_attr( $tip ); ?>"<?php echo $w['page'] ? ' href="' . esc_url( $w['page'] ) . '" target="_blank" rel="noopener"' : ''; ?>><?php echo esc_html( $w['kw'] ); ?></<?php echo esc_attr( $tag ); ?>>
+			<?php endforeach; ?>
+		</div>
+		<div class="sap-cloud-legend">
+			<?php foreach ( $states as $k => $l ) : ?>
+				<span class="is-<?php echo esc_attr( $k ); ?>"><i></i><?php echo esc_html( $l ); ?> <small>(<?php echo esc_html( sap_num( count( array_filter( $cloud, function ( $w ) use ( $k ) { return $w['state'] === $k; } ) ) ) ); ?>)</small></span>
+			<?php endforeach; ?>
+		</div>
+	</section>
+<?php endif; ?>
+
 <div class="sap-toolbar">
 	<div class="sap-seg">
 		<?php foreach ( array( 'all' => 'همه', 'todo' => 'منتظر تأیید', 'conflict' => 'تداخل' ) as $k => $label ) : ?>

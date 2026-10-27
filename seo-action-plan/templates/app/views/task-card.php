@@ -18,6 +18,10 @@ $post    = esc_url( admin_url( 'admin-post.php' ) );
 ?>
 <details class="sap-task is-<?php echo esc_attr( $t['status'] ); ?>" id="task-<?php echo esc_attr( $t['id'] ); ?>" <?php echo ( (int) ( $open_id ?? 0 ) === $t['id'] ) ? 'open' : ''; ?>>
 	<summary>
+		<?php if ( $manager ) : ?>
+			<input type="checkbox" class="sap-task-pick" value="<?php echo esc_attr( $t['id'] ); ?>" aria-label="انتخاب">
+			<button type="button" class="sap-task-del" data-sap-task-del="<?php echo esc_attr( $t['id'] ); ?>" title="حذف کار" aria-label="حذف کار"><?php echo sap_icon( 'trash', 14 ); // phpcs:ignore ?></button>
+		<?php endif; ?>
 		<span class="sap-task-title"><?php echo esc_html( $t['title'] ); ?></span>
 		<span class="sap-task-meta">
 			<?php echo sap_context_chip( $t['context'] ); // phpcs:ignore ?>
@@ -68,6 +72,7 @@ $post    = esc_url( admin_url( 'admin-post.php' ) );
 		<?php if ( sap_ai_connected() && ! in_array( $t['status'], array( 'done', 'dropped' ), true ) ) : ?>
 			<button type="button" class="sap-btn is-small is-ai" data-sap-ai-task="<?php echo esc_attr( $t['id'] ); ?>"><?php echo sap_icon( 'spark', 14 ); // phpcs:ignore ?><?php echo '' === trim( $t['ai_output'] ) ? 'بنویس برام' : 'نوشتن دوباره'; ?></button>
 		<?php endif; ?>
+		<?php sap_view( 'comments', array( 'type' => 'task', 'object_id' => $t['id'], 'project_id' => $t['project_id'] ) ); ?>
 		<form method="post" action="<?php echo $post; // phpcs:ignore ?>" class="sap-form">
 			<?php sap_form_fields( 'sap_task_save', array( 'task_id' => $t['id'], '_return' => $here . '#task-' . $t['id'] ) ); ?>
 			<label>نتیجه / چه کاری انجام شد (در گزارش ماهانه می‌آید)<textarea name="result" rows="2" placeholder="مثلاً: تایتل از «…» به «…» تغییر کرد؛ ۴ سوال FAQ اضافه شد"><?php echo esc_textarea( $t['result'] ); ?></textarea></label>

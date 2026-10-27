@@ -103,6 +103,21 @@ $args = array( 'fnames' => $fnames, 'here' => $here, 'focuses' => $focuses, 'ope
 	</form>
 </details>
 
+<div class="sap-bulkbar" data-sap-bulkbar>
+	<label class="sap-check"><input type="checkbox" data-sap-bulk-toggle> انتخاب چندتایی</label>
+	<span class="sap-bulk-tools" hidden>
+		<label class="sap-check"><input type="checkbox" data-sap-bulk-all> همه کارهای این ماه</label>
+		<b data-sap-bulk-n>۰</b> انتخاب‌شده
+		<select data-sap-bulk-do>
+			<option value="">— اقدام —</option>
+			<option value="delete">حذف</option>
+			<optgroup label="تغییر وضعیت"><?php foreach ( sap_task_statuses() as $k => $label ) : ?><option value="status:<?php echo esc_attr( $k ); ?>"><?php echo esc_html( $label ); ?></option><?php endforeach; ?></optgroup>
+			<optgroup label="انتقال به ماه"><?php foreach ( sap_period_options( 1, 3 ) as $k => $label ) : ?><option value="period:<?php echo esc_attr( $k ); ?>"><?php echo esc_html( $label ); ?></option><?php endforeach; ?></optgroup>
+		</select>
+		<button type="button" class="sap-btn is-small is-primary" data-sap-bulk-go>اعمال</button>
+	</span>
+</div>
+
 <div class="sap-board">
 	<?php
 	foreach ( $cols as $status => $items ) :

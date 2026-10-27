@@ -139,6 +139,10 @@ function sap_ai_brief( $project ) {
 			'keyword'  => $f['keyword'],
 			'evidence' => $items,
 		);
+		$notes = sap_comments_for_ai( 'finding', $f['id'] );
+		if ( $notes ) {
+			$brief['findings'][ count( $brief['findings'] ) - 1 ]['expert_note'] = implode( ' / ', $notes );
+		}
 	}
 	foreach ( sap_tasks( array( 'project_id' => $pid, 'period' => $period ) ) as $t ) {
 		$brief['this_month'][] = array( 'title' => $t['title'], 'status' => $t['status'] );
@@ -357,6 +361,7 @@ function sap_ai_task_assist( $task ) {
 		'page'            => $page,
 		'related'         => $related ?: null,
 		'queries_of_page' => array( 'columns' => array( 'query', 'clicks', 'impressions', 'position' ), 'rows' => $queries ),
+		'expert_notes'    => array_merge( sap_comments_for_ai( 'task', $task['id'] ), $finding ? sap_comments_for_ai( 'finding', $finding['id'] ) : array() ),
 	);
 	$schema = array(
 		'type'                 => 'object',
@@ -375,6 +380,7 @@ function sap_ai_task_assist( $task ) {
 		'- لینک داخلی: صفحات مبدأ پیشنهادی و متن انکر.',
 		'- تکنیکال: دستورالعمل گام‌به‌گام دقیق برای همین مورد.',
 		'خروجی را با خطوط و تیترهای ساده متنی بنویس (بدون Markdown پیچیده). نکات اجرایی کوتاه را در tips بگذار.',
+		'expert_notes نظر و اصلاحات خود متخصص سئو درباره همین کار است؛ آن را دقیقاً رعایت کن و بر پیشنهادهای عمومی مقدم بدان.',
 		'',
 		wp_json_encode( $data, JSON_UNESCAPED_UNICODE ),
 	) );
@@ -916,6 +922,7 @@ function sap_ai_stage_run( $project, $stage, $force = false ) {
 	if ( 'plan' === $stage ) {
 		$task = implode( "\n", array(
 			'داده‌های پروژه سئو در JSON زیر است: خلاصه سرچ کنسول، Focusها، یافته‌های قوانین (findings با id) و نتیجه تحلیل‌های تخصصی قبلی (stage_cannibal، stage_content، stage_links، stage_technical).',
+			'هر جا expert_note آمده، نظر خود متخصص سئو است؛ آن را رعایت کن (اگر گفته کاری لازم نیست، آن را در پلن نیاور).',
 			'۱. وضعیت پروژه را تشخیص بده (summary)، سلامت هر حوزه را نمره ۰ تا ۱۰۰ بده (health) و برای هر Focus یک بینش کلیدی بنویس. نقاط قوت (wins) و ریسک‌ها (risks) را کوتاه فهرست کن.',
 			sprintf( '۲. اکشن پلن این ماه: ۸ تا ۱۵ کار مشخص در سقف %s ساعت، مرتب‌شده بر اساس اثر، با هفته پیشنهادی ۱ تا ۴. کارها را از نتایج تحلیل‌های تخصصی بساز و خروجی آماده آن‌ها را در deliverable بگذار: تایتل/متای پیشنهادی، FAQ، فهرست لینک‌های داخلی (مبدأ ← مقصد: انکر)، راه‌حل تکنیکال. کارهای هم‌نوع کوچک را در یک کار ادغام کن (مثلاً «۸ لینک داخلی به دسته X»). idهای finding مرتبط را در finding_ids بگذار. کارهای this_month را تکرار نکن.', sap_num( $project['capacity_hours'] ) ),
 		) );
