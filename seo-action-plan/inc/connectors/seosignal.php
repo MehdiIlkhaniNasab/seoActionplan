@@ -66,7 +66,7 @@ function sap_ss_connected() {
  *
  * @param string $endpoint e.g. "keyword-research-bulk".
  * @param array  $body     JSON body.
- * @param bool   $metered  Counts against the daily quota.
+ * @param bool|int $metered Counts against the daily quota (true = 1 unit, or the number of units).
  * @return array|WP_Error Full decoded response (with ok/data).
  */
 function sap_ss_request( $endpoint, $body = array(), $metered = true ) {
@@ -92,7 +92,17 @@ function sap_ss_request( $endpoint, $body = array(), $metered = true ) {
 	$code = (int) wp_remote_retrieve_response_code( $res );
 	$data = json_decode( wp_remote_retrieve_body( $res ), true );
 	if ( $metered && in_array( $code, array( 200, 422 ), true ) ) {
-		sap_ss_usage_bump( array( 'used' => sap_ss_usage()['used'] + 1 ) );
+		sap_ss_usage_bump( array( 'used' => sap_ss_usage()['used'] + ( true === $metered ? 1 : (int) $metered ) ) );
+	}
+	// What SEO Signal itself reports (usage / limit of the account), shown in the SEO Signal tab.
+	if ( is_array( $data ) ) {
+		$su = $data['usage'] ?? ( $data['data']['Usage'] ?? null );
+		$sl = $data['limit'] ?? ( $data['data']['Limit'] ?? null );
+		if ( null !== $su ) {
+			$rep              = (array) get_option( 'sap_ss_reported', array() );
+			$rep[ $endpoint ] = array( 'usage' => (int) $su, 'limit' => null === $sl ? null : (int) $sl, 'at' => current_time( 'mysql' ) );
+			update_option( 'sap_ss_reported', $rep, false );
+		}
 	}
 	if ( 200 === $code && ! empty( $data['ok'] ) ) {
 		return $data;
@@ -144,29 +154,141 @@ function sap_ss_volumes( $keywords ) {
 }
 
 /**
- * Keyword research for one keyword.
+ * Search types of keyword research.
+ */
+function sap_ss_research_types() {
+	return array(
+		'similar'       => 'کلمات مشابه و هم‌معنی',
+		'topical'       => 'کلمات هم‌موضوع',
+		'starting_with' => 'شروع‌شونده با این کلمه',
+		'ending_with'   => 'تمام‌شونده با این کلمه',
+		'questions'     => 'سوالات کاربران',
+	);
+}
+
+/**
+ * Keyword research for one keyword, with the keyword's own volume, trend and
+ * the domains that take its clicks.
  *
  * @param string $type similar|topical|starting_with|ending_with|questions.
- * @return array|WP_Error list of [word, volume, competition]
+ * @return array|WP_Error {rows: [word, volume, competition], meta}
  */
-function sap_ss_research( $keyword, $type = 'similar', $count = 200 ) {
+function sap_ss_research_full( $keyword, $type = 'similar', $count = 200 ) {
 	$res = sap_ss_request( 'keyword-research', array(
 		'keyword'     => $keyword,
-		'search_type' => $type,
-		'count'       => (int) $count,
+		'search_type' => array_key_exists( $type, sap_ss_research_types() ) ? $type : 'similar',
+		'count'       => min( 1000, max( 1, (int) $count ) ),
 	) );
 	if ( is_wp_error( $res ) ) {
 		return $res;
 	}
+	return array( 'rows' => sap_ss_word_rows( $res['data']['keywordList'] ?? array() ), 'meta' => sap_ss_trend_meta( (array) ( $res['data'] ?? array() ) ) );
+}
+
+/**
+ * Keyword research rows only (used by the analysis steps).
+ */
+function sap_ss_research( $keyword, $type = 'similar', $count = 200 ) {
+	$r = sap_ss_research_full( $keyword, $type, $count );
+	return is_wp_error( $r ) ? $r : $r['rows'];
+}
+
+/**
+ * [{Word, SearchVolume, Competition, Page}] → normalized rows.
+ */
+function sap_ss_word_rows( $list ) {
 	$out = array();
-	foreach ( (array) ( $res['data']['keywordList'] ?? array() ) as $k ) {
-		$out[] = array(
+	foreach ( (array) $list as $k ) {
+		$row = array(
 			'word'        => (string) ( $k['Word'] ?? '' ),
 			'volume'      => (int) ( $k['SearchVolume'] ?? 0 ),
 			'competition' => (string) ( $k['Competition'] ?? '' ),
 		);
+		if ( isset( $k['Page'] ) ) {
+			$row['page'] = (string) $k['Page'];
+		}
+		$out[] = $row;
 	}
 	return $out;
+}
+
+/**
+ * Volume, change, monthly trend and click share from a research response.
+ */
+function sap_ss_trend_meta( $d ) {
+	$ctr = array();
+	foreach ( (array) ( $d['domainCTR']['Domain'] ?? array() ) as $i => $dom ) {
+		$ctr[] = array( (string) $dom, (float) ( $d['domainCTR']['CTR'][ $i ] ?? 0 ) );
+	}
+	return array(
+		'volume' => isset( $d['wordSearchVolume'] ) ? (int) $d['wordSearchVolume'] : null,
+		'all'    => isset( $d['allSearchVolume'] ) ? (int) $d['allSearchVolume'] : null,
+		'change' => isset( $d['changeSearchVolume'] ) ? (float) $d['changeSearchVolume'] : null,
+		'chart'  => array( 'labels' => array_values( (array) ( $d['chart']['lable'] ?? $d['chart']['label'] ?? array() ) ), 'data' => array_map( 'intval', array_values( (array) ( $d['chart']['data'] ?? array() ) ) ) ),
+		'ctr'    => array_slice( $ctr, 0, 10 ),
+	);
+}
+
+/**
+ * Keywords and top pages of a domain or URL (site analyzer).
+ *
+ * @param string $type domain|page|starting_with|contains.
+ * @return array|WP_Error {rows, meta}
+ */
+function sap_ss_site_analyzer( $url, $type = 'domain', $contains = '', $count = 500 ) {
+	$type = in_array( $type, array( 'domain', 'page', 'starting_with', 'contains' ), true ) ? $type : 'domain';
+	$body = array( 'url' => $url, 'search_type' => $type, 'count' => min( 2000, max( 1, (int) $count ) ) );
+	if ( 'contains' === $type ) {
+		$body['contains'] = $contains;
+	}
+	$res = sap_ss_request( 'site-analyzer', $body );
+	if ( is_wp_error( $res ) ) {
+		return $res;
+	}
+	$d     = (array) ( $res['data'] ?? array() );
+	$pages = array();
+	foreach ( (array) ( $d['topPages'] ?? array() ) as $p ) {
+		$pages[] = array( 'page' => (string) ( $p['Page'] ?? '' ), 'avg' => (float) ( $p['Avg'] ?? 0 ), 'count' => (int) ( $p['Count'] ?? 0 ) );
+	}
+	return array(
+		'rows' => sap_ss_word_rows( $d['Keywords'] ?? array() ),
+		'meta' => array( 'domain' => (string) ( $d['domain'] ?? $url ), 'pages' => array_slice( $pages, 0, 50 ), 'related' => array_values( array_map( 'strval', (array) ( $d['RelDomains'] ?? array() ) ) ), 'ctr' => sap_ss_trend_meta( $d )['ctr'] ),
+	);
+}
+
+/**
+ * Reportage assistant endpoints (plans with the reportage service only).
+ *
+ * @param string $endpoint reportage-suggest|reportage-suggest-check|reportage-seller|reportage-buyer.
+ * @return array|WP_Error {rows, meta}
+ */
+function sap_ss_reportage( $endpoint, $body ) {
+	$res = sap_ss_request( $endpoint, $body );
+	if ( is_wp_error( $res ) ) {
+		return $res;
+	}
+	$d = $res['data'] ?? array();
+	// The list is either the data itself or its first array field (Reportages, PRList, …).
+	$rows = array();
+	if ( is_array( $d ) && array_is_list( $d ) ) {
+		$rows = $d;
+	} elseif ( is_array( $d ) ) {
+		foreach ( $d as $v ) {
+			if ( is_array( $v ) && array_is_list( $v ) ) {
+				$rows = $v;
+				break;
+			}
+		}
+	}
+	$meta = array();
+	if ( is_array( $d ) && ! array_is_list( $d ) ) {
+		foreach ( $d as $k => $v ) {
+			if ( is_scalar( $v ) ) {
+				$meta[ $k ] = $v;
+			}
+		}
+	}
+	return array( 'rows' => array_slice( array_values( array_filter( $rows, 'is_array' ) ), 0, 1000 ), 'meta' => $meta );
 }
 
 /**
@@ -176,11 +298,12 @@ function sap_ss_research( $keyword, $type = 'similar', $count = 200 ) {
  * @return array|WP_Error list of [word, rank1, rank2, volume]
  */
 function sap_ss_compare( $site1, $site2, $type = 'gap' ) {
+	// Both domains are charged as soon as they are valid (2 units).
 	$res = sap_ss_request( 'site-compare', array(
 		'site1'        => $site1,
 		'site2'        => $site2,
 		'compare_type' => $type,
-	) );
+	), 2 );
 	if ( is_wp_error( $res ) ) {
 		return $res;
 	}
@@ -191,9 +314,50 @@ function sap_ss_compare( $site1, $site2, $type = 'gap' ) {
 			'rank1'  => (int) ( $r['Rank1'] ?? 0 ),
 			'rank2'  => (int) ( $r['Rank2'] ?? 0 ),
 			'volume' => (int) ( $r['SearchVolume'] ?? 0 ),
+			'diff'   => (int) ( $r['Diff'] ?? 0 ),
 		);
 	}
 	return $out;
+}
+
+/**
+ * Current rank status of a project's domain (free): rank, change, best rank,
+ * volume, and the rank / change distributions.
+ */
+function sap_ss_rt_status( $project_id, $device_id, $domain = '', $start = '', $end = '' ) {
+	$body = array( 'project_id' => (int) $project_id, 'device_id' => (int) $device_id );
+	foreach ( array( 'domain' => $domain, 'start_date' => $start, 'end_date' => $end ) as $k => $v ) {
+		if ( '' !== $v ) {
+			$body[ $k ] = $v;
+		}
+	}
+	$res = sap_ss_request( 'ranktracker-rank-status', $body, false );
+	if ( is_wp_error( $res ) ) {
+		return $res;
+	}
+	$d    = (array) ( $res['data'] ?? array() );
+	$rows = array();
+	foreach ( (array) ( $d['keywords'] ?? array() ) as $k ) {
+		$rows[] = array(
+			'keyword'     => (string) ( $k['keyword'] ?? '' ),
+			'rank'        => (int) ( $k['rank'] ?? 0 ),
+			'rank_change' => (int) ( $k['rank_change'] ?? 0 ),
+			'best_rank'   => (int) ( $k['best_rank'] ?? 0 ),
+			'avg_rank'    => (float) ( $k['avg_rank'] ?? 0 ),
+			'volume'      => (int) ( $k['search_volume'] ?? 0 ),
+			'target_url'  => (string) ( $k['target_url'] ?? '' ),
+		);
+	}
+	return array(
+		'rows' => $rows,
+		'meta' => array(
+			'domain'       => (string) ( $d['domain'] ?? '' ),
+			'range'        => (array) ( $d['date_range'] ?? array() ),
+			'distribution' => (array) ( $d['rank_distribution'] ?? array() ),
+			'changes'      => (array) ( $d['rank_change_distribution'] ?? array() ),
+			'visibility'   => (array) ( $d['visibility_series'] ?? array() ),
+		),
+	);
 }
 
 /**

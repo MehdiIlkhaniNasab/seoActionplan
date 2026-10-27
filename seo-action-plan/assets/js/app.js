@@ -753,37 +753,86 @@
 	/* ---- SEO Signal tab ---- */
 	var ssProject = document.querySelector('[data-sap-ss-project]');
 	if (ssProject) {
-		var pid = ssProject.value, box = document.querySelector('[data-sap-ss-results]'), last = null, rows = [];
-		var titles = { research: 'تحقیق کلمه', bulk: 'حجم دسته‌ای', compare: 'مقایسه سایت', rt_history: 'وضعیت تغییر رتبه‌ها', rt_projects: 'پروژه‌های ردیاب رتبه' };
-		var fa = function (v) { return (v === null || v === undefined || v === '') ? '—' : (typeof v === 'number' ? v.toLocaleString('fa-IR') : esc(String(v))); };
+		var pid = ssProject.value, box = document.querySelector('[data-sap-ss-results]'), last = null, rows = [], lastMeta = {};
+		var titles = { research: 'تحقیق کلمه', bulk: 'حجم دسته‌ای', analyzer: 'آنالیز کلمات سایت', compare: 'مقایسه سایت', rp_suggest: 'پیشنهاد رسانه رپورتاژ', rp_check: 'جزئیات رسانه', rp_seller: 'آنالیز فروشنده رپورتاژ', rp_buyer: 'آنالیز خریدار رپورتاژ', rt_status: 'وضعیت تغییر رتبه‌ها', rt_history: 'تاریخچه رتبه کلمات', rt_projects: 'پروژه‌های ردیاب رتبه' };
+		var labels = { Domain: 'دامنه', Score: 'امتیاز', Count: 'تعداد', RankAvg: 'میانگین رتبه', Price: 'قیمت (تومان)', Ranks: 'رتبه‌ها', FromUrl: 'صفحه مبدأ', AnchorText: 'انکر', ToUrl: 'مقصد', ToHost: 'دامنه مقصد', Follow: 'فالو', NoFollow: 'نوفالو', All: 'همه', Url: 'آدرس', InLinkCount: 'لینک ورودی', OutDomainCount: 'دامنه خروجی', OutLinkCount: 'لینک خروجی', PublishDate: 'تاریخ انتشار', Title: 'عنوان', FromHost: 'رسانه', Keyword: 'کلمه', Rank: 'رتبه', Word: 'کلمه', SearchVolume: 'حجم', Page: 'صفحه', Anchor: 'انکر', Host: 'دامنه' };
+		var fa = function (v) { return (v === null || v === undefined || v === '') ? '—' : (typeof v === 'number' ? v.toLocaleString('fa-IR') : (typeof v === 'boolean' ? (v ? '✓' : '—') : esc(String(v)))); };
+		var cell = function (v) {
+			if (Array.isArray(v)) { return v.map(function (x) { return typeof x === 'object' ? esc((x.Keyword || x.keyword || '') + (x.Rank ? ' (' + x.Rank + ')' : '')) : esc(String(x)); }).join('، '); }
+			if (v && typeof v === 'object') { return esc(JSON.stringify(v)); }
+			if (typeof v === 'string' && /^https?:\/\//.test(v)) { return '<a href="' + esc(v) + '" target="_blank" rel="noopener" dir="ltr">' + esc(v.replace(/^https?:\/\//, '').slice(0, 60)) + '</a>'; }
+			return fa(v);
+		};
+		var spark = function (data, lbls) {
+			if (!data || data.length < 2) { return ''; }
+			var max = Math.max.apply(null, data) || 1, w = 220, h = 46, step = w / (data.length - 1);
+			var pts = data.map(function (v, i) { return (w - i * step).toFixed(1) + ',' + (h - 4 - (v / max) * (h - 10)).toFixed(1); }).join(' ');
+			return '<svg class="sap-spark" viewBox="0 0 ' + w + ' ' + h + '" width="' + w + '" height="' + h + '"><polyline points="' + pts + '" fill="none" stroke="#2563EB" stroke-width="2"/></svg><small class="sap-muted">' + esc((lbls || [])[0] || '') + ' ← ' + esc((lbls || [])[data.length - 1] || '') + '</small>';
+		};
+		var extra = function (tool, m) {
+			var h = '';
+			if (tool === 'research' && m) {
+				h += '<div class="sap-ss-kpis"><div><span>حجم «' + esc(m.keyword || '') + '»</span><b>' + fa(m.volume) + '</b></div><div><span>حجم کل خوشه</span><b>' + fa(m.all) + '</b></div><div><span>تغییر</span><b class="' + (m.change > 0 ? 'sap-ok' : (m.change < 0 ? 'sap-bad' : '')) + '">' + (m.change === null || m.change === undefined ? '—' : (m.change > 0 ? '+' : '') + Number(m.change).toLocaleString('fa-IR') + '٪') + '</b></div><div class="is-chart"><span>روند ماهانه</span>' + spark(m.chart && m.chart.data, m.chart && m.chart.labels) + '</div></div>';
+			}
+			if (m && m.ctr && m.ctr.length) {
+				h += '<p class="sap-label">سهم کلیک دامنه‌ها</p><div class="sap-kw-chips">' + m.ctr.map(function (c) { return '<span>' + esc(c[0]) + '</span>'; }).join('') + '</div>';
+			}
+			if (tool === 'analyzer' && m) {
+				if (m.pages && m.pages.length) {
+					h += '<p class="sap-label">صفحات برتر ' + esc(m.domain || '') + '</p><div class="sap-table-wrap"><table class="sap-table is-compact"><thead><tr><th>صفحه</th><th>میانگین رتبه</th><th>تعداد کلمه</th></tr></thead><tbody>' + m.pages.slice(0, 15).map(function (p) { return '<tr><td dir="ltr">' + esc(p.page) + '</td><td>' + fa(p.avg) + '</td><td>' + fa(p.count) + '</td></tr>'; }).join('') + '</tbody></table></div>';
+				}
+				if (m.related && m.related.length) {
+					h += '<p class="sap-label">سایت‌های مرتبط (برای مقایسه کلیک کنید)</p><div class="sap-kw-chips">' + m.related.map(function (d) { return '<button type="button" class="sap-chip" data-sap-ss-compare="' + esc(d) + '">' + esc(d) + '</button>'; }).join('') + '</div>';
+				}
+			}
+			if (tool === 'rt_status' && m) {
+				var dist = function (o) { return Object.keys(o || {}).map(function (k) { return '<span>' + esc(k) + ': <b>' + fa(o[k]) + '</b></span>'; }).join(''); };
+				h += '<div class="sap-kw-chips">' + dist(m.changes) + '</div><div class="sap-kw-chips">' + dist(m.distribution) + '</div>';
+			}
+			return h;
+		};
 		var render = function (res) {
-			rows = res.rows || [];
+			rows = res.rows || []; lastMeta = res.meta || {};
 			var tool = last.tool, head = '', body = '';
 			box.hidden = false;
 			box.querySelector('[data-sap-ss-title]').textContent = titles[tool] + ' — ' + rows.length.toLocaleString('fa-IR') + ' ردیف';
 			box.querySelector('[data-sap-ss-meta]').textContent = (res.cached ? 'از کش (بدون مصرف سهمیه) · ' : 'دریافت تازه · ') + (res.left !== undefined ? 'باقی‌مانده امروز: ' + res.left.toLocaleString('fa-IR') : '');
-			box.querySelector('.sap-ss-use').hidden = ['research', 'bulk', 'compare'].indexOf(tool) === -1;
-			if (tool === 'research' || tool === 'bulk') {
-				head = '<tr><th></th><th>کلمه</th><th>حجم جستجو</th><th>رقابت</th></tr>';
-				rows.forEach(function (r, i) { body += '<tr><td><input type="checkbox" data-i="' + i + '"></td><td>' + esc(r.word) + '</td><td>' + fa(r.volume) + '</td><td>' + esc(r.competition || '') + '</td></tr>'; });
+			box.querySelector('[data-sap-ss-extra]').innerHTML = extra(tool, lastMeta);
+			box.querySelector('.sap-ss-use').hidden = ['research', 'bulk', 'analyzer', 'compare'].indexOf(tool) === -1;
+			if (tool === 'research' || tool === 'bulk' || tool === 'analyzer') {
+				head = '<tr><th></th><th>کلمه</th><th>حجم جستجو</th><th>رقابت</th>' + (tool === 'analyzer' ? '<th>صفحه</th>' : '') + '</tr>';
+				rows.forEach(function (r, i) { body += '<tr><td><input type="checkbox" data-i="' + i + '"></td><td>' + esc(r.word) + '</td><td>' + fa(r.volume) + '</td><td>' + esc(r.competition || '') + '</td>' + (tool === 'analyzer' ? '<td dir="ltr" class="sap-small">' + esc(r.page || '') + '</td>' : '') + '</tr>'; });
 			} else if (tool === 'compare') {
-				head = '<tr><th></th><th>کلمه</th><th>رتبه ما</th><th>رتبه رقیب</th><th>حجم</th></tr>';
-				rows.forEach(function (r, i) { body += '<tr><td><input type="checkbox" data-i="' + i + '"></td><td>' + esc(r.word) + '</td><td>' + fa(r.rank1 || '') + '</td><td>' + fa(r.rank2 || '') + '</td><td>' + fa(r.volume) + '</td></tr>'; });
+				head = '<tr><th></th><th>کلمه</th><th>رتبه ما</th><th>رتبه رقیب</th><th>فاصله</th><th>حجم</th></tr>';
+				rows.forEach(function (r, i) { body += '<tr><td><input type="checkbox" data-i="' + i + '"></td><td>' + esc(r.word) + '</td><td>' + fa(r.rank1 || '') + '</td><td>' + fa(r.rank2 || '') + '</td><td>' + fa(r.diff || '') + '</td><td>' + fa(r.volume) + '</td></tr>'; });
+			} else if (tool === 'rt_status') {
+				head = '<tr><th>کلمه</th><th>رتبه</th><th>تغییر</th><th>بهترین</th><th>میانگین</th><th>حجم</th><th>صفحه</th></tr>';
+				rows.sort(function (a, b) { return b.rank_change - a.rank_change; });
+				rows.forEach(function (r) {
+					var d = r.rank_change; // positive = rank number grew = dropped.
+					body += '<tr><td>' + esc(r.keyword) + '</td><td>' + fa(r.rank || '') + '</td><td class="' + (d > 0 ? 'sap-bad' : (d < 0 ? 'sap-ok' : '')) + '">' + (d > 0 ? '▼ ' : (d < 0 ? '▲ ' : '')) + fa(Math.abs(d) || '') + '</td><td>' + fa(r.best_rank || '') + '</td><td>' + fa(r.avg_rank || '') + '</td><td>' + fa(r.volume) + '</td><td dir="ltr" class="sap-small">' + esc((r.target_url || '').replace(/^https?:\/\/[^/]+/, '')) + '</td></tr>';
+				});
 			} else if (tool === 'rt_history') {
 				rows.sort(function (a, b) { return (b.start_rank - b.end_rank) - (a.start_rank - a.end_rank); });
-				var up = rows.filter(function (r) { return r.end_rank && r.start_rank && r.end_rank < r.start_rank; }).length, down = rows.filter(function (r) { return r.end_rank > r.start_rank; }).length;
-				box.querySelector('[data-sap-ss-meta]').textContent += ' · بهتر شد: ' + up.toLocaleString('fa-IR') + ' · بدتر شد: ' + down.toLocaleString('fa-IR');
 				head = '<tr><th>کلمه</th><th>رتبه اول دوره</th><th>رتبه آخر</th><th>تغییر</th><th>بهترین</th><th>حجم</th><th>صفحه</th></tr>';
 				rows.forEach(function (r) {
 					var d = r.start_rank && r.end_rank ? r.start_rank - r.end_rank : 0;
 					body += '<tr><td>' + esc(r.keyword) + '</td><td>' + fa(r.start_rank || '') + '</td><td>' + fa(r.end_rank || '') + '</td><td class="' + (d > 0 ? 'sap-ok' : (d < 0 ? 'sap-bad' : '')) + '">' + (d > 0 ? '▲ ' : (d < 0 ? '▼ ' : '')) + fa(Math.abs(d) || '') + '</td><td>' + fa(r.best_rank || '') + '</td><td>' + fa(r.volume) + '</td><td dir="ltr" class="sap-small">' + esc((r.target_url || '').replace(/^https?:\/\/[^/]+/, '')) + '</td></tr>';
 				});
-			} else {
+			} else if (tool === 'rt_projects') {
 				head = '<tr><th>شناسه</th><th>نام</th><th>دامنه</th><th>کلمات</th><th>فعال</th></tr>';
 				rows.forEach(function (r) { body += '<tr><td>' + fa(r.id) + '</td><td>' + esc(r.name) + '</td><td dir="ltr">' + esc(r.domain) + '</td><td>' + fa(r.keywords) + '</td><td>' + (r.active ? '✓' : '—') + '</td></tr>'; });
+			} else {
+				// Reportage tools: columns from the data itself.
+				var keys = [];
+				rows.slice(0, 20).forEach(function (r) { Object.keys(r).forEach(function (k) { if (keys.indexOf(k) === -1) { keys.push(k); } }); });
+				head = '<tr>' + keys.map(function (k) { return '<th>' + esc(labels[k] || k) + '</th>'; }).join('') + (tool === 'rp_suggest' ? '<th></th>' : '') + '</tr>';
+				rows.forEach(function (r) {
+					body += '<tr>' + keys.map(function (k) { return '<td class="sap-small">' + cell(r[k]) + '</td>'; }).join('') + (tool === 'rp_suggest' ? '<td><button type="button" class="sap-btn is-small" data-sap-ss-check="' + esc(r.Domain || '') + '">جزئیات</button></td>' : '') + '</tr>';
+				});
 			}
 			box.querySelector('[data-sap-ss-head]').innerHTML = head;
-			box.querySelector('[data-sap-ss-body]').innerHTML = body || '<tr><td colspan="7" class="sap-muted">داده‌ای نبود.</td></tr>';
+			box.querySelector('[data-sap-ss-body]').innerHTML = body || '<tr><td colspan="8" class="sap-muted">داده‌ای نبود.</td></tr>';
 			box.scrollIntoView({ behavior: 'smooth', block: 'start' });
 		};
 		var run = function (tool, params, force, btn) {
@@ -795,14 +844,20 @@
 			f.addEventListener('submit', function (ev) {
 				ev.preventDefault();
 				var params = {}; new FormData(f).forEach(function (v, k) { params[k] = v; });
-				run(f.getAttribute('data-sap-ss-form'), params, false, f.querySelector('[type=submit]'));
+				var sub = ev.submitter;
+				var tool = sub && sub.getAttribute('data-sap-ss-alt') ? sub.getAttribute('data-sap-ss-alt') : f.getAttribute('data-sap-ss-form');
+				run(tool, params, false, sub || f.querySelector('[type=submit]'));
 			});
 		});
 		document.addEventListener('click', function (ev) {
 			var r = ev.target.closest('[data-sap-ss-run]');
 			var adv = ev.target.closest('[data-sap-ss-advise]');
 			var use = ev.target.closest('[data-sap-ss-use]');
+			var chk = ev.target.closest('[data-sap-ss-check]');
+			var cmp = ev.target.closest('[data-sap-ss-compare]');
 			if (r) { var d = JSON.parse(r.getAttribute('data-sap-ss-run')); run(d.tool, d.params, false, r); }
+			if (chk) { run('rp_check', { domain: chk.getAttribute('data-sap-ss-check'), keywords: (lastMeta.keywords || []).join('\n') }, false, chk); }
+			if (cmp) { var cf = document.querySelector('form[data-sap-ss-form="compare"]'); cf.querySelector('[name=site2]').value = cmp.getAttribute('data-sap-ss-compare'); cf.scrollIntoView({ behavior: 'smooth', block: 'center' }); toast('دامنه در فرم «مقایسه دو سایت» قرار گرفت (۲ واحد)'); }
 			if (ev.target.closest('[data-sap-ss-refresh]') && last) { if (window.confirm('درخواست تازه از سهمیه روزانه مصرف می‌کند. ادامه؟')) { run(last.tool, last.params, true, ev.target); } }
 			if (adv) {
 				busy(adv, 'در حال بررسی داده‌ها…');

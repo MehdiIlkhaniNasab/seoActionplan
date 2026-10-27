@@ -350,7 +350,7 @@ function sap_step_ss_compare( $project, $force = false ) {
 		if ( ! $force && isset( $data[ $c ]['at'] ) && time() - (int) $data[ $c ]['at'] < $fresh ) {
 			continue;
 		}
-		if ( sap_ss_remaining() < 2 ) {
+		if ( sap_ss_remaining() < 4 ) {
 			$msgs[] = sprintf( 'مقایسه با %s به دلیل سقف روزانه به بعد موکول شد.', $c );
 			continue;
 		}

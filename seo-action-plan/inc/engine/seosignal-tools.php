@@ -34,7 +34,7 @@ function sap_ss_estimate( $project, $step ) {
 			if ( $old && ( $old['meta']['hash'] ?? '' ) === md5( implode( '|', $kws ) ) && sap_dataset_age_days( $project['id'], 'ss_volumes' ) < $fresh ) {
 				return array( 'units' => 0, 'free' => true, 'msg' => 'حجم کلمات از قبل موجود است (از کش، بدون مصرف).' );
 			}
-			$u = (int) ceil( count( $kws ) / 1000 );
+			$u = (int) ceil( count( $kws ) / 1000 ); // One unit per request of up to 1000 keywords.
 			return array( 'units' => $u, 'free' => false, 'msg' => sprintf( 'حجم جستجوی %s کلمه شیت‌ها و Focusها', sap_num( count( $kws ) ) ) );
 		case 'ss_rank':
 			return array( 'units' => 0, 'free' => true, 'msg' => $project['ss_project_id'] ? 'رتبه ۳۰ روزه کلمات ردیاب رتبه (رایگان)' : 'ردیاب رتبه به پروژه وصل نیست.' );
@@ -47,7 +47,7 @@ function sap_ss_estimate( $project, $step ) {
 				}
 			}
 			return $need
-				? array( 'units' => 2 * count( $need ), 'free' => false, 'msg' => 'گپ کلمات و کلمات بهتر رقیب: ' . implode( '، ', $need ) )
+				? array( 'units' => 4 * count( $need ), 'free' => false, 'msg' => 'گپ کلمات و کلمات بهتر رقیب (هر مقایسه ۲ واحد): ' . implode( '، ', $need ) )
 				: array( 'units' => 0, 'free' => true, 'msg' => $project['competitors'] ? 'مقایسه رقبا تازه است (از کش).' : 'رقیبی تعریف نشده.' );
 		case 'ss_questions':
 			$data = (array) ( sap_dataset_payload( $project['id'], 'ss_questions' )['focuses'] ?? array() );
@@ -88,7 +88,78 @@ function sap_ss_tool( $project, $tool, $params, $force = false ) {
 			if ( '' === $kw ) {
 				return new WP_Error( 'sap_ss', 'کلمه را وارد کنید.' );
 			}
-			$rows = sap_ss_research( $kw, in_array( $params['type'] ?? '', array( 'similar', 'questions' ), true ) ? $params['type'] : 'similar', min( 300, max( 10, (int) ( $params['count'] ?? 100 ) ) ) );
+			$r = sap_ss_research_full( $kw, (string) ( $params['type'] ?? 'similar' ), (int) ( $params['count'] ?? 200 ) );
+			if ( is_wp_error( $r ) ) {
+				return $r;
+			}
+			$rows = $r['rows'];
+			$meta = $r['meta'] + array( 'keyword' => $kw );
+			break;
+		case 'analyzer':
+			$url = trim( (string) ( $params['url'] ?? '' ) );
+			if ( '' === $url ) {
+				return new WP_Error( 'sap_ss', 'دامنه یا آدرس را وارد کنید.' );
+			}
+			$r = sap_ss_site_analyzer( $url, (string) ( $params['type'] ?? 'domain' ), (string) ( $params['contains'] ?? '' ), (int) ( $params['count'] ?? 500 ) );
+			if ( is_wp_error( $r ) ) {
+				return $r;
+			}
+			$rows = $r['rows'];
+			$meta = $r['meta'];
+			break;
+		case 'rp_suggest':
+		case 'rp_check':
+			$kws = array_slice( sap_list( (string) ( $params['keywords'] ?? '' ) ), 0, 4 );
+			if ( ! $kws ) {
+				return new WP_Error( 'sap_ss', 'تا ۴ کلمه کلیدی وارد کنید.' );
+			}
+			$body = array( 'keywords' => $kws );
+			if ( 'rp_check' === $tool ) {
+				$body['domain'] = sap_clean_domain( (string) ( $params['domain'] ?? '' ) );
+				if ( '' === $body['domain'] ) {
+					return new WP_Error( 'sap_ss', 'دامنه رسانه را وارد کنید.' );
+				}
+			}
+			$r = sap_ss_reportage( 'rp_check' === $tool ? 'reportage-suggest-check' : 'reportage-suggest', $body );
+			if ( is_wp_error( $r ) ) {
+				return $r;
+			}
+			$rows = $r['rows'];
+			$meta = array( 'keywords' => $kws, 'domain' => $body['domain'] ?? '' );
+			break;
+		case 'rp_seller':
+		case 'rp_buyer':
+			$dom = sap_clean_domain( (string) ( $params['domain'] ?? '' ) );
+			if ( '' === $dom ) {
+				return new WP_Error( 'sap_ss', 'دامنه را وارد کنید.' );
+			}
+			$types = 'rp_seller' === $tool ? array( 'reportages', 'out_domains', 'out_links', 'out_anchors', 'linked_pages', 'range_domains', 'serp' ) : array( 'reportages', 'inbound_media', 'linked_pages', 'inbound_anchors', 'cost_analysis' );
+			$body  = array( 'domain' => $dom, 'report_type' => in_array( $params['report_type'] ?? '', $types, true ) ? $params['report_type'] : 'reportages', 'date_range' => preg_match( '/^(all|last_\d+)$/', (string) ( $params['date_range'] ?? '' ) ) ? $params['date_range'] : 'all' );
+			if ( 'rp_buyer' === $tool ) {
+				$body['search_type'] = 'page' === ( $params['search_type'] ?? '' ) ? 'page' : 'domain';
+			}
+			$r = sap_ss_reportage( 'rp_seller' === $tool ? 'reportage-seller' : 'reportage-buyer', $body );
+			if ( is_wp_error( $r ) ) {
+				return $r;
+			}
+			$rows = $r['rows'];
+			$meta = $r['meta'] + array( 'domain' => $dom, 'report_type' => $body['report_type'] );
+			break;
+		case 'rt_status':
+			$pid    = (int) ( $params['project_id'] ?? 0 ) ?: (int) $project['ss_project_id'];
+			$detail = sap_ss_rt_detail( $pid );
+			if ( is_wp_error( $detail ) ) {
+				return $detail;
+			}
+			$device = (int) ( 'desktop' === ( $params['device'] ?? '' ) ? ( $detail['desktop_id'] ?? 0 ) : ( $detail['mobile_id'] ?? 0 ) );
+			$days   = min( 90, max( 1, (int) ( $params['days'] ?? 30 ) ) );
+			$end    = current_time( 'Y-m-d' );
+			$r      = sap_ss_rt_status( $pid, $device, (string) ( $params['domain'] ?? '' ), gmdate( 'Y-m-d', strtotime( "-$days days", strtotime( $end ) ) ), $end );
+			if ( is_wp_error( $r ) ) {
+				return $r;
+			}
+			$rows = $r['rows'];
+			$meta = $r['meta'] + array( 'name' => $detail['name'] ?? '', 'location' => $detail['location'] ?? '', 'competitors' => $detail['competitor_domains'] ?? array() );
 			break;
 		case 'bulk':
 			$list = array_slice( sap_list( (string) ( $params['keywords'] ?? '' ) ), 0, 1000 );
@@ -110,7 +181,7 @@ function sap_ss_tool( $project, $tool, $params, $force = false ) {
 			$rows = sap_ss_rt_projects();
 			break;
 		case 'rt_history':
-			$pid    = (int) ( $params['project_id'] ?? $project['ss_project_id'] );
+			$pid    = (int) ( $params['project_id'] ?? 0 ) ?: (int) $project['ss_project_id'];
 			$detail = sap_ss_rt_detail( $pid );
 			if ( is_wp_error( $detail ) ) {
 				return $detail;
@@ -131,7 +202,7 @@ function sap_ss_tool( $project, $tool, $params, $force = false ) {
 	if ( is_wp_error( $rows ) ) {
 		return $rows;
 	}
-	$ttl = in_array( $tool, array( 'rt_projects', 'rt_history' ), true ) ? 6 * HOUR_IN_SECONDS : (int) sap_setting( 'seosignal_cache_days', 25 ) * DAY_IN_SECONDS;
+	$ttl = in_array( $tool, array( 'rt_projects', 'rt_history', 'rt_status' ), true ) ? 6 * HOUR_IN_SECONDS : (int) sap_setting( 'seosignal_cache_days', 25 ) * DAY_IN_SECONDS;
 	set_transient( $key, array( 'rows' => $rows, 'meta' => $meta, 'at' => sap_now() ), $ttl );
 	$recent   = (array) get_option( 'sap_ss_recent_' . $project['id'], array() );
 	array_unshift( $recent, array( 'tool' => $tool, 'params' => $params, 'count' => count( $rows ), 'at' => sap_now() ) );
@@ -181,18 +252,18 @@ function sap_ss_advise( $project ) {
 	);
 	$str    = array( 'type' => 'string' );
 	$schema = sap_ai_obj( array( 'actions' => array( 'type' => 'array', 'items' => sap_ai_obj( array(
-		'tool'     => array( 'type' => 'string', 'enum' => array( 'research', 'bulk', 'compare', 'rt_history' ) ),
+		'tool'     => array( 'type' => 'string', 'enum' => array( 'research', 'bulk', 'analyzer', 'compare', 'rp_suggest', 'rt_status' ) ),
 		'title'    => $str,
 		'why'      => array( 'type' => 'string', 'description' => 'چرا الان و چه خروجی‌ای به کار پروژه می‌آید' ),
 		'keyword'  => array( 'type' => 'string', 'description' => 'برای research' ),
-		'type'     => array( 'type' => 'string', 'description' => 'برای research: similar یا questions؛ برای compare: gap/worse_than/better_than/common' ),
-		'keywords' => array( 'type' => 'array', 'items' => $str, 'description' => 'برای bulk' ),
-		'site2'    => array( 'type' => 'string', 'description' => 'برای compare' ),
-		'units'    => array( 'type' => 'integer', 'description' => 'واحد سهمیه (research/compare = ۱، bulk = ۱ به ازای هر ۱۰۰۰ کلمه، rt_history = ۰)' ),
+		'type'     => array( 'type' => 'string', 'description' => 'research: similar/topical/starting_with/ending_with/questions؛ analyzer: domain/page؛ compare: gap/worse_than/better_than/common' ),
+		'keywords' => array( 'type' => 'array', 'items' => $str, 'description' => 'برای bulk (تا ۱۰۰۰) یا rp_suggest (تا ۴)' ),
+		'site2'    => array( 'type' => 'string', 'description' => 'برای compare: دامنه رقیب؛ برای analyzer: دامنه یا آدرس' ),
+		'units'    => array( 'type' => 'integer', 'description' => 'واحد سهمیه (research/bulk/analyzer/rp_suggest = ۱، compare = ۲، rt_status = ۰)' ),
 		'priority' => array( 'type' => 'string', 'enum' => array( 'high', 'medium', 'low' ) ),
 	) ) ) ) );
 	$task = implode( "\n", array(
-		'تو مدیر سئو هستی و باید سهمیه محدود روزانه API سئو سیگنال را هوشمندانه خرج کنی. ابزارها: research (تحقیق کلمه: کلمات مشابه similar یا سوالات کاربران questions برای یک کلمه)، bulk (حجم جستجوی دسته‌ای کلمات)، compare (مقایسه سایت با رقیب: gap = کلماتی که رقیب دارد و ما نداریم، worse_than = کلماتی که رقیب بهتر است، better_than، common)، rt_history (تاریخچه ردیاب رتبه، رایگان).',
+		'تو مدیر سئو هستی و باید سهمیه محدود روزانه API سئو سیگنال را هوشمندانه خرج کنی. ابزارها: research (تحقیق یک کلمه: similar مشابه، topical هم‌موضوع، starting_with/ending_with، questions سوالات کاربران)، bulk (حجم دسته‌ای تا ۱۰۰۰ کلمه با یک واحد)، analyzer (کلمات و صفحات برتر یک دامنه/آدرس، مثلاً رقیب؛ site2 = دامنه)، compare (مقایسه با رقیب، ۲ واحد: gap، worse_than، better_than، common)، rp_suggest (رسانه‌های مناسب رپورتاژ برای تا ۴ کلمه؛ فقط اگر تقویت اعتبار لازم است)، rt_status (وضعیت رتبه‌های ردیاب، رایگان).',
 		'با توجه به داده‌های پروژه، ۳ تا ۷ اقدام پیشنهاد بده که بیشترین ارزش را برای تصمیم‌های سئوی همین ماه دارند (مثلاً حجم کلمات اصلی صفحاتی که حجمشان معلوم نیست، سوالات کاربران برای Focus بدون سوال، گپ رقیبی که هنوز مقایسه نشده). از اقدام تکراری یا بی‌اثر پرهیز کن و مجموع واحدها از quota_left_today بیشتر نشود. برای هر اقدام پارامترهای دقیق را پر کن.',
 	) );
 	$res = sap_ai_request( sap_ai_system_prompt(), $task . "\n\n" . wp_json_encode( $input, JSON_UNESCAPED_UNICODE ), $schema, array( 'purpose' => 'analysis', 'max_tokens' => 2500, 'effort' => 'low' ) );
@@ -201,14 +272,16 @@ function sap_ss_advise( $project ) {
 	}
 	$actions = array();
 	foreach ( (array) ( $res['actions'] ?? array() ) as $a ) {
-		if ( ! is_array( $a ) || ! in_array( $a['tool'] ?? '', array( 'research', 'bulk', 'compare', 'rt_history' ), true ) ) {
+		if ( ! is_array( $a ) || ! in_array( $a['tool'] ?? '', array( 'research', 'bulk', 'analyzer', 'compare', 'rp_suggest', 'rt_status' ), true ) ) {
 			continue;
 		}
 		$params = array();
 		if ( 'research' === $a['tool'] ) {
-			$params = array( 'keyword' => (string) ( $a['keyword'] ?? '' ), 'type' => 'questions' === ( $a['type'] ?? '' ) ? 'questions' : 'similar', 'count' => 100 );
-		} elseif ( 'bulk' === $a['tool'] ) {
-			$params = array( 'keywords' => implode( "\n", array_map( 'strval', (array) ( $a['keywords'] ?? array() ) ) ) );
+			$params = array( 'keyword' => (string) ( $a['keyword'] ?? '' ), 'type' => array_key_exists( $a['type'] ?? '', sap_ss_research_types() ) ? $a['type'] : 'similar', 'count' => 200 );
+		} elseif ( 'bulk' === $a['tool'] || 'rp_suggest' === $a['tool'] ) {
+			$params = array( 'keywords' => implode( "\n", array_slice( array_map( 'strval', (array) ( $a['keywords'] ?? array() ) ), 0, 'rp_suggest' === $a['tool'] ? 4 : 1000 ) ) );
+		} elseif ( 'analyzer' === $a['tool'] ) {
+			$params = array( 'url' => (string) ( $a['site2'] ?? '' ), 'type' => 'page' === ( $a['type'] ?? '' ) ? 'page' : 'domain', 'count' => 500 );
 		} elseif ( 'compare' === $a['tool'] ) {
 			$params = array( 'site2' => (string) ( $a['site2'] ?? '' ), 'type' => in_array( $a['type'] ?? '', array( 'gap', 'worse_than', 'better_than', 'common' ), true ) ? $a['type'] : 'gap' );
 		} else {
