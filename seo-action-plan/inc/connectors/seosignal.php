@@ -69,15 +69,40 @@ function sap_ss_connected() {
  * @param bool|int $metered Counts against the daily quota (true = 1 unit, or the number of units).
  * @return array|WP_Error Full decoded response (with ok/data).
  */
+function sap_ss_key() {
+	// People paste the key with the header name, quotes or spaces around it.
+	$key = trim( (string) sap_setting( 'seosignal_key' ) );
+	$key = preg_replace( '/^\s*x-api-key\s*:\s*/i', '', $key );
+	return trim( $key, " \t\n\r\0\x0B\"'" );
+}
+
+/**
+ * Remember the last requests (endpoint, status, error) for the diagnostics panel.
+ */
+function sap_ss_log( $endpoint, $code, $ok, $msg, $ms ) {
+	$log   = (array) get_option( 'sap_ss_log', array() );
+	$log[] = array(
+		'at'       => current_time( 'mysql' ),
+		'endpoint' => $endpoint,
+		'code'     => (int) $code,
+		'ok'       => (bool) $ok,
+		'msg'      => mb_substr( (string) $msg, 0, 300 ),
+		'ms'       => (int) $ms,
+	);
+	update_option( 'sap_ss_log', array_slice( $log, -15 ), false );
+}
+
 function sap_ss_request( $endpoint, $body = array(), $metered = true ) {
-	$key = sap_setting( 'seosignal_key' );
+	$key = sap_ss_key();
 	if ( '' === $key ) {
-		return new WP_Error( 'sap_ss_key', 'کلید API سئو سیگنال وارد نشده است (تنظیمات › سئو سیگنال).' );
+		return new WP_Error( 'sap_ss_key', 'کلید API سئو سیگنال وارد نشده است (تنظیمات › سئو سیگنال).', array( 'code' => 'NO_KEY' ) );
 	}
 	if ( $metered && sap_ss_remaining() < 1 ) {
-		return new WP_Error( 'sap_ss_cap', 'سقف روزانه درخواست‌های سئو سیگنال که برای این افزونه تعیین کرده‌اید پر شده است؛ فردا (ساعت ۰۰:۰۰ تهران) ادامه می‌دهد.' );
+		return new WP_Error( 'sap_ss_cap', 'سقف روزانه درخواست‌های سئو سیگنال که برای این افزونه تعیین کرده‌اید پر شده است (تنظیمات › سئو سیگنال › سقف درخواست روزانه)؛ یا عدد را بیشتر کنید یا فردا ساعت ۰۰:۰۰ تهران ادامه می‌دهد.', array( 'code' => 'LOCAL_CAP' ) );
 	}
-	$res = wp_remote_post( SAP_SS_BASE . $endpoint, array(
+	$t0  = microtime( true );
+	$res = sap_http( SAP_SS_BASE . $endpoint, array(
+		'method'  => 'POST',
 		'timeout' => 60,
 		'headers' => array(
 			'X-Api-Key'    => $key,
@@ -86,11 +111,22 @@ function sap_ss_request( $endpoint, $body = array(), $metered = true ) {
 		),
 		'body'    => wp_json_encode( (object) $body ),
 	) );
+	$ms = (int) round( 1000 * ( microtime( true ) - $t0 ) );
 	if ( is_wp_error( $res ) ) {
-		return new WP_Error( 'sap_ss_http', 'اتصال به سئو سیگنال ناموفق بود: ' . sap_net_error( $res ) );
+		$msg = 'اتصال به سئو سیگنال (panel.seosignal.net) برقرار نشد: ' . sap_net_error( $res );
+		sap_ss_log( $endpoint, 0, false, $res->get_error_message(), $ms );
+		sap_ss_usage_bump( array( 'last_error' => $msg ) );
+		return new WP_Error( 'sap_ss_http', $msg, array( 'code' => 'NETWORK' ) );
 	}
 	$code = (int) wp_remote_retrieve_response_code( $res );
-	$data = json_decode( wp_remote_retrieve_body( $res ), true );
+	$raw  = (string) wp_remote_retrieve_body( $res );
+	$data = json_decode( $raw, true );
+	if ( ! is_array( $data ) ) {
+		$msg = sprintf( 'پاسخ سئو سیگنال JSON نبود (HTTP %d). معمولاً یعنی فایروال یا VPN/پروکسی سرور شما درخواست را به صفحه دیگری برده یا سئو سیگنال IP خارج از ایران را رد کرده است. «تست اتصال» را در تب سئو سیگنال بزنید.', $code );
+		sap_ss_log( $endpoint, $code, false, wp_strip_all_tags( mb_substr( $raw, 0, 200 ) ), $ms );
+		sap_ss_usage_bump( array( 'last_error' => $msg ) );
+		return new WP_Error( 'sap_ss_not_json', $msg, array( 'status' => $code, 'code' => 'NOT_JSON' ) );
+	}
 	if ( $metered && in_array( $code, array( 200, 422 ), true ) ) {
 		sap_ss_usage_bump( array( 'used' => sap_ss_usage()['used'] + ( true === $metered ? 1 : (int) $metered ) ) );
 	}
@@ -105,12 +141,16 @@ function sap_ss_request( $endpoint, $body = array(), $metered = true ) {
 		}
 	}
 	if ( 200 === $code && ! empty( $data['ok'] ) ) {
+		sap_ss_log( $endpoint, $code, true, '', $ms );
 		return $data;
 	}
 	$err  = is_array( $data ) ? ( $data['error'] ?? array() ) : array();
 	$ecode = (string) ( $err['code'] ?? 'HTTP_' . $code );
+	if ( 'HTTP_401' === $ecode || 'HTTP_403' === $ecode ) {
+		$ecode = 'INVALID_API_KEY';
+	}
 	$msgs = array(
-		'INVALID_API_KEY'     => 'کلید API سئو سیگنال نامعتبر است.',
+		'INVALID_API_KEY'     => 'کلید API سئو سیگنال نامعتبر است. کلید را دقیقاً همان‌طور که در پنل سئو سیگنال › مدیریت API نمایش داده می‌شود (بدون فاصله و بدون «X-Api-Key:») دوباره در تنظیمات وارد کنید.',
 		'PLAN_NOT_ALLOWED'    => 'پلن حساب سئو سیگنال اجازه استفاده از این بخش API را ندارد.',
 		'ACCOUNT_DISABLED'    => 'حساب سئو سیگنال غیرفعال است.',
 		'RATE_LIMIT_EXCEEDED' => 'سقف روزانه API سئو سیگنال پر شده است.',
@@ -122,7 +162,51 @@ function sap_ss_request( $endpoint, $body = array(), $metered = true ) {
 		sap_ss_usage_bump( array( 'used' => sap_ss_usage()['cap'], 'server_limit' => (int) ( $data['limit'] ?? 0 ) ) );
 	}
 	sap_ss_usage_bump( array( 'last_error' => $msg ) );
+	sap_ss_log( $endpoint, $code, false, $ecode . ( isset( $err['message'] ) ? ' — ' . $err['message'] : '' ), $ms );
 	return new WP_Error( 'sap_ss_' . strtolower( $ecode ), $msg, array( 'status' => $code, 'code' => $ecode ) );
+}
+
+/**
+ * Connection test (free endpoint): DNS, network route, key, plan.
+ *
+ * @return array{ok: bool, steps: array}
+ */
+function sap_ss_diagnose() {
+	$steps = array();
+	$key   = sap_ss_key();
+	$steps[] = array(
+		'ok'   => '' !== $key,
+		'name' => 'کلید API',
+		'msg'  => '' === $key ? 'کلید وارد نشده.' : sprintf( 'وارد شده (%s کاراکتر، شروع با %s…)%s', sap_num( strlen( $key ) ), substr( $key, 0, 4 ), false !== strpos( $key, ' ' ) ? ' — داخل کلید فاصله هست؛ احتمالاً اشتباه کپی شده.' : '' ),
+	);
+	$ip = gethostbyname( 'panel.seosignal.net' );
+	$steps[] = array(
+		'ok'   => 'panel.seosignal.net' !== $ip,
+		'name' => 'پیدا کردن سرور سئو سیگنال (DNS)',
+		'msg'  => 'panel.seosignal.net' !== $ip ? $ip : 'آدرس panel.seosignal.net روی این سرور پیدا نشد (DNS یا اینترنت سرور).',
+	);
+	$proxied = apply_filters( 'pre_http_send_through_proxy', null, SAP_SS_BASE, wp_parse_url( SAP_SS_BASE ), array() );
+	$steps[] = array(
+		'ok'   => null,
+		'name' => 'مسیر شبکه',
+		'msg'  => ( sap_proxy_defined() && false !== $proxied ? 'از پروکسی ' . sap_proxy_label() . ' (اگر سئو سیگنال IP خارجی را رد کند، در تنظیمات › شبکه حالت «هوشمند» را بگذارید)' : 'مستقیم (بدون پروکسی)' ),
+	);
+	if ( '' !== $key ) {
+		$res = sap_ss_request( 'ranktracker-projects', array(), false );
+		if ( ! is_wp_error( $res ) || 'NETWORK' !== ( $res->get_error_data()['code'] ?? '' ) ) {
+			$steps[1]['ok'] = 'panel.seosignal.net' !== $ip ? true : null; // The server was reached (maybe via a proxy that resolves it).
+		}
+		if ( is_wp_error( $res ) ) {
+			$steps[] = array( 'ok' => false, 'name' => 'درخواست آزمایشی (رایگان)', 'msg' => $res->get_error_message() );
+		} else {
+			$n       = count( (array) ( $res['data']['List'] ?? array() ) );
+			$steps[] = array( 'ok' => true, 'name' => 'درخواست آزمایشی (رایگان)', 'msg' => sprintf( 'موفق؛ کلید معتبر است و %s پروژه ردیاب رتبه در حساب هست.', sap_num( $n ) ) );
+		}
+	}
+	return array(
+		'ok'    => ! in_array( false, array_column( $steps, 'ok' ), true ),
+		'steps' => $steps,
+	);
 }
 
 /**

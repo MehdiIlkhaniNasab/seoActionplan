@@ -282,9 +282,9 @@ function sap_step_ss_volumes( $project, $force = false ) {
 	if ( ! sap_ss_connected() ) {
 		return sap_skip( 'کلید سئو سیگنال وارد نشده.' );
 	}
-	$keywords = sap_project_keywords( $project );
+	$keywords = sap_project_keywords( $project ) ?: sap_ss_track_suggestions( $project, 1000 ); // No sheet / focus keywords yet: the keyword map's.
 	if ( ! $keywords ) {
-		return sap_skip( 'هنوز کلمه‌ای در شیت‌ها یا Focusها نیست.' );
+		return sap_skip( 'هنوز کلمه‌ای در شیت‌ها، Focusها یا نقشه کلمات نیست؛ اول مرحله «نقشه کلمات» باید اجرا شود.' );
 	}
 	$hash = md5( implode( '|', $keywords ) );
 	$old  = sap_dataset( $project['id'], 'ss_volumes' );
@@ -392,6 +392,7 @@ function sap_step_ss_questions( $project, $force = false ) {
 	$fresh = (int) sap_setting( 'seosignal_cache_days', 25 ) * DAY_IN_SECONDS;
 	$done  = array();
 	$keep  = array();
+	$errs  = array();
 	foreach ( $focuses as $f ) {
 		$kw         = $f['keywords'][0] ?? $f['name'];
 		$keep[ $f['id'] ] = true;
@@ -404,6 +405,10 @@ function sap_step_ss_questions( $project, $force = false ) {
 		}
 		$rows = sap_ss_research( $kw, 'questions', 100 );
 		if ( is_wp_error( $rows ) ) {
+			$errs[] = $kw . ': ' . $rows->get_error_message();
+			if ( in_array( $rows->get_error_data()['code'] ?? '', array( 'INVALID_API_KEY', 'ACCOUNT_DISABLED', 'PLAN_NOT_ALLOWED', 'RATE_LIMIT_EXCEEDED', 'NETWORK', 'NOT_JSON' ), true ) ) {
+				break; // Same failure for every keyword: stop instead of repeating it.
+			}
 			continue;
 		}
 		$data[ $f['id'] ] = array( 'keyword' => $kw, 'rows' => $rows, 'at' => time() );
@@ -411,7 +416,10 @@ function sap_step_ss_questions( $project, $force = false ) {
 	}
 	$data = array_intersect_key( $data, $keep );
 	sap_dataset_put( $project['id'], 'ss_questions', array( 'focuses' => $data ) );
-	return $done ? array( 'msg' => 'سوالات کاربران برای: ' . implode( '، ', $done ) ) : sap_skip( 'سوالات Focusها از قبل موجود است؛ بدون مصرف سهمیه.' );
+	if ( ! $done && $errs ) {
+		return array( 'ok' => false, 'msg' => implode( ' · ', array_unique( $errs ) ) );
+	}
+	return $done ? array( 'msg' => 'سوالات کاربران برای: ' . implode( '، ', $done ) . ( $errs ? ' · خطا: ' . implode( ' · ', $errs ) : '' ) ) : sap_skip( 'سوالات Focusها از قبل موجود است؛ بدون مصرف سهمیه.' );
 }
 
 /* ---- Analysis ---------------------------------------------------------- */

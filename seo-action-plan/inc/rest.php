@@ -314,13 +314,16 @@ add_action( 'rest_api_init', function () {
 			return sap_ss_estimate( $project, sanitize_key( $req['step'] ) ) + array( 'left' => sap_ss_remaining(), 'cap' => $u['cap'], 'connected' => sap_ss_connected() );
 		},
 	) );
-	register_rest_route( $ns, '/ss/(?P<project>\d+)/(?P<do>tool|advise|use|link)', array(
+	register_rest_route( $ns, '/ss/(?P<project>\d+)/(?P<do>tool|advise|use|link|test)', array(
 		'methods'             => 'POST',
 		'permission_callback' => 'sap_can',
 		'callback'            => function ( WP_REST_Request $req ) {
 			$project = sap_project( (int) $req['project'] );
 			if ( ! $project ) {
 				return new WP_Error( 'sap_project', 'پروژه یافت نشد.', array( 'status' => 404 ) );
+			}
+			if ( 'test' === $req['do'] ) {
+				return sap_ss_diagnose();
 			}
 			if ( 'link' === $req['do'] ) {
 				return sap_ss_link_tracker( $project, (int) $req->get_param( 'id' ) );

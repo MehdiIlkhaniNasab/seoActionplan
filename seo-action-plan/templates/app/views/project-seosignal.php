@@ -39,6 +39,41 @@ endif;
 			<?php endif; ?>
 		</div>
 	</div>
+	<?php
+	$ss_log  = array_reverse( (array) get_option( 'sap_ss_log', array() ) );
+	$ss_last = $ss_log[0] ?? null;
+	?>
+	<?php if ( $ss_last && ! $ss_last['ok'] ) : ?>
+		<div class="sap-alert is-bad">
+			<?php echo sap_icon( 'alert' ); // phpcs:ignore ?>
+			<div><b>آخرین درخواست به سئو سیگنال ناموفق بود</b> (<?php echo esc_html( sap_jdate( $ss_last['at'], 'short' ) . ' · ' . $ss_last['endpoint'] ); ?>)<br><span><?php echo esc_html( $usage['last_error'] ?: $ss_last['msg'] ); ?></span></div>
+		</div>
+	<?php endif; ?>
+	<div class="sap-ss-diag">
+		<button type="button" class="sap-btn" data-sap-ss-test="<?php echo esc_attr( $pid ); ?>"><?php echo sap_icon( 'refresh' ); // phpcs:ignore ?>تست اتصال سئو سیگنال (رایگان)</button>
+		<?php if ( $ss_log ) : ?>
+			<details>
+				<summary>گزارش آخرین درخواست‌ها (<?php echo esc_html( sap_num( count( $ss_log ) ) ); ?>)</summary>
+				<div class="sap-table-wrap">
+					<table class="sap-table is-compact">
+						<thead><tr><th>زمان</th><th>Endpoint</th><th>نتیجه</th><th>جزئیات</th><th>مدت</th></tr></thead>
+						<tbody>
+							<?php foreach ( $ss_log as $l ) : ?>
+								<tr>
+									<td class="sap-nowrap"><?php echo esc_html( sap_jdate( $l['at'], 'short' ) . ' ' . substr( $l['at'], 11, 5 ) ); ?></td>
+									<td dir="ltr"><code><?php echo esc_html( $l['endpoint'] ); ?></code></td>
+									<td><span class="sap-chip <?php echo $l['ok'] ? 'is-good' : 'is-bad'; ?>"><?php echo $l['ok'] ? 'موفق' : 'خطا'; ?><?php echo $l['code'] ? ' ' . esc_html( $l['code'] ) : ''; ?></span></td>
+									<td class="sap-small" dir="auto"><?php echo esc_html( $l['msg'] ); ?></td>
+									<td class="sap-nowrap sap-small"><?php echo esc_html( sap_num( $l['ms'] ) ); ?>ms</td>
+								</tr>
+							<?php endforeach; ?>
+						</tbody>
+					</table>
+				</div>
+			</details>
+		<?php endif; ?>
+	</div>
+	<div class="sap-ss-diag-out" data-sap-ss-test-out hidden></div>
 </section>
 
 <?php
@@ -100,95 +135,116 @@ $todo  = count( array_filter( $setup['items'], function ( $i ) {
 	<?php endif; ?>
 </section>
 
+<?php
+$cost  = function ( $u ) {
+	return $u ? '<span class="sap-cost">' . esc_html( sap_num( $u ) ) . ' واحد</span>' : '<span class="sap-cost is-free">رایگان</span>';
+};
+$f     = function ( $label, $html, $wide = false ) {
+	return '<label class="sap-field' . ( $wide ? ' is-wide' : '' ) . '"><span>' . esc_html( $label ) . '</span>' . $html . '</label>';
+};
+$opts  = function ( $list, $sel = '' ) {
+	$o = '';
+	foreach ( $list as $k => $l ) {
+		$o .= '<option value="' . esc_attr( $k ) . '"' . selected( $sel, $k, false ) . '>' . esc_html( $l ) . '</option>';
+	}
+	return $o;
+};
+$dates = array( 'all' => 'همه زمان‌ها', 'last_90' => '۹۰ روز اخیر' );
+// phpcs:disable WordPress.Security.EscapeOutput.OutputNotEscaped -- the helpers above escape.
+?>
+<datalist id="sap-competitors"><?php foreach ( $project['competitors'] as $c ) : ?><option value="<?php echo esc_attr( $c ); ?>"><?php endforeach; ?></datalist>
+<h2 class="sap-section-title">ابزارهای سئو سیگنال</h2>
 <div class="sap-ss-grid">
 	<section class="sap-panel sap-ss-tool">
-		<h3>تحقیق کلمه کلیدی <small class="sap-muted">۱ واحد</small></h3>
-		<p class="sap-muted sap-small">حجم، رقابت، روند ماهانه و سهم کلیک رقبا برای یک کلمه، با ۵ مدل جستجو.</p>
-		<form data-sap-ss-form="research">
-			<input type="text" name="keyword" required placeholder="مثلاً: کفی طبی">
-			<select name="type"><?php foreach ( sap_ss_research_types() as $k => $l ) : ?><option value="<?php echo esc_attr( $k ); ?>"><?php echo esc_html( $l ); ?></option><?php endforeach; ?></select>
-			<input type="number" name="count" value="200" min="10" max="1000" class="is-tiny" title="حداکثر تعداد نتیجه">
-			<button type="submit" class="sap-btn is-small is-primary">جستجو</button>
+		<header><h3>تحقیق کلمه کلیدی</h3><?php echo $cost( 1 ); ?></header>
+		<p class="sap-muted sap-small">حجم، تغییر، روند ماهانه و سهم کلیک رقبا برای یک کلمه، با ۵ مدل جستجو.</p>
+		<form data-sap-ss-form="research" class="sap-ss-form">
+			<?php echo $f( 'کلمه کلیدی', '<input type="text" name="keyword" required placeholder="مثلاً: کفی طبی">', true ); ?>
+			<?php echo $f( 'مدل جستجو', '<select name="type">' . $opts( sap_ss_research_types() ) . '</select>' ); ?>
+			<?php echo $f( 'حداکثر نتیجه', '<input type="number" name="count" value="200" min="10" max="1000">' ); ?>
+			<button type="submit" class="sap-btn is-primary is-block">جستجوی کلمات</button>
 		</form>
 	</section>
 	<section class="sap-panel sap-ss-tool">
-		<h3>تحقیق دسته‌ای کلمات <small class="sap-muted">۱ واحد تا ۱۰۰۰ کلمه</small></h3>
-		<form data-sap-ss-form="bulk">
-			<textarea name="keywords" rows="3" required placeholder="هر خط یک کلمه"></textarea>
-			<button type="submit" class="sap-btn is-small is-primary">گرفتن حجم</button>
+		<header><h3>حجم دسته‌ای کلمات</h3><?php echo $cost( 1 ); ?></header>
+		<p class="sap-muted sap-small">حجم و رقابت تا ۱۰۰۰ کلمه با یک درخواست.</p>
+		<form data-sap-ss-form="bulk" class="sap-ss-form">
+			<?php echo $f( 'کلمات (هر خط یک کلمه)', '<textarea name="keywords" rows="5" required placeholder="کفی طبی&#10;کفش طبی زنانه"></textarea>', true ); ?>
+			<button type="submit" class="sap-btn is-primary is-block">گرفتن حجم</button>
 		</form>
 	</section>
 	<section class="sap-panel sap-ss-tool">
-		<h3>آنالیز کلمات سایت <small class="sap-muted">۱ واحد</small></h3>
-		<p class="sap-muted sap-small">کلمات و صفحات برتر یک دامنه یا آدرس (مثلاً رقیب)، به‌همراه سایت‌های مرتبط.</p>
-		<form data-sap-ss-form="analyzer">
-			<input type="text" name="url" dir="ltr" required list="sap-competitors" placeholder="rival.ir یا آدرس صفحه">
-			<select name="type"><option value="domain">کل دامنه</option><option value="page">یک صفحه</option><option value="starting_with">آدرس‌هایی که با این شروع می‌شوند</option><option value="contains">آدرس‌هایی که شامل عبارت هستند</option></select>
-			<input type="text" name="contains" dir="ltr" placeholder="عبارت (برای «شامل»)" class="is-tiny" style="width:150px">
-			<input type="number" name="count" value="500" min="10" max="2000" class="is-tiny" title="حداکثر تعداد">
-			<button type="submit" class="sap-btn is-small is-primary">آنالیز</button>
+		<header><h3>آنالیز کلمات سایت</h3><?php echo $cost( 1 ); ?></header>
+		<p class="sap-muted sap-small">کلمات و صفحات برتر یک دامنه یا آدرس (مثلاً رقیب)، با سایت‌های مرتبط.</p>
+		<form data-sap-ss-form="analyzer" class="sap-ss-form">
+			<?php echo $f( 'دامنه یا آدرس', '<input type="text" name="url" dir="ltr" required list="sap-competitors" placeholder="rival.ir">', true ); ?>
+			<?php echo $f( 'محدوده', '<select name="type">' . $opts( array( 'domain' => 'کل دامنه', 'page' => 'یک صفحه', 'starting_with' => 'آدرس‌هایی که با این شروع می‌شوند', 'contains' => 'آدرس‌هایی که شامل عبارت هستند' ) ) . '</select>' ); ?>
+			<?php echo $f( 'حداکثر نتیجه', '<input type="number" name="count" value="500" min="10" max="2000">' ); ?>
+			<?php echo $f( 'عبارت (فقط برای «شامل»)', '<input type="text" name="contains" dir="ltr" placeholder="/blog/">', true ); ?>
+			<button type="submit" class="sap-btn is-primary is-block">آنالیز سایت</button>
 		</form>
 	</section>
 	<section class="sap-panel sap-ss-tool">
-		<h3>مقایسه دو سایت <small class="sap-muted">۲ واحد</small></h3>
-		<form data-sap-ss-form="compare">
-			<input type="text" name="site1" dir="ltr" value="<?php echo esc_attr( sap_project_domain( $project ) ); ?>">
-			<input type="text" name="site2" dir="ltr" required list="sap-competitors" placeholder="رقیب: rival.ir">
-			<datalist id="sap-competitors"><?php foreach ( $project['competitors'] as $c ) : ?><option value="<?php echo esc_attr( $c ); ?>"><?php endforeach; ?></datalist>
-			<select name="type">
-				<option value="gap">گپ: کلماتی که رقیب دارد و ما نداریم</option>
-				<option value="worse_than">کلماتی که رقیب از ما بهتر است</option>
-				<option value="better_than">کلماتی که ما از رقیب بهتریم</option>
-				<option value="common">کلمات مشترک</option>
-			</select>
-			<button type="submit" class="sap-btn is-small is-primary">مقایسه</button>
+		<header><h3>مقایسه دو سایت</h3><?php echo $cost( 2 ); ?></header>
+		<p class="sap-muted sap-small">کلماتی که رقیب دارد و شما ندارید، یا جاهایی که از شما جلوتر است.</p>
+		<form data-sap-ss-form="compare" class="sap-ss-form">
+			<?php echo $f( 'سایت شما', '<input type="text" name="site1" dir="ltr" value="' . esc_attr( sap_project_domain( $project ) ) . '">' ); ?>
+			<?php echo $f( 'رقیب', '<input type="text" name="site2" dir="ltr" required list="sap-competitors" placeholder="rival.ir">' ); ?>
+			<?php echo $f( 'نوع مقایسه', '<select name="type">' . $opts( array( 'gap' => 'گپ: کلماتی که رقیب دارد و ما نداریم', 'worse_than' => 'کلماتی که رقیب از ما بهتر است', 'better_than' => 'کلماتی که ما از رقیب بهتریم', 'common' => 'کلمات مشترک' ) ) . '</select>', true ); ?>
+			<button type="submit" class="sap-btn is-primary is-block">مقایسه</button>
 		</form>
 	</section>
+
 	<section class="sap-panel sap-ss-tool is-wide">
-		<h3>دستیار رپورتاژ <small class="sap-muted">۱ واحد هر درخواست · فقط پلن‌های دارای دستیار رپورتاژ</small></h3>
-		<div class="sap-ss-sub">
-			<form data-sap-ss-form="rp_suggest">
-				<b>پیشنهاد رسانه</b>
-				<input type="text" name="keywords" required placeholder="تا ۴ کلمه، با ، جدا کنید">
-				<button type="submit" class="sap-btn is-small is-primary">پیشنهاد بده</button>
+		<header><h3>ردیاب رتبه</h3><?php echo $cost( 0 ); ?></header>
+		<p class="sap-muted sap-small">وضعیت و تغییر رتبه کلمات پروژه ردیاب در بازه انتخابی، یا تاریخچه روزبه‌روز هر کلمه.</p>
+		<form data-sap-ss-form="rt_status" class="sap-ss-form is-row">
+			<?php echo $f( 'شناسه پروژه ردیاب', '<input type="number" name="project_id" value="' . esc_attr( $project['ss_project_id'] ?: '' ) . '" placeholder="مثلاً 37113">' ); ?>
+			<?php echo $f( 'دستگاه', '<select name="device">' . $opts( array( 'mobile' => 'موبایل', 'desktop' => 'دسکتاپ' ), $project['ss_device'] ) . '</select>' ); ?>
+			<?php echo $f( 'دامنه (خالی = سایت اصلی)', '<input type="text" name="domain" dir="ltr" list="sap-competitors" placeholder="یا یکی از رقبای پروژه">' ); ?>
+			<?php echo $f( 'بازه', '<select name="days">' . $opts( array( '1' => 'دیروز تا امروز', '7' => '۷ روز', '30' => '۳۰ روز', '90' => '۹۰ روز' ), '30' ) . '</select>' ); ?>
+			<div class="sap-ss-btns">
+				<button type="submit" class="sap-btn is-primary">وضعیت تغییر رتبه‌ها</button>
+				<button type="submit" class="sap-btn is-soft" data-sap-ss-alt="rt_history">تاریخچه روزبه‌روز</button>
+				<button type="button" class="sap-btn is-ghost" data-sap-ss-run='{"tool":"rt_projects","params":{}}'>لیست پروژه‌ها</button>
+			</div>
+		</form>
+	</section>
+
+	<section class="sap-panel sap-ss-tool is-wide">
+		<header><h3>دستیار رپورتاژ</h3><?php echo $cost( 1 ); ?></header>
+		<p class="sap-muted sap-small">فقط در پلن‌های دارای «دستیار رپورتاژ». آنالیز خریدار علاوه بر سقف روزانه، از سقف ماهانه رپورتاژ (SRLimit) هم مصرف می‌کند.</p>
+		<div class="sap-ss-rp">
+			<form data-sap-ss-form="rp_suggest" class="sap-ss-form">
+				<h4>پیشنهاد رسانه</h4>
+				<?php echo $f( 'کلمات هدف (تا ۴، با ، جدا کنید)', '<input type="text" name="keywords" required placeholder="کفی طبی، کفش طبی">', true ); ?>
+				<button type="submit" class="sap-btn is-primary is-block">پیشنهاد رسانه</button>
 			</form>
-			<form data-sap-ss-form="rp_check">
-				<b>جزئیات رسانه</b>
-				<input type="text" name="domain" dir="ltr" required placeholder="دامنه رسانه">
-				<input type="text" name="keywords" required placeholder="کلمات (تا ۴)">
-				<button type="submit" class="sap-btn is-small">بررسی</button>
+			<form data-sap-ss-form="rp_check" class="sap-ss-form">
+				<h4>جزئیات یک رسانه</h4>
+				<?php echo $f( 'دامنه رسانه', '<input type="text" name="domain" dir="ltr" required placeholder="media.ir">' ); ?>
+				<?php echo $f( 'کلمات (تا ۴)', '<input type="text" name="keywords" required>' ); ?>
+				<button type="submit" class="sap-btn is-soft is-block">بررسی رسانه</button>
 			</form>
-			<form data-sap-ss-form="rp_seller">
-				<b>آنالیز فروشنده</b>
-				<input type="text" name="domain" dir="ltr" required placeholder="دامنه رسانه">
-				<select name="report_type"><option value="reportages">رپورتاژهای منتشرشده</option><option value="out_domains">دامنه‌های لینک‌گرفته</option><option value="out_links">لینک‌های خروجی</option><option value="out_anchors">انکرهای خروجی</option><option value="linked_pages">صفحات لینک‌گرفته</option><option value="range_domains">بازه دامنه‌ها</option><option value="serp">رتبه خود رسانه در گوگل</option></select>
-				<select name="date_range"><option value="all">همه زمان‌ها</option><option value="last_90">۹۰ روز اخیر</option></select>
-				<button type="submit" class="sap-btn is-small">آنالیز</button>
+			<form data-sap-ss-form="rp_seller" class="sap-ss-form">
+				<h4>آنالیز فروشنده (رسانه)</h4>
+				<?php echo $f( 'دامنه رسانه', '<input type="text" name="domain" dir="ltr" required placeholder="media.ir">', true ); ?>
+				<?php echo $f( 'گزارش', '<select name="report_type">' . $opts( array( 'reportages' => 'رپورتاژهای منتشرشده', 'out_domains' => 'دامنه‌های لینک‌گرفته', 'out_links' => 'لینک‌های خروجی', 'out_anchors' => 'انکرهای خروجی', 'linked_pages' => 'صفحات لینک‌گرفته', 'range_domains' => 'بازه دامنه‌ها', 'serp' => 'رتبه خود رسانه در گوگل' ) ) . '</select>' ); ?>
+				<?php echo $f( 'بازه', '<select name="date_range">' . $opts( $dates ) . '</select>' ); ?>
+				<button type="submit" class="sap-btn is-soft is-block">آنالیز فروشنده</button>
 			</form>
-			<form data-sap-ss-form="rp_buyer">
-				<b>آنالیز خریدار</b>
-				<input type="text" name="domain" dir="ltr" required list="sap-competitors" placeholder="دامنه (مثلاً رقیب)">
-				<select name="report_type"><option value="reportages">رپورتاژهای خریداری‌شده</option><option value="inbound_media">رسانه‌های لینک‌دهنده</option><option value="linked_pages">صفحات لینک‌گرفته</option><option value="inbound_anchors">انکرهای ورودی</option><option value="cost_analysis">تحلیل هزینه</option></select>
-				<select name="date_range"><option value="all">همه زمان‌ها</option><option value="last_90">۹۰ روز اخیر</option></select>
-				<select name="search_type"><option value="domain">کل دامنه</option><option value="page">یک صفحه</option></select>
-				<button type="submit" class="sap-btn is-small">آنالیز</button>
+			<form data-sap-ss-form="rp_buyer" class="sap-ss-form">
+				<h4>آنالیز خریدار (مثلاً رقیب)</h4>
+				<?php echo $f( 'دامنه یا صفحه', '<input type="text" name="domain" dir="ltr" required list="sap-competitors" placeholder="rival.ir">' ); ?>
+				<?php echo $f( 'محدوده', '<select name="search_type">' . $opts( array( 'domain' => 'کل دامنه', 'page' => 'یک صفحه' ) ) . '</select>' ); ?>
+				<?php echo $f( 'گزارش', '<select name="report_type">' . $opts( array( 'reportages' => 'رپورتاژهای خریداری‌شده', 'inbound_media' => 'رسانه‌های لینک‌دهنده', 'linked_pages' => 'صفحات لینک‌گرفته', 'inbound_anchors' => 'انکرهای ورودی', 'cost_analysis' => 'تحلیل هزینه' ) ) . '</select>' ); ?>
+				<?php echo $f( 'بازه', '<select name="date_range">' . $opts( $dates ) . '</select>' ); ?>
+				<button type="submit" class="sap-btn is-soft is-block">آنالیز خریدار</button>
 			</form>
 		</div>
-		<p class="sap-muted sap-small">آنالیز خریدار علاوه بر سقف روزانه، از سقف ماهانه آنالیز سایت (SRLimit) هم مصرف می‌کند.</p>
-	</section>
-	<section class="sap-panel sap-ss-tool is-wide">
-		<h3>ردیاب رتبه <small class="sap-muted">رایگان</small></h3>
-		<form data-sap-ss-form="rt_status">
-			<input type="number" name="project_id" value="<?php echo esc_attr( $project['ss_project_id'] ?: '' ); ?>" placeholder="شناسه پروژه ردیاب" class="is-tiny" style="width:140px">
-			<select name="device"><option value="mobile" <?php selected( $project['ss_device'], 'mobile' ); ?>>موبایل</option><option value="desktop" <?php selected( $project['ss_device'], 'desktop' ); ?>>دسکتاپ</option></select>
-			<input type="text" name="domain" dir="ltr" placeholder="دامنه (خالی = دامنه اصلی، یا رقیب پروژه)" style="width:240px">
-			<select name="days"><option value="1">دیروز تا امروز</option><option value="7">۷ روز</option><option value="30" selected>۳۰ روز</option><option value="90">۹۰ روز</option></select>
-			<button type="submit" class="sap-btn is-small is-primary">وضعیت تغییر رتبه‌ها</button>
-			<button type="submit" class="sap-btn is-small" data-sap-ss-alt="rt_history">تاریخچه روزبه‌روز</button>
-			<button type="button" class="sap-btn is-small" data-sap-ss-run='{"tool":"rt_projects","params":{}}'>لیست پروژه‌ها</button>
-		</form>
 	</section>
 </div>
+<?php // phpcs:enable ?>
 
 <section class="sap-panel sap-ss-results" data-sap-ss-results hidden>
 	<div class="sap-panel-head">

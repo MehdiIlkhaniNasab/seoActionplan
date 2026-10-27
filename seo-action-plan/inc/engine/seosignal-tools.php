@@ -26,7 +26,7 @@ function sap_ss_estimate( $project, $step ) {
 	$fresh = (int) sap_setting( 'seosignal_cache_days', 25 );
 	switch ( $step ) {
 		case 'ss_volumes':
-			$kws = sap_project_keywords( $project );
+			$kws = sap_project_keywords( $project ) ?: sap_ss_track_suggestions( $project, 1000 );
 			$old = sap_dataset( $project['id'], 'ss_volumes' );
 			if ( ! $kws ) {
 				return array( 'units' => 0, 'free' => true, 'msg' => 'کلمه‌ای برای گرفتن حجم نیست.' );

@@ -101,8 +101,8 @@ $auth  = sap_google_auth_url();
 			<span class="sap-muted">مصرف امروز این افزونه: <?php echo esc_html( sap_num( $usage['used'] ) . ' از ' . sap_num( $usage['cap'] ) ); ?><?php echo $usage['last_error'] ? ' · آخرین خطا: ' . esc_html( $usage['last_error'] ) : ''; ?></span>
 		</div>
 		<div class="sap-grid-3">
-			<label>کلید API (ایمیل:توکن)<input type="text" name="seosignal_key" dir="ltr" value="<?php echo esc_attr( sap_mask( $s['seosignal_key'] ) ); ?>" autocomplete="off">
-				<small>پنل سئو سیگنال › منوی کاربری › مدیریت API › ساخت کلید.</small>
+			<label>کلید API<input type="text" name="seosignal_key" dir="ltr" value="<?php echo esc_attr( sap_mask( $s['seosignal_key'] ) ); ?>" autocomplete="off">
+				<small>پنل سئو سیگنال › منوی کاربری › مدیریت API › ساخت کلید. کلید را کامل و دقیقاً همان‌طور که پنل نشان می‌دهد کپی کنید. بعد از ذخیره، در تب «سئو سیگنال» هر پروژه دکمه «تست اتصال» علت هر خطا را نشان می‌دهد.</small>
 			</label>
 			<label>سقف درخواست روزانه برای این افزونه<input type="number" name="seosignal_daily_cap" min="1" value="<?php echo esc_attr( $s['seosignal_daily_cap'] ); ?>">
 				<small>سقف پیش‌فرض سئو سیگنال ۵۰ درخواست در روز (مشترک بین همه ابزارها) است؛ ردیاب رتبه شامل سقف نیست.</small>

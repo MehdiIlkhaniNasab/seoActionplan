@@ -852,8 +852,33 @@
 		var run = function (tool, params, force, btn) {
 			last = { tool: tool, params: params };
 			if (btn) { busy(btn); }
-			post('ss/' + pid + '/tool', { tool: tool, params: params, force: force ? 1 : 0 }).then(render).catch(function (e) { toast(e.message, true); }).then(function () { if (btn) { idle(btn); } });
+			post('ss/' + pid + '/tool', { tool: tool, params: params, force: force ? 1 : 0 }).then(render).catch(function (e) {
+				// Keep the error on screen (a toast disappears before it can be read).
+				box.hidden = false;
+				box.querySelector('[data-sap-ss-title]').textContent = titles[tool] + ' — ناموفق';
+				box.querySelector('[data-sap-ss-meta]').textContent = '';
+				box.querySelector('[data-sap-ss-extra]').innerHTML = '<div class="sap-alert is-bad"><div><b>سئو سیگنال جواب نداد</b><br>' + esc(e.message) + '<br><small>برای دیدن علت دقیق، «تست اتصال سئو سیگنال» را در بالای همین صفحه بزنید.</small></div></div>';
+				box.querySelector('.sap-ss-use').hidden = true;
+				box.querySelector('[data-sap-ss-head]').innerHTML = '';
+				box.querySelector('[data-sap-ss-body]').innerHTML = '';
+				box.scrollIntoView({ behavior: 'smooth', block: 'start' });
+			}).then(function () { if (btn) { idle(btn); } });
 		};
+		var tst = document.querySelector('[data-sap-ss-test]');
+		if (tst) {
+			tst.addEventListener('click', function () {
+				var out = document.querySelector('[data-sap-ss-test-out]');
+				busy(tst, 'در حال تست…');
+				post('ss/' + tst.getAttribute('data-sap-ss-test') + '/test').then(function (j) {
+					out.hidden = false;
+					out.innerHTML = '<ol class="sap-ss-steps">' + j.steps.map(function (s) {
+						var cls = s.ok === true ? 'is-done' : (s.ok === false ? 'is-todo is-bad' : 'is-info');
+						return '<li class="' + cls + '"><i>' + (s.ok === true ? '✓' : (s.ok === false ? '!' : 'i')) + '</i><div><b>' + esc(s.name) + '</b><p class="sap-small">' + esc(s.msg) + '</p></div></li>';
+					}).join('') + '</ol>';
+					toast(j.ok ? 'اتصال سئو سیگنال سالم است.' : 'اتصال مشکل دارد؛ جزئیات زیر دکمه.', !j.ok);
+				}).catch(function (e) { toast(e.message, true); }).then(function () { idle(tst); });
+			});
+		}
 		document.querySelectorAll('[data-sap-ss-form]').forEach(function (f) {
 			f.addEventListener('submit', function (ev) {
 				ev.preventDefault();
