@@ -72,6 +72,40 @@ $args = array( 'fnames' => $fnames, 'here' => $here, 'focuses' => $focuses, 'ope
 	</div>
 </div>
 
+<?php
+// A new month has started: show what happened last month and offer to carry over / build.
+$prev_p = sap_period_shift( $period, -1 );
+if ( sap_period_current() === $period && ! $tasks ) :
+	$prev_t    = sap_tasks( array( 'project_id' => $pid, 'period' => $prev_p ) );
+	$prev_open = count( array_filter( $prev_t, function ( $t ) {
+		return in_array( $t['status'], array( 'inbox', 'next', 'doing', 'waiting' ), true ) && ! $t['recurring'];
+	} ) );
+	$prev_done = count( array_filter( $prev_t, function ( $t ) {
+		return 'done' === $t['status'];
+	} ) );
+	if ( $prev_t ) :
+		sap_month_snapshot( $project, $prev_p );
+		?>
+		<section class="sap-panel sap-newmonth">
+			<div>
+				<b><?php echo esc_html( sap_period_label( $period ) ); ?> شروع شده و هنوز برنامه‌ای ندارد.</b>
+				<p class="sap-muted sap-small"><?php echo esc_html( sprintf( '%s: %s کار از %s کار انجام شد و کارنامه آن ماه ذخیره شده (در تب «لاگ اقدامات» و گزارش سئو). کارهای انجام‌شده ماه قبل همان‌جا می‌مانند و در برنامه این ماه تکرار نمی‌شوند.', sap_period_label( $prev_p ), sap_num( $prev_done ), sap_num( count( $prev_t ) ) ) ); ?></p>
+			</div>
+			<div class="sap-actions">
+				<?php if ( $prev_open ) : ?>
+					<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
+						<?php sap_form_fields( 'sap_plan_carry', array( 'project_id' => $pid, 'from' => $prev_p ) ); ?>
+						<button class="sap-btn" type="submit">۱. انتقال <?php echo esc_html( sap_num( $prev_open ) ); ?> کار ناتمام به این ماه</button>
+					</form>
+				<?php endif; ?>
+				<a class="sap-btn is-primary" href="<?php echo esc_url( sap_project_url( $pid, 'overview' ) ); ?>"><?php echo $prev_open ? '۲. ' : ''; ?>تحلیل کامل با داده‌های تازه</a>
+			</div>
+		</section>
+		<?php
+	endif;
+endif;
+?>
+
 <section class="sap-panel sap-capacity">
 	<div>
 		<b>اکشن پلن <?php echo esc_html( sap_period_label( $period ) ); ?></b>

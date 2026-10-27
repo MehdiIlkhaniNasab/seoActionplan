@@ -141,6 +141,9 @@ function sap_activity_export( $project, $start, $end ) {
 	$lines  = array();
 	$items  = array();
 	foreach ( array_reverse( $entries ) as $e ) {
+		if ( 'reset' === $e['action'] ) {
+			continue; // Internal housekeeping, not work for the client.
+		}
 		$label            = sap_context_label( $e['category'] );
 		$groups[ $label ] = ( $groups[ $label ] ?? 0 ) + 1;
 		$text             = $e['title'] . ( $e['url'] ? ' — ' . rawurldecode( $e['url'] ) : '' );

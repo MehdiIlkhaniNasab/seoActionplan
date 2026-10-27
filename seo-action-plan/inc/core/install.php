@@ -236,6 +236,16 @@ function sap_install() {
 		KEY project_status (project_id,status)
 	) $c;" );
 
+	dbDelta( 'CREATE TABLE ' . sap_table( 'months' ) . " (
+		id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+		project_id bigint(20) unsigned NOT NULL DEFAULT 0,
+		period varchar(7) NOT NULL DEFAULT '',
+		data longtext NULL,
+		updated_at datetime NOT NULL DEFAULT '0000-00-00 00:00:00',
+		PRIMARY KEY  (id),
+		UNIQUE KEY project_period (project_id,period)
+	) $c;" );
+
 	foreach ( array( 'administrator' ) as $role_name ) {
 		$role = get_role( $role_name );
 		if ( $role ) {

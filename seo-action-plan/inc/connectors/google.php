@@ -217,6 +217,9 @@ function sap_google_request( $method, $url, $body = null, $timeout = 60 ) {
 			delete_transient( 'sap_google_access_token' );
 			return new WP_Error( 'sap_scope', sap_google_scope_message(), array( 'status' => $code ) );
 		}
+		if ( preg_match( '/has not been used in project|it is disabled|SERVICE_DISABLED|accessNotConfigured/i', $msg . wp_json_encode( $data['error']['details'] ?? array() ) ) ) {
+			return new WP_Error( 'sap_google_api_off', sap_google_api_off_message( $msg, $url ), array( 'status' => $code ) );
+		}
 		return new WP_Error( 'sap_google_http', 'خطای API گوگل: ' . $msg, array( 'status' => $code ) );
 	}
 	return is_array( $data ) ? $data : array();
@@ -252,4 +255,39 @@ function sap_google_service_email() {
  */
 function sap_google_scope_message() {
 	return 'حساب گوگل متصل است اما اجازه Search Console یا Google Sheets داده نشده. در تنظیمات دوباره «اتصال حساب گوگل» را بزنید و در صفحه گوگل تیک هر دو مورد (Search Console و Google Sheets) را بزنید.';
+}
+
+/**
+ * Explain an API that is not enabled in the Google Cloud project (SERVICE_DISABLED).
+ *
+ * @param string $msg Google's message (carries the console link and project number).
+ * @param string $url The API URL that was called (tells which API it is).
+ */
+function sap_google_api_off_message( $msg, $url ) {
+	$apis = array(
+		'sheets.googleapis.com'           => array( 'Google Sheets API', 'sheets.googleapis.com' ),
+		'searchconsole.googleapis.com'    => array( 'Google Search Console API', 'searchconsole.googleapis.com' ),
+		'www.googleapis.com/webmasters'   => array( 'Google Search Console API', 'searchconsole.googleapis.com' ),
+		'pagespeedonline.googleapis.com'  => array( 'PageSpeed Insights API', 'pagespeedonline.googleapis.com' ),
+		'analyticsdata.googleapis.com'    => array( 'Google Analytics Data API', 'analyticsdata.googleapis.com' ),
+	);
+	$api = array( 'API مورد نیاز', '' );
+	foreach ( $apis as $needle => $a ) {
+		if ( false !== strpos( $url, $needle ) ) {
+			$api = $a;
+			break;
+		}
+	}
+	$project = preg_match( '/project[= ](\d+)/', $msg, $m ) ? $m[1] : '';
+	if ( preg_match( '#https://console\.developers\.google\.com/\S+#', $msg, $m2 ) ) {
+		$link = rtrim( $m2[0], '.,' );
+	} else {
+		$link = 'https://console.cloud.google.com/apis/library/' . ( $api[1] ?: '' ) . ( $project ? '?project=' . $project : '' );
+	}
+	return sprintf(
+		'%1$s در پروژه Google Cloud شما%2$s فعال نیست (این خطا مشکل سکان یا شیت نیست؛ فقط یک بار باید فعالش کنید). لینک را باز کنید، با همان حساب گوگلی که OAuth را ساخته‌اید وارد شوید و دکمه آبی ENABLE را بزنید؛ ۲ تا ۵ دقیقه صبر کنید و دوباره امتحان کنید: %3$s',
+		$api[0],
+		$project ? ' (شماره ' . $project . ')' : '',
+		$link
+	);
 }

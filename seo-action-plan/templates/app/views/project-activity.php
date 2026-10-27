@@ -51,6 +51,37 @@ $sources = sap_activity_sources();
 	</div>
 </div>
 
+<?php
+if ( $period <= sap_period_current() ) {
+	sap_month_snapshot( $project, $period );
+}
+$months = array_slice( sap_months( $pid ), 0, 12, true );
+?>
+<?php if ( $months ) : ?>
+	<details class="sap-panel" <?php echo count( $months ) > 1 ? '' : 'open'; ?>>
+		<summary><b>کارنامه ماه‌ها</b> <span class="sap-muted sap-small">— خلاصه ذخیره‌شده هر ماه؛ با پاکسازی پروژه یا حذف و نصب دوباره افزونه از بین نمی‌رود و گزارش سئو از آن استفاده می‌کند.</span></summary>
+		<div class="sap-months">
+			<?php foreach ( $months as $per => $m ) : ?>
+				<?php
+				$new = count( array_filter( (array) ( $m['content'] ?? array() ), function ( $c ) {
+					return 'new' === $c['kind'];
+				} ) );
+				$upd = count( (array) ( $m['content'] ?? array() ) ) - $new;
+				?>
+				<a class="sap-month" href="<?php echo esc_url( sap_project_url( $pid, 'activity', array( 'period' => $per ) ) ); ?>">
+					<h4><?php echo esc_html( sap_period_label( $per ) ); ?><?php echo sap_period_current() === $per ? '<span class="sap-chip">ماه جاری</span>' : ''; // phpcs:ignore ?></h4>
+					<ul>
+						<li>کار انجام‌شده: <b><?php echo esc_html( sap_num( count( (array) ( $m['done'] ?? array() ) ) ) . ' از ' . sap_num( count( (array) ( $m['planned'] ?? array() ) ) ) ); ?></b> · <?php echo esc_html( sap_num( array_sum( array_column( (array) ( $m['done'] ?? array() ), 'effort' ) ), 1 ) ); ?> ساعت</li>
+						<li>محتوا: <b><?php echo esc_html( sap_num( $new ) ); ?></b> جدید · <b><?php echo esc_html( sap_num( $upd ) ); ?></b> بروزرسانی</li>
+						<li>اقدام ثبت‌شده در لاگ: <b><?php echo esc_html( sap_num( (int) ( $m['activity']['count'] ?? 0 ) ) ); ?></b></li>
+						<?php if ( ! empty( $m['resets'] ) ) : ?><li>پاکسازی و شروع دوباره: <?php echo esc_html( sap_num( $m['resets'] ) ); ?> بار (کارهای قبلی حفظ شد)</li><?php endif; ?>
+					</ul>
+				</a>
+			<?php endforeach; ?>
+		</div>
+	</details>
+<?php endif; ?>
+
 <?php if ( $by_cat ) : ?>
 	<div class="sap-chips">
 		<?php foreach ( $by_cat as $c => $n ) : ?>

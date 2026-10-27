@@ -150,6 +150,20 @@ add_action( 'admin_post_sap_delete_project', function () {
 	sap_back( sap_url(), 'پروژه و همه داده‌هایش حذف شد.' );
 } );
 
+add_action( 'admin_post_sap_project_reset', function () {
+	sap_guard( 'sap_project_reset' );
+	$id = absint( sap_post( 'project_id' ) );
+	if ( 'RESET' !== strtoupper( trim( sap_post( 'confirm' ) ) ) ) {
+		sap_back( sap_project_url( $id, 'settings' ) . '#reset', 'برای پاکسازی، کلمه RESET را تایپ کنید.', false );
+	}
+	$parts = array_map( 'sanitize_key', (array) ( $_POST['parts'] ?? array() ) ); // phpcs:ignore WordPress.Security.NonceVerification
+	$done  = sap_project_reset( $id, $parts );
+	if ( ! $done ) {
+		sap_back( sap_project_url( $id, 'settings' ) . '#reset', 'هیچ بخشی انتخاب نشده بود.', false );
+	}
+	sap_back( sap_project_url( $id, 'overview' ), sprintf( 'پاک شد: %s. کارنامه ماه ذخیره شده است؛ حالا «تحلیل کامل» را بزنید تا همه چیز از نو ساخته شود.', implode( '، ', $done ) ) );
+} );
+
 add_action( 'admin_post_sap_regen_key', function () {
 	sap_guard( 'sap_regen_key' );
 	global $wpdb;

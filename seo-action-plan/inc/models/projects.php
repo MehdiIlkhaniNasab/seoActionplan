@@ -105,7 +105,7 @@ function sap_project_set_option( $id, $key, $value ) {
 function sap_project_delete( $id ) {
 	global $wpdb;
 	$id = (int) $id;
-	foreach ( array( 'focuses', 'datasets', 'findings', 'tasks', 'activity' ) as $t ) {
+	foreach ( array( 'focuses', 'datasets', 'findings', 'tasks', 'activity', 'keymap', 'revisions', 'comments', 'ideas', 'months' ) as $t ) {
 		$wpdb->delete( sap_table( $t ), array( 'project_id' => $id ) );
 	}
 	$wpdb->delete( sap_table( 'projects' ), array( 'id' => $id ) );

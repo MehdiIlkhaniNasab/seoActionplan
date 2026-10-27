@@ -28,10 +28,24 @@
 			toastEl.setAttribute('role', 'status');
 			document.body.appendChild(toastEl);
 		}
-		toastEl.textContent = msg;
-		toastEl.className = 'sap-toast is-show' + (bad ? ' is-bad' : '');
+		// Plain text, but URLs become links (e.g. «enable this Google API» errors).
+		toastEl.textContent = '';
+		String(msg).split(/(https?:\/\/[^\s]+)/).forEach(function (part, i) {
+			if (i % 2) {
+				var a = document.createElement('a');
+				a.href = part.replace(/[.,)]+$/, '');
+				a.target = '_blank';
+				a.rel = 'noopener';
+				a.textContent = 'باز کردن لینک ↗';
+				toastEl.appendChild(a);
+			} else {
+				toastEl.appendChild(document.createTextNode(part));
+			}
+		});
+		var long = String(msg).length > 90 || /https?:/.test(msg);
+		toastEl.className = 'sap-toast is-show' + (bad ? ' is-bad' : '') + (long ? ' is-long' : '');
 		clearTimeout(toastEl._t);
-		toastEl._t = setTimeout(function () { toastEl.className = 'sap-toast'; }, 2600);
+		toastEl._t = setTimeout(function () { toastEl.className = 'sap-toast'; }, long ? 14000 : 2600);
 	}
 
 	function fadeOut(el) {
@@ -859,6 +873,16 @@
 			if (chk) { run('rp_check', { domain: chk.getAttribute('data-sap-ss-check'), keywords: (lastMeta.keywords || []).join('\n') }, false, chk); }
 			if (cmp) { var cf = document.querySelector('form[data-sap-ss-form="compare"]'); cf.querySelector('[name=site2]').value = cmp.getAttribute('data-sap-ss-compare'); cf.scrollIntoView({ behavior: 'smooth', block: 'center' }); toast('دامنه در فرم «مقایسه دو سایت» قرار گرفت (۲ واحد)'); }
 			if (ev.target.closest('[data-sap-ss-refresh]') && last) { if (window.confirm('درخواست تازه از سهمیه روزانه مصرف می‌کند. ادامه؟')) { run(last.tool, last.params, true, ev.target); } }
+			var lnk = ev.target.closest('[data-sap-ss-link]');
+			if (lnk) {
+				busy(lnk, 'در حال جستجو در ردیاب…');
+				post('ss/' + lnk.getAttribute('data-sap-ss-link') + '/link').then(function (j) { toast(j.msg); setTimeout(function () { location.reload(); }, 1600); }).catch(function (e) { toast(e.message, true); idle(lnk); });
+			}
+			var cpf = ev.target.closest('[data-sap-copy-from]');
+			if (cpf) {
+				var src = document.querySelector(cpf.getAttribute('data-sap-copy-from'));
+				(navigator.clipboard ? navigator.clipboard.writeText(src.value) : Promise.reject()).then(function () { toast('کپی شد'); }).catch(function () { src.select(); document.execCommand('copy'); toast('کپی شد'); });
+			}
 			if (adv) {
 				busy(adv, 'در حال بررسی داده‌ها…');
 				post('ss/' + adv.getAttribute('data-sap-ss-advise') + '/advise').then(function () { location.reload(); }).catch(function (e) { toast(e.message, true); idle(adv); });

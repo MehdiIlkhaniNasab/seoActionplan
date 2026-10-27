@@ -52,7 +52,7 @@ $auth  = sap_google_auth_url();
 		<label>کلید API گوگل برای PageSpeed Insights (اختیاری)<input type="text" name="psi_key" dir="ltr" value="<?php echo esc_attr( sap_mask( $s['psi_key'] ) ); ?>" autocomplete="off">
 			<small>برای Core Web Vitals. بدون کلید هم کار می‌کند ولی سهمیه محدودتری دارد؛ PageSpeed Insights API را در Google Cloud فعال کنید.</small>
 		</label>
-		<p class="sap-muted">در Google Cloud Console دو API را فعال کنید: <b>Google Search Console API</b> و <b>Google Sheets API</b>. اگر از SeoReport استفاده می‌کنید می‌توانید از همان پروژه Google Cloud و همان OAuth Client استفاده کنید؛ فقط Redirect URI بالا را هم به Client اضافه کنید.</p>
+		<p class="sap-muted">در Google Cloud Console دو API را فعال کنید (روی هر لینک بزنید و ENABLE را بزنید): <a href="https://console.cloud.google.com/apis/library/searchconsole.googleapis.com" target="_blank" rel="noopener"><b>Google Search Console API</b></a> و <a href="https://console.cloud.google.com/apis/library/sheets.googleapis.com" target="_blank" rel="noopener"><b>Google Sheets API</b></a>. اگر Sheets API فعال نباشد، ساخت و خواندن شیت خطای «has not been used in project… or it is disabled» می‌دهد. اگر از SeoReport استفاده می‌کنید می‌توانید از همان پروژه Google Cloud و همان OAuth Client استفاده کنید؛ فقط Redirect URI بالا را هم به Client اضافه کنید.</p>
 	</section>
 
 	<section class="sap-panel">

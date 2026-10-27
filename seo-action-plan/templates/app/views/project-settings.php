@@ -75,6 +75,27 @@ $site     = $project['site_url'] ?: 'https://' . sap_project_domain( $project ) 
 	</form>
 </section>
 
+<section class="sap-panel is-danger" id="reset">
+	<h2>پاکسازی و ساخت اکشن پلن از صفر</h2>
+	<p class="sap-muted">بخش‌هایی را که می‌خواهید از نو ساخته شوند انتخاب کنید. تنظیمات پروژه و اتصال‌ها (سرچ کنسول، شیت، سایت، سئو سیگنال) دست نمی‌خورند. <b>قبل از پاکسازی، کارنامه این ماه و ماه قبل ذخیره می‌شود</b>؛ پس کارهایی که انجام داده‌اید در گزارش سئو می‌مانند، حتی اگر چند بار در یک ماه از صفر شروع کنید.</p>
+	<form method="post" action="<?php echo $post; // phpcs:ignore ?>" class="sap-reset" onsubmit="return confirm('بخش‌های انتخاب‌شده برای همیشه پاک می‌شوند. ادامه؟')">
+		<?php sap_form_fields( 'sap_project_reset', array( 'project_id' => $pid ) ); ?>
+		<div class="sap-reset-parts">
+			<?php foreach ( sap_reset_parts() as $k => $part ) : ?>
+				<label class="sap-check<?php echo in_array( $k, array( 'log', 'archive' ), true ) ? ' is-risky' : ''; ?>">
+					<input type="checkbox" name="parts[]" value="<?php echo esc_attr( $k ); ?>" <?php checked( in_array( $k, array( 'plan', 'analysis' ), true ) ); ?>>
+					<span><b><?php echo esc_html( $part[0] ); ?></b><small><?php echo esc_html( $part[1] ); ?></small></span>
+				</label>
+			<?php endforeach; ?>
+		</div>
+		<p class="sap-small sap-muted">«لاگ اقدامات» و «کارنامه ماه‌ها» منبع بخش «اقدامات انجام‌شده» گزارش سئو هستند؛ فقط وقتی پاکشان کنید که پروژه واقعاً از اول شروع شده و گزارشی از قبل لازم ندارید.</p>
+		<div class="sap-inline">
+			<input type="text" name="confirm" placeholder="RESET" dir="ltr" class="is-tiny" required>
+			<button class="sap-btn is-small is-danger" type="submit">پاکسازی بخش‌های انتخاب‌شده</button>
+		</div>
+	</form>
+</section>
+
 <section class="sap-panel is-danger">
 	<h2>حذف پروژه</h2>
 	<p class="sap-muted">همه Focusها، یافته‌ها، کارها، لاگ اقدامات و داده‌های دریافتی این پروژه حذف می‌شود.</p>

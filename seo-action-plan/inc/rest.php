@@ -314,13 +314,16 @@ add_action( 'rest_api_init', function () {
 			return sap_ss_estimate( $project, sanitize_key( $req['step'] ) ) + array( 'left' => sap_ss_remaining(), 'cap' => $u['cap'], 'connected' => sap_ss_connected() );
 		},
 	) );
-	register_rest_route( $ns, '/ss/(?P<project>\d+)/(?P<do>tool|advise|use)', array(
+	register_rest_route( $ns, '/ss/(?P<project>\d+)/(?P<do>tool|advise|use|link)', array(
 		'methods'             => 'POST',
 		'permission_callback' => 'sap_can',
 		'callback'            => function ( WP_REST_Request $req ) {
 			$project = sap_project( (int) $req['project'] );
 			if ( ! $project ) {
 				return new WP_Error( 'sap_project', 'پروژه یافت نشد.', array( 'status' => 404 ) );
+			}
+			if ( 'link' === $req['do'] ) {
+				return sap_ss_link_tracker( $project, (int) $req->get_param( 'id' ) );
 			}
 			if ( 'advise' === $req['do'] ) {
 				$res = sap_ss_advise( $project );
@@ -575,70 +578,11 @@ function sap_rest_crawl_ingest( WP_REST_Request $req ) {
  * Query: ?period=1405-08 (Jalali month) or ?from=Y-m-d&to=Y-m-d.
  */
 function sap_rest_report( WP_REST_Request $req ) {
-	$project = sap_project( (int) $req['project'] );
-	$from    = sap_parse_date( (string) $req->get_param( 'from' ) );
-	$to      = sap_parse_date( (string) $req->get_param( 'to' ) );
-	if ( $from && $to ) {
-		$period = sap_period_of( $from );
-	} else {
-		$period = sap_period_sanitize( (string) ( $req->get_param( 'period' ) ?: sap_period_current() ) );
-		list( $from, $to ) = sap_period_range( $period );
-	}
-	$next     = sap_period_shift( $period, 1 );
-	$tasks    = sap_tasks( array( 'project_id' => $project['id'], 'period' => $period ) );
-	$planned  = array_filter( $tasks, function ( $t ) {
-		return 'dropped' !== $t['status'];
-	} );
-	$done     = array_filter( $tasks, function ( $t ) {
-		return 'done' === $t['status'];
-	} );
-	$next_plan = array();
-	foreach ( sap_tasks( array( 'project_id' => $project['id'], 'period' => $next, 'status' => array( 'inbox', 'next', 'doing', 'waiting' ) ) ) as $t ) {
-		$next_plan[] = array(
-			'title'          => $t['title'],
-			'category'       => $t['context'],
-			'category_label' => sap_context_label( $t['context'] ),
-			'url'            => $t['url'],
-			'effort'         => $t['effort'],
-		);
-	}
-	$focuses = array();
-	foreach ( sap_focuses( $project['id'] ) as $f ) {
-		$k         = sap_focus_kpis( $f, $project['id'] );
-		$metric    = $f['kpi_metric'];
-		$focuses[] = array(
-			'name'     => $f['name'],
-			'goal'     => $f['goal'],
-			'status'   => $f['status'],
-			'metric'   => $metric,
-			'metric_label' => sap_kpi_metrics()[ $metric ] ?? $metric,
-			'baseline' => $f['kpi_baseline'],
-			'target'   => $f['kpi_target'],
-			'current'  => $k ? $k[ $metric ] : null,
-			'progress' => $k ? sap_focus_progress( $f, $k[ $metric ] ) : null,
-			'deadline' => $f['deadline'],
-		);
-	}
-	return array(
-		'project'        => array( 'id' => $project['id'], 'name' => $project['name'], 'site' => $project['site_url'] ),
-		'period'         => array( 'key' => $period, 'label' => sap_period_label( $period ), 'from' => $from, 'to' => $to ),
-		'activity'       => sap_activity_export( $project, $from, $to ),
-		'plan'           => array(
-			'tasks_planned' => count( $planned ),
-			'tasks_done'    => count( $done ),
-			'hours_planned' => array_sum( array_column( $planned, 'effort' ) ),
-			'hours_done'    => array_sum( array_column( $done, 'effort' ) ),
-		),
-		'next_plan'      => array(
-			'period'     => array( 'key' => $next, 'label' => sap_period_label( $next ) ),
-			'items'      => $next_plan,
-			'lines'      => implode( "\n", array_map( function ( $i ) {
-				return $i['category_label'] . ' | ' . $i['title'];
-			}, $next_plan ) ),
-		),
-		'focuses'        => $focuses,
-		'generated_at'   => sap_now(),
-		'plugin_version' => SAP_VERSION,
+	return sap_month_report(
+		sap_project( (int) $req['project'] ),
+		(string) $req->get_param( 'period' ),
+		sap_parse_date( (string) $req->get_param( 'from' ) ),
+		sap_parse_date( (string) $req->get_param( 'to' ) )
 	);
 }
 

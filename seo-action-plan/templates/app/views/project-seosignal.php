@@ -41,6 +41,43 @@ endif;
 	</div>
 </section>
 
+<?php
+$setup = sap_ss_setup( $project );
+$todo  = count( array_filter( $setup['items'], function ( $i ) {
+	return false === $i['ok'];
+} ) );
+?>
+<details class="sap-panel sap-ss-setup" <?php echo $todo ? 'open' : ''; ?>>
+	<summary>
+		<h3><?php echo sap_icon( 'check' ); // phpcs:ignore ?>راهنمای راه‌اندازی: در پنل سئو سیگنال چه چیزهایی باید اضافه کنم؟</h3>
+		<span class="sap-chip <?php echo $todo ? 'is-warn' : 'is-good'; ?>"><?php echo $todo ? esc_html( sap_num( $todo ) . ' کار مانده' ) : 'کامل است'; ?></span>
+	</summary>
+	<p class="sap-muted sap-small">سکان برای تحلیل به این موارد در حساب سئو سیگنال شما نیاز دارد. وضعیت هر مورد از داده‌های همین پروژه خوانده می‌شود و هیچ واحدی مصرف نمی‌کند.</p>
+	<ol class="sap-ss-steps">
+		<?php foreach ( $setup['items'] as $it ) : ?>
+			<li class="<?php echo true === $it['ok'] ? 'is-done' : ( false === $it['ok'] ? 'is-todo' : 'is-info' ); ?>">
+				<i aria-hidden="true"><?php echo true === $it['ok'] ? '✓' : ( false === $it['ok'] ? '!' : 'i' ); ?></i>
+				<div>
+					<b><?php echo esc_html( $it['title'] ); ?></b>
+					<p class="sap-small"><?php echo esc_html( $it['how'] ); ?></p>
+					<?php if ( 'link' === ( $it['action'] ?? '' ) ) : ?>
+						<button type="button" class="sap-btn is-small" data-sap-ss-link="<?php echo esc_attr( $pid ); ?>"><?php echo $project['ss_project_id'] ? 'اتصال دوباره' : 'پیدا کردن و اتصال خودکار'; ?> (رایگان)</button>
+					<?php endif; ?>
+				</div>
+			</li>
+		<?php endforeach; ?>
+	</ol>
+	<?php if ( $setup['track'] ) : ?>
+		<div class="sap-ss-track">
+			<div class="sap-panel-head">
+				<h4><?php echo $setup['tracked'] ? 'کلمات جا مانده از ردیاب' : 'کلمات پیشنهادی برای ردیاب رتبه'; ?> <small class="sap-muted"><?php echo esc_html( sap_num( count( $setup['missing'] ) ) ); ?> کلمه</small></h4>
+				<button type="button" class="sap-btn is-small" data-sap-copy-from="#sap-ss-track-list">کپی (هر خط یک کلمه)</button>
+			</div>
+			<textarea id="sap-ss-track-list" rows="5" readonly><?php echo esc_textarea( implode( "\n", $setup['missing'] ) ); ?></textarea>
+		</div>
+	<?php endif; ?>
+</details>
+
 <section class="sap-panel sap-ss-advice">
 	<div class="sap-panel-head">
 		<h3><?php echo sap_icon( 'spark' ); // phpcs:ignore ?>پیشنهاد هوشمند: الان از سئو سیگنال چه بگیریم؟</h3>
