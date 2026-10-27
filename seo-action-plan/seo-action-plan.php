@@ -2,7 +2,7 @@
 /**
  * Plugin Name:       سُکان — Sokan by Ronagh
  * Description:       سکان، هدایت هوشمند سئو (اکشن پلن سئو): تحلیل داده‌های سرچ کنسول، گوگل شیت، سئو سیگنال و اسکریمینگ فراگ، کشف ایرادها و فرصت‌ها، ساخت اکشن پلن ماهانه به روش GTD و ثبت صفر تا صد اقدامات برای گزارش سئو.
- * Version:           0.8.4
+ * Version:           0.9.0
  * Requires at least: 6.4
  * Requires PHP:      8.0
  * Author:            Mehdi Ilkhani Nasab
@@ -14,8 +14,8 @@
 
 defined( 'ABSPATH' ) || exit;
 
-const SAP_VERSION    = '0.8.4';
-const SAP_DB_VERSION = '5';
+const SAP_VERSION    = '0.9.0';
+const SAP_DB_VERSION = '6';
 const SAP_CAP        = 'sap_manage'; // Full access: projects, settings, plans.
 const SAP_CAP_WORK   = 'sap_work';   // Team members: their own tasks.
 
@@ -39,6 +39,7 @@ foreach ( array(
 	'models/revisions',
 	'models/comments',
 	'models/ideas',
+	'models/updates',
 	'connectors/google',
 	'connectors/gsc',
 	'connectors/sheets',
@@ -53,11 +54,16 @@ foreach ( array(
 	'engine/ai',
 	'engine/content',
 	'engine/ideas',
+	'engine/ideas-pool',
 	'engine/calendar',
 	'engine/graph',
 	'engine/seosignal-tools',
 	'engine/seosignal-setup',
 	'engine/months',
+	'engine/technical',
+	'engine/pillars',
+	'engine/audit',
+	'engine/offpage',
 	'engine/planner',
 	'engine/sync',
 	'rest',

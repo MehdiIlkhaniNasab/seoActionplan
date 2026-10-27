@@ -198,12 +198,14 @@ add_action( 'rest_api_init', function () {
 				return new WP_Error( 'sap_project', 'پروژه یافت نشد.', array( 'status' => 404 ) );
 			}
 			$period = (string) $req->get_param( 'period' );
-			$res    = $period ? sap_calendar_fill_month( $project, sap_period_sanitize( $period ), max( 1, absint( $req->get_param( 'target' ) ?: 8 ) ) ) : sap_ideas_generate( $project, absint( $req->get_param( 'count' ) ?: 10 ) );
+			$source = 'competitors' === $req->get_param( 'source' ) ? 'competitors' : 'all';
+			$res    = $period ? sap_calendar_fill_month( $project, sap_period_sanitize( $period ), max( 1, absint( $req->get_param( 'target' ) ?: 8 ) ) ) : sap_ideas_generate( $project, absint( $req->get_param( 'count' ) ?: 10 ), '', $source );
 			if ( is_wp_error( $res ) ) {
 				return $res;
 			}
-			$u = sap_ai_usage();
-			return array( 'ok' => true, 'msg' => ( $res['msg'] ?? sprintf( '%s ایده جدید آماده بررسی است.', sap_num( $res['added'] ) ) ) . sprintf( ' (هزینه حدود %s دلار)', sap_num( $u['last_cost'], 3 ) ) );
+			$u     = sap_ai_usage();
+			$extra = ! empty( $res['dropped'] ) ? sprintf( ' %s ایده خارج از کلمات تأییدشده بود و حذف شد.', sap_num( $res['dropped'] ) ) : '';
+			return array( 'ok' => true, 'msg' => ( $res['msg'] ?? sprintf( '%s ایده جدید آماده بررسی است.', sap_num( $res['added'] ) ) ) . $extra . sprintf( ' (هزینه حدود %s دلار)', sap_num( $u['last_cost'], 3 ) ) );
 		},
 	) );
 	register_rest_route( $ns, '/idea/(?P<id>\d+)', array(
@@ -338,6 +340,123 @@ add_action( 'rest_api_init', function () {
 			}
 			return sap_ss_use( $project, (string) $req->get_param( 'action' ), (array) $req->get_param( 'items' ), (string) $req->get_param( 'url' ) );
 		},
+	) );
+
+	// Pillars: single-page audit, off-page data, content updates, clustering sheet, competitors.
+	$project_route = function ( $cb ) {
+		return function ( WP_REST_Request $req ) use ( $cb ) {
+			$project = sap_project( (int) $req['project'] );
+			if ( ! $project ) {
+				return new WP_Error( 'sap_project', 'پروژه یافت نشد.', array( 'status' => 404 ) );
+			}
+			return $cb( $project, $req );
+		};
+	};
+	register_rest_route( $ns, '/audit/(?P<project>\d+)/(?P<group>[a-z_]+)', array(
+		'methods'             => 'POST',
+		'permission_callback' => 'sap_can',
+		'callback'            => $project_route( function ( $project, $req ) {
+			$group = sanitize_key( $req['group'] );
+			if ( ! isset( sap_content_groups()[ $group ] ) ) {
+				return new WP_Error( 'sap_group', 'نوع محتوا نامعتبر است.', array( 'status' => 400 ) );
+			}
+			$url = esc_url_raw( (string) $req->get_param( 'url' ) );
+			if ( $url ) {
+				update_option( 'sap_audit_only_' . $project['id'], array( sap_norm_url( $url ) ), false );
+			}
+			$res = sap_ai_stage_step( $project, 'audit_' . $group, true );
+			return is_wp_error( $res ) ? $res : $res;
+		} ),
+	) );
+	register_rest_route( $ns, '/offpage/(?P<project>\d+)/collect', array(
+		'methods'             => 'POST',
+		'permission_callback' => 'sap_can',
+		'callback'            => $project_route( function ( $project, $req ) {
+			return array( 'ok' => true, 'msg' => sap_offpage_collect( $project, 'competitors' === $req->get_param( 'what' ) ? 'competitors' : 'media' ) );
+		} ),
+	) );
+	register_rest_route( $ns, '/updates/(?P<project>\d+)', array(
+		'methods'             => 'POST',
+		'permission_callback' => 'sap_can',
+		'callback'            => $project_route( function ( $project, $req ) {
+			$urls   = array_filter( array_map( 'esc_url_raw', (array) ( $req->get_param( 'urls' ) ?: array( $req->get_param( 'url' ) ) ) ) );
+			$period = sap_period_sanitize( (string) ( $req->get_param( 'period' ) ?: sap_period_current() ) );
+			if ( ! $urls ) {
+				return new WP_Error( 'sap_url', 'صفحه‌ای انتخاب نشده.', array( 'status' => 400 ) );
+			}
+			$audit = (array) ( sap_dataset_payload( $project['id'], 'ai_audit' )['groups'] ?? array() );
+			foreach ( $urls as $u ) {
+				$reason = (string) $req->get_param( 'reason' );
+				foreach ( $audit as $g ) {
+					if ( ! $reason && ! empty( $g[ sap_norm_url( $u ) ] ) ) {
+						$reason = $g[ sap_norm_url( $u ) ]['diagnosis'] . ( $g[ sap_norm_url( $u ) ]['update_brief'] ? "\n" . $g[ sap_norm_url( $u ) ]['update_brief'] : '' );
+					}
+				}
+				sap_update_plan( $project, $u, $period, array( 'reason' => $reason, 'source' => sanitize_key( (string) ( $req->get_param( 'source' ) ?: 'manual' ) ) ) );
+			}
+			return array( 'ok' => true, 'msg' => sprintf( '%s صفحه به بخش «آپدیت محتوا»ی تقویم %s اضافه شد.', sap_num( count( $urls ) ), sap_period_label( $period ) ) );
+		} ),
+	) );
+	register_rest_route( $ns, '/update/(?P<id>\d+)', array(
+		'methods'             => 'POST',
+		'permission_callback' => 'sap_can',
+		'callback'            => function ( WP_REST_Request $req ) {
+			$u = sap_update( (int) $req['id'] );
+			if ( ! $u ) {
+				return new WP_Error( 'sap_update', 'یافت نشد.', array( 'status' => 404 ) );
+			}
+			$project = sap_project( $u['project_id'] );
+			switch ( sanitize_key( (string) $req->get_param( 'do' ) ) ) {
+				case 'brief':
+					$b = sap_update_brief( $project, $u );
+					return is_wp_error( $b ) ? $b : array( 'ok' => true, 'msg' => 'بریف آپدیت آماده شد.', 'reload' => true );
+				case 'status':
+					sap_update_save( array( 'status' => sanitize_key( (string) $req->get_param( 'status' ) ) ), $u['id'] );
+					if ( 'done' === $req->get_param( 'status' ) ) {
+						sap_activity_add( $project['id'], array( 'category' => 'content_update', 'action' => 'content_updated', 'title' => 'آپدیت محتوای «' . $u['title'] . '»', 'url' => $u['url'], 'source' => 'tool', 'ref' => 'upd:' . $u['id'] ) );
+					}
+					return array( 'ok' => true, 'msg' => 'وضعیت ثبت شد.', 'reload' => true );
+				case 'task':
+					$tid = sap_task_save( array( 'project_id' => $project['id'], 'title' => 'آپدیت کامل محتوای «' . $u['title'] . '»', 'notes' => $u['reason'] . ( $u['brief'] ? "\n\nبریف در تقویم محتوا › آپدیت محتوا." : '' ), 'context' => 'content_update', 'status' => 'next', 'period' => $u['period'], 'effort' => 'product' === $u['content_type'] ? 1.5 : 3, 'url' => $u['url'], 'keyword' => $u['keyword'], 'focus_id' => $u['focus_id'] ) );
+					sap_update_save( array( 'task_id' => $tid, 'status' => 'in_progress' ), $u['id'] );
+					return array( 'ok' => true, 'msg' => 'به اکشن پلن ' . sap_period_label( $u['period'] ) . ' اضافه شد.', 'reload' => true );
+				case 'delete':
+					sap_update_delete( $u['id'] );
+					return array( 'ok' => true, 'msg' => 'حذف شد.', 'reload' => true );
+			}
+			return new WP_Error( 'sap_do', 'عملیات نامعتبر.', array( 'status' => 400 ) );
+		},
+	) );
+	register_rest_route( $ns, '/cluster/(?P<project>\d+)/sheet', array(
+		'methods'             => 'POST',
+		'permission_callback' => 'sap_can',
+		'callback'            => $project_route( function ( $project, $req ) {
+			$r = sap_cluster_write_sheet( $project, rest_sanitize_boolean( $req->get_param( 'overwrite' ) ) );
+			return is_wp_error( $r ) ? $r : array( 'ok' => true, 'msg' => $r . '.' );
+		} ),
+	) );
+	register_rest_route( $ns, '/competitors/(?P<project>\d+)', array(
+		'methods'             => 'POST',
+		'permission_callback' => 'sap_can',
+		'callback'            => $project_route( function ( $project, $req ) {
+			global $wpdb;
+			$list = (array) $project['competitors'];
+			$d    = sap_clean_domain( (string) $req->get_param( 'domain' ) );
+			if ( '' === $d || false === strpos( $d, '.' ) ) {
+				return new WP_Error( 'sap_domain', 'دامنه معتبر وارد کنید (مثلاً rival.ir).', array( 'status' => 400 ) );
+			}
+			if ( 'remove' === $req->get_param( 'do' ) ) {
+				$list = array_values( array_diff( $list, array( $d ) ) );
+			} elseif ( ! in_array( $d, $list, true ) ) {
+				if ( $d === sap_project_domain( $project ) ) {
+					return new WP_Error( 'sap_domain', 'این دامنه خود سایت است.', array( 'status' => 400 ) );
+				}
+				$list[] = $d;
+			}
+			$wpdb->update( sap_table( 'projects' ), array( 'competitors' => implode( "\n", $list ) ), array( 'id' => $project['id'] ) );
+			unset( $GLOBALS['sap_project_cache'] );
+			return array( 'ok' => true, 'list' => $list, 'msg' => 'remove' === $req->get_param( 'do' ) ? 'رقیب حذف شد.' : 'رقیب ذخیره شد.' );
+		} ),
 	) );
 
 	// AI gateway test: key, model list, a tiny request with each configured model.

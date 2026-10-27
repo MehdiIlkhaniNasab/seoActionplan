@@ -61,6 +61,7 @@ add_action( 'admin_post_sap_save_settings', function () {
 		'ai_base_url'          => esc_url_raw( trim( (string) sap_post( 'ai_base_url' ) ) ) ?: 'https://api.gapgpt.app/v1',
 		'ai_model'             => preg_replace( '/[^a-zA-Z0-9._:\/-]/', '', (string) sap_post( 'ai_model' ) ) ?: 'claude-sonnet-5-5',
 		'ai_model_assist'      => preg_replace( '/[^a-zA-Z0-9._:\/-]/', '', (string) sap_post( 'ai_model_assist' ) ) ?: 'claude-haiku-5-5',
+		'ai_model_light'       => preg_replace( '/[^a-zA-Z0-9._:\/-]/', '', (string) sap_post( 'ai_model_light' ) ),
 		'ai_budget'            => max( 0, (float) sap_norm_text( sap_post( 'ai_budget', 10 ) ) ),
 		'proxy_mode'           => in_array( sap_post( 'proxy_mode' ), array( 'smart', 'all', 'none' ), true ) ? sap_post( 'proxy_mode' ) : 'smart',
 		'proxy_force_hosts'    => sanitize_textarea_field( (string) sap_post( 'proxy_force_hosts' ) ),
@@ -149,6 +150,18 @@ add_action( 'admin_post_sap_delete_project', function () {
 	}
 	sap_project_delete( $id );
 	sap_back( sap_url(), 'پروژه و همه داده‌هایش حذف شد.' );
+} );
+
+add_action( 'admin_post_sap_offpage_settings', function () {
+	sap_guard( 'sap_offpage_settings' );
+	$pid = absint( sap_post( 'project_id' ) );
+	sap_project_set_option( $pid, 'offpage', array(
+		'budget' => (int) preg_replace( '/\D/', '', sap_norm_text( (string) sap_post( 'budget' ) ) ),
+		'brand'  => sanitize_text_field( (string) sap_post( 'brand' ) ),
+		'notes'  => sanitize_textarea_field( (string) sap_post( 'notes' ) ),
+		'avoid'  => sanitize_textarea_field( (string) sap_post( 'avoid' ) ),
+	) );
+	sap_back( sap_project_url( $pid, 'offpage' ), 'تنظیمات آف‌پیج ذخیره شد.' );
 } );
 
 add_action( 'admin_post_sap_project_reset', function () {

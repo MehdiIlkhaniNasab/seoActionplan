@@ -77,6 +77,90 @@ $sheet_ok = '' !== $sheet && sap_google_connected() && sap_google_has_sheets();
 	</div>
 </div>
 
+<?php
+$updates = sap_updates( $pid, array( 'period' => $period ) );
+$ustats  = sap_update_statuses();
+$utypes  = sap_content_types();
+$updone  = count( array_filter( $updates, function ( $u ) {
+	return 'done' === $u['status'];
+} ) );
+?>
+<h2 class="sap-section-title">۱. آپدیت محتوای قبلی <small class="sap-muted"><?php echo esc_html( sprintf( '%s صفحه · %s انجام شده', sap_num( count( $updates ) ), sap_num( $updone ) ) ); ?></small></h2>
+<section class="sap-panel sap-updates">
+	<p class="sap-muted sap-small">صفحاتی که این ماه کامل و حرفه‌ای آپدیت می‌شوند (محصول: محتوا بر اساس کلمه کلیدی، ویژگی‌ها و مشخصات کامل، FAQ و اسکیما؛ دسته: متن راهنمای خرید؛ مقاله: پوشش کامل نیت، لینک داخلی به صفحات پولساز و منبع معتبر). از تب «سئو محتوا › تحلیل محتوا» یا از این فرم اضافه کنید و برای هر کدام بریف حرفه‌ای بگیرید.</p>
+	<form class="sap-update-add" data-sap-update-form="<?php echo esc_attr( $pid ); ?>" data-period="<?php echo esc_attr( $period ); ?>">
+		<label class="sap-field"><span>صفحه</span>
+			<select name="url" required>
+				<option value="">انتخاب صفحه از نقشه کلمات…</option>
+				<?php foreach ( sap_keymap( $pid ) as $m ) : ?>
+					<option value="<?php echo esc_attr( $m['url'] ); ?>"><?php echo esc_html( ( $utypes[ sap_content_type( $m ) ] ?? '' ) . ' — ' . ( $m['title'] ?: rawurldecode( $m['url'] ) ) ); ?></option>
+				<?php endforeach; ?>
+			</select>
+		</label>
+		<label class="sap-field"><span>دلیل آپدیت (اختیاری)</span><input type="text" name="reason" placeholder="مثلاً افت رتبه، محتوای قدیمی، ویژگی‌های ناقص"></label>
+		<button type="submit" class="sap-btn is-primary">افزودن به آپدیت <?php echo esc_html( sap_period_label( $period ) ); ?></button>
+	</form>
+	<?php if ( $updates ) : ?>
+		<div class="sap-update-list">
+			<?php foreach ( $updates as $u ) : ?>
+				<?php $b = $u['brief']; ?>
+				<article class="sap-update is-<?php echo esc_attr( $u['status'] ); ?>">
+					<div class="sap-update-head">
+						<div>
+							<b><?php echo sap_page_link( $u['url'], $u['title'] ); // phpcs:ignore ?></b>
+							<span class="sap-chip"><?php echo esc_html( $utypes[ $u['content_type'] ] ?? $u['content_type'] ); ?></span>
+							<?php if ( $u['keyword'] ) : ?><span class="sap-chip is-soft"><?php echo esc_html( $u['keyword'] ); ?></span><?php endif; ?>
+							<span class="sap-chip <?php echo 'done' === $u['status'] ? 'is-good' : ( 'in_progress' === $u['status'] ? 'is-warn' : '' ); ?>"><?php echo esc_html( $ustats[ $u['status'] ] ?? $u['status'] ); ?></span>
+						</div>
+						<div class="sap-update-actions">
+							<button type="button" class="sap-btn is-small is-soft" data-sap-update-do="brief" data-id="<?php echo esc_attr( $u['id'] ); ?>" <?php disabled( ! sap_ai_connected() ); ?>><?php echo $b ? 'بریف دوباره' : 'ساخت بریف حرفه‌ای'; ?></button>
+							<a class="sap-btn is-small is-ghost" href="<?php echo esc_url( sap_project_url( $pid, 'content', array( 'url' => $u['url'] ) ) ); ?>">بازنویسی با هوش مصنوعی</a>
+							<?php if ( ! $u['task_id'] ) : ?><button type="button" class="sap-btn is-small is-ghost" data-sap-update-do="task" data-id="<?php echo esc_attr( $u['id'] ); ?>">به اکشن پلن</button><?php endif; ?>
+							<?php if ( 'done' !== $u['status'] ) : ?><button type="button" class="sap-btn is-small is-ghost" data-sap-update-do="status" data-status="done" data-id="<?php echo esc_attr( $u['id'] ); ?>">انجام شد</button><?php endif; ?>
+							<button type="button" class="sap-icon-btn" data-sap-update-do="delete" data-id="<?php echo esc_attr( $u['id'] ); ?>" title="حذف"><?php echo sap_icon( 'trash', 15 ); // phpcs:ignore ?></button>
+						</div>
+					</div>
+					<?php if ( $u['reason'] ) : ?><p class="sap-small sap-muted"><?php echo esc_html( $u['reason'] ); ?></p><?php endif; ?>
+					<?php if ( $b ) : ?>
+						<details class="sap-brief" open>
+							<summary>بریف آپدیت<?php echo ! empty( $b['words_target'] ) ? ' · حدود ' . esc_html( sap_num( $b['words_target'] ) ) . ' کلمه' : ''; ?></summary>
+							<p><?php echo esc_html( $b['summary'] ?? '' ); ?></p>
+							<div class="sap-brief-grid">
+								<div>
+									<p class="sap-label">کلمات</p>
+									<p class="sap-small"><b><?php echo esc_html( $b['keyword'] ?? '' ); ?></b> · <?php echo esc_html( implode( '، ', (array) ( $b['secondary'] ?? array() ) ) ); ?></p>
+									<?php if ( ! empty( $b['title'] ) ) : ?><p class="sap-small"><b>تایتل:</b> <?php echo esc_html( $b['title'] ); ?></p><?php endif; ?>
+									<?php if ( ! empty( $b['meta'] ) ) : ?><p class="sap-small"><b>متا:</b> <?php echo esc_html( $b['meta'] ); ?></p><?php endif; ?>
+									<?php if ( ! empty( $b['h1'] ) ) : ?><p class="sap-small"><b>H1:</b> <?php echo esc_html( $b['h1'] ); ?></p><?php endif; ?>
+									<?php if ( ! empty( $b['outline'] ) ) : ?>
+										<p class="sap-label">ساختار و بخش‌ها</p>
+										<ol class="sap-small"><?php foreach ( $b['outline'] as $o ) : ?><li><b><?php echo esc_html( $o['heading'] ?? '' ); ?></b> — <?php echo esc_html( $o['notes'] ?? '' ); ?></li><?php endforeach; ?></ol>
+									<?php endif; ?>
+								</div>
+								<div>
+									<?php if ( ! empty( $b['attributes'] ) ) : ?>
+										<p class="sap-label">ویژگی‌های محصول که باید کامل شوند</p>
+										<ul class="sap-small"><?php foreach ( $b['attributes'] as $at ) : ?><li><b><?php echo esc_html( $at['name'] ?? '' ); ?>:</b> <?php echo esc_html( $at['hint'] ?? '' ); ?></li><?php endforeach; ?></ul>
+									<?php endif; ?>
+									<?php if ( ! empty( $b['faq'] ) ) : ?><p class="sap-label">FAQ</p><ul class="sap-small"><?php foreach ( $b['faq'] as $q ) : ?><li><?php echo esc_html( $q ); ?></li><?php endforeach; ?></ul><?php endif; ?>
+									<?php foreach ( array( 'links_out' => 'لینک داخلی از این صفحه', 'links_in' => 'لینک داخلی به این صفحه (از)' ) as $lk => $ll ) : ?>
+										<?php if ( ! empty( $b[ $lk ] ) ) : ?><p class="sap-label"><?php echo esc_html( $ll ); ?></p><ul class="sap-small"><?php foreach ( $b[ $lk ] as $l ) : ?><li><?php echo sap_page_link( $l['url'] ?? '', sap_page_title( $pid, $l['url'] ?? '' ) ?: rawurldecode( $l['url'] ?? '' ) ); // phpcs:ignore ?> ← «<?php echo esc_html( $l['anchor'] ?? '' ); ?>»</li><?php endforeach; ?></ul><?php endif; ?>
+									<?php endforeach; ?>
+									<?php if ( ! empty( $b['external'] ) ) : ?><p class="sap-label">منبع/لینک خارجی معتبر</p><ul class="sap-small"><?php foreach ( $b['external'] as $e ) : ?><li><?php echo esc_html( $e ); ?></li><?php endforeach; ?></ul><?php endif; ?>
+									<?php if ( ! empty( $b['schema'] ) ) : ?><p class="sap-small"><b>اسکیما:</b> <?php echo esc_html( implode( '، ', $b['schema'] ) ); ?></p><?php endif; ?>
+									<?php if ( ! empty( $b['cta'] ) ) : ?><p class="sap-small"><b>CTA:</b> <?php echo esc_html( $b['cta'] ); ?></p><?php endif; ?>
+								</div>
+							</div>
+							<?php if ( ! empty( $b['checklist'] ) ) : ?><p class="sap-label">چک‌لیست نهایی</p><ul class="sap-check-list"><?php foreach ( $b['checklist'] as $c ) : ?><li><i>☐</i><span><?php echo esc_html( $c ); ?></span></li><?php endforeach; ?></ul><?php endif; ?>
+						</details>
+					<?php endif; ?>
+				</article>
+			<?php endforeach; ?>
+		</div>
+	<?php endif; ?>
+</section>
+
+<h2 class="sap-section-title">۲. تولید محتوای جدید</h2>
 <section class="sap-panel sap-cal">
 	<div class="sap-cal-head">
 		<span class="sap-cal-m"><?php echo esc_html( $label ); ?></span>

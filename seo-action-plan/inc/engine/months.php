@@ -88,6 +88,12 @@ function sap_month_live( $project, $period ) {
 			$content[ sap_month_item_key( 'rev', $r['url'] ) ] = array( 'kind' => 'update', 'title' => $r['title'] ?: sap_page_title( $pid, $r['url'] ), 'url' => $r['url'], 'date' => substr( $r['updated_at'], 0, 10 ) );
 		}
 	}
+	foreach ( sap_updates( $pid, array( 'status' => 'done' ) ) as $u ) {
+		$d = substr( (string) $u['done_at'], 0, 10 );
+		if ( $d >= $from && $d <= $to ) {
+			$content[ sap_month_item_key( 'rev', $u['url'] ) ] = array( 'kind' => 'update', 'title' => $u['title'], 'url' => $u['url'], 'keyword' => $u['keyword'], 'date' => $d );
+		}
+	}
 	foreach ( sap_ideas( $pid, array( 'status' => array( 'published' ) ) ) as $i ) {
 		$d = (string) ( $i['planned_date'] ?: substr( $i['updated_at'], 0, 10 ) );
 		if ( $i['period'] === $period || ( $d >= $from && $d <= $to ) ) {

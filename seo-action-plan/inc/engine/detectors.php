@@ -49,6 +49,9 @@ function sap_detectors() {
 		'schema'         => array( 'اسکیمای جاافتاده یا خراب', array( 'pages' ) ),
 		'img_alt'        => array( 'تصاویر بدون Alt', array( 'pages' ) ),
 		'cwv'            => array( 'Core Web Vitals ضعیف', array( 'cwv' ) ),
+		'robots'         => array( 'robots.txt', array( 'robots' ) ),
+		'sitemap_check'  => array( 'بررسی فایل سایت‌مپ', array( 'sitemap_check' ) ),
+		'index_inspect'  => array( 'ایندکس صفحات مهم (URL Inspection)', array( 'gsc_inspect' ) ),
 	);
 }
 

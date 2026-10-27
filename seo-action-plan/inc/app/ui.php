@@ -62,6 +62,10 @@ function sap_project_tabs_all() {
 		'focuses'  => array( 'Focus و اهداف', 'target' ),
 		'graph'    => array( 'گراف کلمات و صفحات', 'link' ),
 		'seosignal' => array( 'سئو سیگنال', 'research' ),
+		'technical'   => array( 'چک‌لیست تکنیکال', 'settings' ),
+		'audit'       => array( 'تحلیل محتوا', 'log' ),
+		'offpage'     => array( 'برنامه آف‌پیج', 'link' ),
+		'competitors' => array( 'رقبا', 'target' ),
 		'settings' => array( 'تنظیمات پروژه', 'settings' ),
 	);
 }
@@ -74,11 +78,12 @@ function sap_project_tabs_all() {
  */
 function sap_project_groups() {
 	return array(
-		'home'     => array( 'نمای کلی', 'grid', array( 'overview', 'focuses' ) ),
-		'work'     => array( 'برنامه و اجرا', 'list', array( 'plan', 'findings', 'activity' ) ),
-		'content'  => array( 'محتوا', 'log', array( 'calendar', 'ideas', 'content' ) ),
-		'keywords' => array( 'کلمات و رقبا', 'research', array( 'keywords', 'graph', 'seosignal' ) ),
-		'analysis' => array( 'تحلیل', 'spark', array( 'insights' ) ),
+		'home'      => array( 'نمای کلی', 'grid', array( 'overview', 'insights', 'focuses' ) ),
+		'technical' => array( 'سئو تکنیکال', 'settings', array( 'technical' ) ),
+		'content'   => array( 'سئو محتوا', 'log', array( 'audit', 'keywords', 'calendar', 'ideas', 'content' ) ),
+		'offpage'   => array( 'آف‌پیج', 'link', array( 'offpage' ) ),
+		'keywords'  => array( 'رقبا و داده‌ها', 'research', array( 'competitors', 'seosignal', 'graph' ) ),
+		'work'      => array( 'برنامه و اجرا', 'list', array( 'plan', 'findings', 'activity' ) ),
 	);
 }
 

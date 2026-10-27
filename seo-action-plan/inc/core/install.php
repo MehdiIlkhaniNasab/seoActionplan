@@ -236,6 +236,30 @@ function sap_install() {
 		KEY project_status (project_id,status)
 	) $c;" );
 
+	dbDelta( 'CREATE TABLE ' . sap_table( 'updates' ) . " (
+		id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+		project_id bigint(20) unsigned NOT NULL DEFAULT 0,
+		focus_id bigint(20) unsigned NOT NULL DEFAULT 0,
+		url text NULL,
+		title varchar(255) NOT NULL DEFAULT '',
+		content_type varchar(20) NOT NULL DEFAULT '',
+		keyword varchar(190) NOT NULL DEFAULT '',
+		secondary text NULL,
+		reason text NULL,
+		brief longtext NULL,
+		priority varchar(10) NOT NULL DEFAULT 'medium',
+		status varchar(20) NOT NULL DEFAULT 'planned',
+		period varchar(7) NOT NULL DEFAULT '',
+		planned_date date NULL,
+		task_id bigint(20) unsigned NOT NULL DEFAULT 0,
+		source varchar(20) NOT NULL DEFAULT 'manual',
+		created_at datetime NOT NULL DEFAULT '0000-00-00 00:00:00',
+		updated_at datetime NOT NULL DEFAULT '0000-00-00 00:00:00',
+		done_at datetime NULL,
+		PRIMARY KEY  (id),
+		KEY project_period (project_id,period)
+	) $c;" );
+
 	dbDelta( 'CREATE TABLE ' . sap_table( 'months' ) . " (
 		id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
 		project_id bigint(20) unsigned NOT NULL DEFAULT 0,

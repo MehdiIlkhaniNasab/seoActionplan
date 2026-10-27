@@ -28,6 +28,9 @@ function sap_sync_steps() {
 		'pages'        => 'خواندن محتوای صفحات کلیدی',
 		'cwv'          => 'Core Web Vitals (PageSpeed)',
 		'keymap'       => 'نقشه کلمات: کلمه اصلی هر صفحه (شیت و سرچ کنسول)',
+		'robots'       => 'تکنیکال: فایل robots.txt',
+		'sitemap_check' => 'تکنیکال: بررسی فایل‌های سایت‌مپ',
+		'gsc_inspect'  => 'تکنیکال: وضعیت ایندکس صفحات مهم (URL Inspection)',
 		'ai_keymap'    => 'هوش مصنوعی ۱/۷: تشخیص کلمه اصلی صفحات',
 		'analyze'      => 'قوانین تحلیل: کشف ایرادها و فرصت‌ها',
 		'ai_cannibal'  => 'هوش مصنوعی ۲/۷: کنیبالیزیشن هوشمند',
@@ -47,7 +50,12 @@ function sap_sync_steps() {
  */
 function sap_sync_step( $project, $step, $force = false ) {
 	$fn = 'sap_step_' . $step;
-	if ( ( ! array_key_exists( $step, sap_sync_steps() ) && ! in_array( $step, array( 'ai_focus' ), true ) ) || ! function_exists( $fn ) ) {
+	// On-demand AI stages of the pillars (content audit per type, off-page plan).
+	if ( preg_match( '/^audit_(products|product_tax|posts|post_cat|pages)$/', $step ) || 'ai_offpage' === $step ) {
+		$fn = function ( $project, $force ) use ( $step ) {
+			return sap_ai_stage_step( $project, 'ai_offpage' === $step ? 'offpage' : $step, $force );
+		};
+	} elseif ( ( ! array_key_exists( $step, sap_sync_steps() ) && ! in_array( $step, array( 'ai_focus', 'ideas_pool' ), true ) ) || ! function_exists( $fn ) ) {
 		return array( 'ok' => false, 'skipped' => false, 'msg' => 'مرحله نامعتبر.' );
 	}
 	if ( function_exists( 'set_time_limit' ) ) {
@@ -587,6 +595,11 @@ function sap_step_ai_ideas( $project, $force = false ) {
 	$u = sap_ai_usage();
 	return array( 'msg' => sprintf( '%s ایده محتوای جدید (کلمه اصلی، فرعی، هدف و ساختار) در تب «ایده‌های محتوا»', sap_num( $res['added'] ) ) . sprintf( ' · هزینه حدود %s دلار.', sap_num( $u['last_cost'], 3 ) ) );
 }
+function sap_step_ideas_pool( $project ) {
+	$pool = sap_ideas_pool( $project );
+	return array( 'msg' => sprintf( '%s موضوع مقاله، %s فرصت صفحه دسته/محصول و %s کلمه برای بهینه‌سازی صفحات فعلی پیدا شد (%s کلمه حذف شد چون سایت رتبه ۱ تا ۵ دارد، %s کلمه چون از قبل هدف‌گیری شده).', sap_num( count( $pool['blog'] ) ), sap_num( count( $pool['landing'] ) ), sap_num( count( $pool['optimize'] ) ), sap_num( $pool['excluded']['ranking'] ), sap_num( $pool['excluded']['covered'] ) ) );
+}
+
 function sap_step_ai_plan( $project, $force = false ) {
 	return sap_ai_stage_step( $project, 'plan', $force );
 }
@@ -660,7 +673,12 @@ function sap_step_writeback( $project ) {
 		$fail   = $fail || is_wp_error( $res );
 		$msgs[] = is_wp_error( $res ) ? 'تقویم: ' . $res->get_error_message() : 'تقویم محتوا بروز شد';
 	}
-	if ( ! empty( $ctx['sheet_clusters']['rows'] ) ) {
+	if ( ! empty( $project['options']['cluster_generated'] ) && sap_keymap( $project['id'] ) ) {
+		// The tool owns the clustering tab: rebuild it from the keyword map.
+		$res    = sap_cluster_write_sheet( $project, true );
+		$fail   = $fail || is_wp_error( $res );
+		$msgs[] = is_wp_error( $res ) ? 'کلاسترینگ: ' . $res->get_error_message() : $res;
+	} elseif ( ! empty( $ctx['sheet_clusters']['rows'] ) ) {
 		$cols = array_fill_keys( array( 'a_volume', 'a_competition', 'a_position', 'a_rank_page', 'a_clicks', 'a_coverage', 'a_updated' ), array() );
 		foreach ( sap_cluster_coverage( $ctx ) as $row => $c ) {
 			$vk                            = $ctx['volumes'][ sap_kw_key( $c['row']['keyword'] ) ] ?? array();
@@ -686,6 +704,11 @@ function sap_step_writeback( $project ) {
 		$res    = sap_keymap_write_sheet( $project );
 		$fail   = $fail || is_wp_error( $res );
 		$msgs[] = is_wp_error( $res ) ? 'نقشه کلمات: ' . $res->get_error_message() : $res;
+	}
+	if ( sap_updates( $project['id'] ) ) {
+		$res    = sap_updates_write_sheet( $project );
+		$fail   = $fail || is_wp_error( $res );
+		$msgs[] = is_wp_error( $res ) ? 'آپدیت محتوا: ' . $res->get_error_message() : $res;
 	}
 	$res    = sap_log_write_sheet( sap_project( $project['id'] ) );
 	$fail   = $fail || is_wp_error( $res );

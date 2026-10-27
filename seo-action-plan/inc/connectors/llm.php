@@ -25,40 +25,81 @@ const SAP_CLAUDE_VERSION = '2026-10-21';
 
 /**
  * Suggested models with USD price per 1M tokens [input, output].
- * Any other model name can be typed in settings (priced at the fallback rate).
+ * Approximate list prices: the gateway's own price list (GapGPT panel) is the
+ * reference. Any other model name can be typed in settings (priced at the
+ * fallback rate, so the budget errs on the safe side).
  */
 function sap_ai_model_prices() {
 	return array(
-		'claude-haiku-5-5'  => array( 0.10, 0.50 ),
-		'claude-sonnet-5-5' => array( 2.00, 10.00 ),
-		'claude-opus-5-5'   => array( 4.00, 20.00 ),
-		'gpt-5-mini'        => array( 0.25, 2.00 ),
-		'gpt-5.4-mini'      => array( 0.75, 4.50 ),
-		'gpt-5'             => array( 1.25, 10.00 ),
-		'gemini-2.5-flash'  => array( 0.30, 2.50 ),
-		'gemini-2.5-pro'    => array( 2.50, 20.00 ),
+		'gpt-5-nano'                => array( 0.05, 0.40 ),
+		'gpt-4.1-nano'              => array( 0.10, 0.40 ),
+		'gemini-2.5-flash-lite'     => array( 0.10, 0.40 ),
+		'claude-haiku-5-5'          => array( 0.10, 0.50 ),
+		'gpt-4o-mini'               => array( 0.15, 0.60 ),
+		'deepseek-chat'             => array( 0.27, 1.10 ),
+		'gpt-5-mini'                => array( 0.25, 2.00 ),
+		'gpt-4.1-mini'              => array( 0.40, 1.60 ),
+		'gemini-2.5-flash'          => array( 0.30, 2.50 ),
+		'gpt-5.4-mini'              => array( 0.75, 4.50 ),
+		'claude-haiku-4-5-20251001' => array( 1.00, 5.00 ),
+		'gpt-5'                     => array( 1.25, 10.00 ),
+		'claude-sonnet-5-5'         => array( 2.00, 10.00 ),
+		'gemini-2.5-pro'            => array( 2.50, 20.00 ),
+		'claude-opus-5-5'           => array( 4.00, 20.00 ),
 	);
 }
 
 /**
- * Labels for the model pickers.
+ * Labels for the model pickers (cheapest first).
  */
 function sap_ai_models() {
 	return array(
-		'claude-sonnet-5-5' => 'Claude Sonnet 5.5 — تحلیل دقیق (پیشنهادی برای تحلیل)',
-		'claude-haiku-5-5'  => 'Claude Haiku 5.5 — خیلی ارزان (پیشنهادی برای «بنویس برام»)',
-		'claude-opus-5-5'   => 'Claude Opus 5.5 — دقیق‌ترین و گران‌ترین',
-		'gpt-5-mini'        => 'GPT-5 mini',
-		'gpt-5.4-mini'      => 'GPT-5.4 mini',
-		'gemini-2.5-flash'  => 'Gemini 2.5 Flash',
+		'gpt-5-nano'                => 'GPT-5 nano — ارزان‌ترین؛ فقط کارهای ساده',
+		'gpt-4.1-nano'              => 'GPT-4.1 nano — خیلی ارزان؛ کارهای ساده',
+		'gemini-2.5-flash-lite'     => 'Gemini 2.5 Flash-Lite — خیلی ارزان',
+		'claude-haiku-5-5'          => 'Claude Haiku 5.5 — ارزان و خوب برای فارسی',
+		'gpt-4o-mini'               => 'GPT-4o mini — ارزان',
+		'deepseek-chat'             => 'DeepSeek Chat — ارزان',
+		'gpt-5-mini'                => 'GPT-5 mini — ارزان با کیفیت تحلیل خوب (پیشنهاد اقتصادی)',
+		'gpt-4.1-mini'              => 'GPT-4.1 mini — ارزان و دقیق در JSON (پیشنهاد مدل سبک)',
+		'gemini-2.5-flash'          => 'Gemini 2.5 Flash — متوسط',
+		'gpt-5.4-mini'              => 'GPT-5.4 mini — متوسط',
+		'claude-sonnet-5-5'         => 'Claude Sonnet 5.5 — تحلیل دقیق؛ گران',
+		'claude-opus-5-5'           => 'Claude Opus 5.5 — دقیق‌ترین و گران‌ترین',
 	);
 }
 
 /**
- * Model for a purpose: "analysis" or "assist".
+ * Ready-made model sets: analysis (deep stages), light (bulk / simple
+ * stages: keyword map, cannibalization, links, briefs) and assist.
+ */
+function sap_ai_profiles() {
+	return array(
+		'economy'  => array( 'اقتصادی', 'gpt-5-mini', 'gpt-4.1-nano', 'gpt-4o-mini', 'کمترین هزینه؛ برای اکثر پروژه‌ها کافی است.' ),
+		'balanced' => array( 'متعادل (پیشنهادی)', 'gpt-5-mini', 'gpt-4.1-mini', 'claude-haiku-5-5', 'تحلیل خوب با هزینه کم؛ مدل سبک دقیق‌تر.' ),
+		'pro'      => array( 'حرفه‌ای', 'claude-sonnet-5-5', 'claude-haiku-5-5', 'claude-haiku-5-5', 'دقیق‌ترین تحلیل؛ چند برابر گران‌تر.' ),
+	);
+}
+
+/**
+ * Rough cost of one full analysis with a model set (USD): typical token use
+ * of the deep stages (analysis model) and the bulk stages (light model).
+ */
+function sap_ai_estimate_run( $analysis, $light ) {
+	return sap_ai_cost( $analysis, 70000, 20000 ) + sap_ai_cost( $light, 60000, 15000 );
+}
+
+/**
+ * Model for a purpose: "analysis", "light" or "assist".
  */
 function sap_ai_model_for( $purpose ) {
-	$model = 'assist' === $purpose ? sap_setting( 'ai_model_assist', 'claude-haiku-5-5' ) : sap_setting( 'ai_model', 'claude-sonnet-5-5' );
+	if ( 'assist' === $purpose ) {
+		$model = sap_setting( 'ai_model_assist', 'claude-haiku-5-5' );
+	} elseif ( 'light' === $purpose ) {
+		$model = sap_setting( 'ai_model_light', '' ) ?: sap_setting( 'ai_model', 'gpt-5-mini' );
+	} else {
+		$model = sap_setting( 'ai_model', 'gpt-5-mini' );
+	}
 	return preg_replace( '/[^a-zA-Z0-9._:\/-]/', '', (string) $model );
 }
 

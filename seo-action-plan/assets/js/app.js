@@ -9,7 +9,7 @@
 		opts.credentials = 'same-origin';
 		return fetch(SAP.rest + path, opts).then(function (r) {
 			return r.json().then(function (j) {
-				if (!r.ok) { throw new Error((j && j.message) || ('HTTP ' + r.status)); }
+				if (!r.ok) { var err = new Error((j && j.message) || ('HTTP ' + r.status)); err.status = r.status; err.code = j && j.code; throw err; }
 				return j;
 			});
 		});
@@ -669,7 +669,7 @@
 		if (gen) {
 			busy(gen, 'هوش مصنوعی در حال بررسی داده‌ها… (۳۰ تا ۹۰ ثانیه)');
 			var n = document.querySelector('[data-sap-ideas-count]');
-			post('ideas/' + gen.getAttribute('data-sap-ideas-gen') + '/generate', { count: n ? n.value : 10 }).then(function (res) {
+			post('ideas/' + gen.getAttribute('data-sap-ideas-gen') + '/generate', { count: n ? n.value : 10, source: gen.getAttribute('data-source') || 'all' }).then(function (res) {
 				toast(res.msg); setTimeout(function () { location.reload(); }, 900);
 			}).catch(function (e) { toast(e.message, true); idle(gen); });
 		} else if (fill) {
@@ -762,6 +762,91 @@
 		post('net/test', { url: b.getAttribute('data-sap-net-test') }).then(function (res) {
 			out.textContent = b.textContent.replace('تست اتصال ', '') + ': ' + res.msg; out.className = res.ok ? 'sap-ok' : 'sap-bad';
 		}).catch(function (e) { out.textContent = e.message; out.className = 'sap-bad'; }).then(function () { idle(b); });
+	});
+
+	/* ---- Pillars: content audit, content updates, clustering sheet, competitors, off-page data ---- */
+	(function () {
+		var done = function (res) { toast(res.msg || 'انجام شد'); setTimeout(function () { location.reload(); }, 900); };
+		var picked = function () { return Array.prototype.map.call(document.querySelectorAll('[data-sap-audit-pick]:checked'), function (c) { return c.value; }); };
+		document.addEventListener('change', function (ev) {
+			if (ev.target.matches('[data-sap-audit-all]')) {
+				document.querySelectorAll('[data-sap-audit-pick]').forEach(function (c) { c.checked = ev.target.checked; });
+			}
+		});
+		document.addEventListener('click', function (ev) {
+			var one = ev.target.closest('[data-sap-audit-one]');
+			var add = ev.target.closest('[data-sap-update-add]');
+			var bulk = ev.target.closest('[data-sap-update-bulk]');
+			var udo = ev.target.closest('[data-sap-update-do]');
+			var cl = ev.target.closest('[data-sap-cluster-sheet]');
+			var rm = ev.target.closest('[data-sap-comp-remove]');
+			var oc = ev.target.closest('[data-sap-offpage-collect]');
+			if (one) {
+				busy(one, 'در حال تحلیل…');
+				post('audit/' + one.getAttribute('data-project') + '/' + one.getAttribute('data-group'), { url: one.getAttribute('data-sap-audit-one') }).then(done).catch(function (e) { toast(e.message, true); idle(one); });
+			}
+			if (add) {
+				busy(add, '…');
+				post('updates/' + add.getAttribute('data-project'), { url: add.getAttribute('data-sap-update-add'), source: 'audit' }).then(function (res) { toast(res.msg); add.textContent = '✓ در تقویم'; }).catch(function (e) { toast(e.message, true); idle(add); });
+			}
+			if (bulk) {
+				var urls = picked();
+				if (!urls.length) { toast('اول صفحه‌ها را تیک بزنید.', true); return; }
+				var per = document.querySelector('[data-sap-update-period]');
+				busy(bulk, '…');
+				post('updates/' + bulk.getAttribute('data-sap-update-bulk'), { urls: urls, period: per ? per.value : '', source: 'audit' }).then(function (res) { toast(res.msg); idle(bulk); }).catch(function (e) { toast(e.message, true); idle(bulk); });
+			}
+			if (udo) {
+				var what = udo.getAttribute('data-sap-update-do');
+				if (what === 'delete' && !window.confirm('این صفحه از آپدیت‌های این ماه حذف شود؟')) { return; }
+				busy(udo, what === 'brief' ? 'در حال نوشتن بریف… (۲۰ تا ۶۰ ثانیه)' : '…');
+				post('update/' + udo.getAttribute('data-id'), { do: what, status: udo.getAttribute('data-status') || '' }).then(done).catch(function (e) { toast(e.message, true); idle(udo); });
+			}
+			if (cl) {
+				var go = function (over) {
+					busy(cl, 'در حال نوشتن در شیت…');
+					post('cluster/' + cl.getAttribute('data-sap-cluster-sheet') + '/sheet', { overwrite: over ? 1 : 0 }).then(function (res) { toast(res.msg); idle(cl); }).catch(function (e) {
+						idle(cl);
+						if (e.status === 409 && window.confirm(e.message + '\n\nجایگزین شود؟')) { go(true); } else { toast(e.message, true); }
+					});
+				};
+				go(false);
+			}
+			if (rm) {
+				if (!window.confirm('رقیب ' + rm.getAttribute('data-sap-comp-remove') + ' حذف شود؟')) { return; }
+				post('competitors/' + rm.getAttribute('data-project'), { do: 'remove', domain: rm.getAttribute('data-sap-comp-remove') }).then(done).catch(function (e) { toast(e.message, true); });
+			}
+			if (oc) {
+				if (!window.confirm('این درخواست از سهمیه روزانه سئو سیگنال مصرف می‌کند. ادامه؟')) { return; }
+				busy(oc, 'در حال دریافت از سئو سیگنال…');
+				post('offpage/' + oc.getAttribute('data-project') + '/collect', { what: oc.getAttribute('data-sap-offpage-collect') }).then(done).catch(function (e) { toast(e.message, true); idle(oc); });
+			}
+		});
+		document.addEventListener('submit', function (ev) {
+			var f = ev.target;
+			if (f.matches('[data-sap-update-form]')) {
+				ev.preventDefault();
+				var b = f.querySelector('[type=submit]');
+				busy(b, '…');
+				post('updates/' + f.getAttribute('data-sap-update-form'), { url: f.url.value, reason: f.reason.value, period: f.getAttribute('data-period'), source: 'manual' }).then(done).catch(function (e) { toast(e.message, true); idle(b); });
+			}
+			if (f.matches('[data-sap-comp-add]')) {
+				ev.preventDefault();
+				var bb = f.querySelector('[type=submit]');
+				busy(bb, '…');
+				post('competitors/' + f.getAttribute('data-sap-comp-add'), { do: 'add', domain: f.domain.value }).then(done).catch(function (e) { toast(e.message, true); idle(bb); });
+			}
+		});
+	}());
+
+	/* ---- AI cost profiles (settings) ---- */
+	document.querySelectorAll('[data-sap-ai-profile]').forEach(function (b) {
+		b.addEventListener('click', function () {
+			var m = JSON.parse(b.getAttribute('data-sap-ai-profile'));
+			Object.keys(m).forEach(function (k) { var f = document.querySelector('input[name=' + k + ']'); if (f) { f.value = m[k]; } });
+			document.querySelectorAll('[data-sap-ai-profile]').forEach(function (x) { x.classList.toggle('is-on', x === b); });
+			toast('مدل‌ها پر شدند؛ «ذخیره تنظیمات» را بزنید.');
+		});
 	});
 
 	/* ---- AI gateway test (settings) ---- */

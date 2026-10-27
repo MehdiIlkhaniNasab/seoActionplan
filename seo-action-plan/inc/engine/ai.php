@@ -530,9 +530,10 @@ function sap_ai_page_facts( $ctx, $url, $text_chars = 0 ) {
 function sap_ai_stages() {
 	$str = array( 'type' => 'string' );
 	$arr = array( 'type' => 'array', 'items' => array( 'type' => 'string' ) );
-	return array(
+	return apply_filters( 'sap_ai_stages', array(
 		'keymap'    => array(
 			'label'  => 'کلمه اصلی صفحات',
+			'model'  => 'light',
 			'tokens' => 3000,
 			'batch'  => array( 'in' => 'pages', 'out' => 'pages', 'size' => 8 ),
 			'schema' => sap_ai_obj( array( 'pages' => array( 'type' => 'array', 'items' => sap_ai_obj( array(
@@ -547,7 +548,8 @@ function sap_ai_stages() {
 				'برای هر صفحه سایت (با تایتل، H1، تیترها و کوئری‌های واقعی سرچ کنسول: کوئری، نمایش، جایگاه) مشخص کن این صفحه برای چه «کلمه کلیدی اصلی» ساخته شده است.',
 				'- کلمه اصلی باید با موضوع و نیت خود صفحه (تایتل و H1) بخواند، نه صرفاً پرنمایش‌ترین کوئری. مثال: صفحه دسته «کفی ورزشی» کلمه اصلی‌اش «کفی ورزشی» است حتی اگر برای «کفی» نمایش بیشتری بگیرد؛ «کفی» کلمه کلی‌تر است و نباید کلمه اصلی این صفحه باشد.',
 				'- برای صفحه محصول، نام محصول/مدل؛ برای مقاله، موضوع اصلی مقاله؛ برای دسته، نام دسته به شکلی که کاربر جستجو می‌کند.',
-				'- secondary: کلمات فرعی و هم‌کانسپتی که همین صفحه باید پوشش دهد (هم‌معنی، نسخه‌های خرید/قیمت، زیرموضوع‌ها) — نه کلمات کلی‌تر یا موضوعات صفحات دیگر.',
+				'- secondary: کلمات فرعی و هم‌کانسپتی که همین صفحه باید پوشش دهد (هم‌معنی، نسخه‌های خرید/قیمت، زیرموضوع‌ها) — نه کلمات کلی‌تر یا موضوعات صفحات دیگر. حداکثر ۶ کلمه دقیق؛ فله‌ای کلمه نده.',
+				'- نیت هر کلمه باید با نوع صفحه بخواند: صفحه محصول فقط کلمات مخصوص همان محصول/مدل را می‌گیرد (مثلاً برای «چسب کفش ۱۰۵»: «چسب ۱۰۵»، «قیمت چسب کفش ۱۰۵»)؛ کلمات عمومی خرید مثل «خرید چسب کفش» یا «چسب کتونی» نیاز کاربر به مقایسه چند محصول است و مال صفحه دسته‌بندی است، نه یک محصول. کلمات اطلاعاتی (چیست، چگونه، روش، آموزش) مال مقاله‌اند و نباید به صفحه دسته یا محصول داده شوند.',
 				'- id هر صفحه را عیناً برگردان.',
 			) ),
 		),
@@ -582,6 +584,7 @@ function sap_ai_stages() {
 		),
 		'cannibal'  => array(
 			'label'  => 'کنیبالیزیشن هوشمند',
+			'model'  => 'light',
 			'tokens' => 3000,
 			'batch'  => array( 'in' => 'candidates', 'out' => 'items', 'size' => 10 ),
 			'schema' => sap_ai_obj( array( 'items' => array( 'type' => 'array', 'items' => sap_ai_obj( array(
@@ -621,6 +624,7 @@ function sap_ai_stages() {
 		),
 		'links'     => array(
 			'label'  => 'لینک‌سازی داخلی',
+			'model'  => 'light',
 			'tokens' => 4000,
 			'schema' => sap_ai_obj( array( 'links' => array( 'type' => 'array', 'items' => sap_ai_obj( array(
 				'source_url' => $str,
@@ -639,7 +643,7 @@ function sap_ai_stages() {
 			'label'  => 'تکنیکال، سایت‌مپ، اسکیما و سرعت',
 			'tokens' => 4000,
 			'schema' => sap_ai_obj( array( 'issues' => array( 'type' => 'array', 'items' => sap_ai_obj( array(
-				'area'     => array( 'type' => 'string', 'enum' => array( 'crawl', 'index', 'sitemap', 'schema', 'cwv', 'onpage' ) ),
+				'area'     => array( 'type' => 'string', 'enum' => array( 'crawl', 'index', 'sitemap', 'robots', 'schema', 'cwv', 'pages', 'onpage' ) ),
 				'priority' => array( 'type' => 'string', 'enum' => array( 'high', 'medium', 'low' ) ),
 				'title'    => $str,
 				'detail'   => $str,
@@ -647,7 +651,8 @@ function sap_ai_stages() {
 				'urls'     => $arr,
 			) ) ) ) ),
 			'task'   => implode( "\n", array(
-				'وضعیت تکنیکال سایت آمده: کدهای وضعیت خزش، ایرادهای شناسایی‌شده با تعداد، سایت‌مپ‌ها، اسکیمای هر صفحه کلیدی (نوع‌ها و خطاهای JSON-LD) و Core Web Vitals موبایل (داده واقعی کاربران CrUX و امتیاز آزمایشگاهی).',
+				'وضعیت تکنیکال سایت آمده: کدهای وضعیت خزش، ایرادهای شناسایی‌شده با تعداد، سایت‌مپ‌های سرچ کنسول و نتیجه بررسی فایل‌های سایت‌مپ (صفحات مهم جامانده، آدرس‌های خراب)، robots.txt (قوانین و مسیرهای مسدود)، وضعیت ایندکس صفحات مهم از URL Inspection، اسکیمای هر صفحه کلیدی (نوع‌ها و خطاهای JSON-LD) و Core Web Vitals موبایل (داده واقعی کاربران CrUX و امتیاز آزمایشگاهی).',
+					'مثل یک متخصص سئو تکنیکال حرفه‌ای بخش به بخش (sitemap، robots، cwv، schema، index، pages، crawl) بررسی کن؛ هر مشکل را در area درست بگذار و اگر بخشی سالم است چیزی برایش ننویس.',
 				'مهم‌ترین مشکلات تکنیکال را با اولویت، شرح، راه‌حل گام‌به‌گام و آدرس‌های نمونه بنویس. برای اسکیما مشخص کن کدام نوع‌ها برای هر نوع صفحه لازم است و نیست (Product و Offer برای محصول، BreadcrumbList، Article برای مقاله، Organization برای سایت). برای CWV علت محتمل و راه‌حل عملی بنویس.',
 				'مشکلات کم‌اثر را حذف کن؛ حداکثر ۱۲ مورد.',
 			) ),
@@ -658,7 +663,7 @@ function sap_ai_stages() {
 			'schema' => sap_ai_analysis_schema(),
 			'task'   => '',
 		),
-	);
+	) );
 }
 
 /**
@@ -861,6 +866,15 @@ function sap_ai_stage_input( $project, $stage, $ctx ) {
 				'issues'       => array_slice( $issues, 0, 30 ),
 				'schema_pages' => array( 'columns' => array( 'url', 'types', 'jsonld_errors', 'images_without_alt' ), 'rows' => $schema ),
 				'cwv_mobile'   => $cwv,
+				'robots'       => isset( $ctx['robots'] ) ? array( 'code' => $ctx['robots']['code'], 'rules' => array_slice( (array) $ctx['robots']['rules'], 0, 30 ), 'sitemaps' => $ctx['robots']['sitemaps'], 'blocked_paths' => array_values( array_map( function ( $t ) {
+					return $t['path'];
+				}, array_filter( (array) $ctx['robots']['tests'], function ( $t ) {
+					return ! $t['allowed'];
+				} ) ) ) ) : null,
+				'sitemap_check' => isset( $ctx['sitemap_check'] ) ? array( 'root' => $ctx['sitemap_check']['root'], 'files' => count( (array) $ctx['sitemap_check']['maps'] ), 'urls' => $ctx['sitemap_check']['total'] ?? 0, 'important_missing' => array_slice( array_column( (array) ( $ctx['sitemap_check']['missing'] ?? array() ), 'url' ), 0, 10 ), 'bad_urls' => array_slice( (array) ( $ctx['sitemap_check']['bad'] ?? array() ), 0, 10 ) ) : null,
+				'index_status'  => isset( $ctx['gsc_inspect'] ) ? array_map( function ( $r ) {
+					return array( sap_short_url( $r['url'], 70 ), $r['verdict'] ?? '', $r['coverage'] ?? '', $r['g_canon'] && $r['u_canon'] && $r['g_canon'] !== $r['u_canon'] ? 'canonical_mismatch' : '' );
+				}, array_slice( (array) $ctx['gsc_inspect']['rows'], 0, 15 ) ) : null,
 			);
 
 		case 'plan':
@@ -885,7 +899,7 @@ function sap_ai_stage_input( $project, $stage, $ctx ) {
 			}
 			return $brief;
 	}
-	return null;
+	return apply_filters( 'sap_ai_stage_input', null, $project, $stage, $ctx );
 }
 
 /**
@@ -914,7 +928,7 @@ function sap_ai_stage_run( $project, $stage, $force = false ) {
 		}
 		unset( $f );
 	}
-	$hash = md5( wp_json_encode( $facts ) . '|' . sap_ai_model_for( 'analysis' ) );
+	$hash = md5( wp_json_encode( $facts ) . '|' . sap_ai_model_for( $def['model'] ?? 'analysis' ) );
 	$old  = sap_dataset( $project['id'], $key );
 	if ( ! $force && $old && ( $old['meta']['hash'] ?? '' ) === $hash ) {
 		return array( 'skipped' => 'داده‌های این بخش از تحلیل قبلی تغییری نکرده؛ نتیجه قبلی نگه داشته شد (بدون هزینه).' );
@@ -927,7 +941,7 @@ function sap_ai_stage_run( $project, $stage, $force = false ) {
 			sprintf( '۲. اکشن پلن این ماه: ۸ تا ۱۵ کار مشخص در سقف %s ساعت، مرتب‌شده بر اساس اثر، با هفته پیشنهادی ۱ تا ۴. کارها را از نتایج تحلیل‌های تخصصی بساز و خروجی آماده آن‌ها را در deliverable بگذار: تایتل/متای پیشنهادی، FAQ، فهرست لینک‌های داخلی (مبدأ ← مقصد: انکر)، راه‌حل تکنیکال. کارهای هم‌نوع کوچک را در یک کار ادغام کن (مثلاً «۸ لینک داخلی به دسته X»). idهای finding مرتبط را در finding_ids بگذار. کارهای this_month را تکرار نکن.', sap_num( $project['capacity_hours'] ) ),
 		) );
 	} else {
-		$task = $def['task'];
+		$task = apply_filters( 'sap_ai_stage_task', $def['task'], $stage );
 	}
 	// Big inputs go in small batches (one batch per call): no answer comes near the
 	// token limit, and each item gets the model's full attention.
@@ -941,7 +955,7 @@ function sap_ai_stage_run( $project, $stage, $force = false ) {
 		$all  = array_values( (array) $input[ $batch['in'] ] );
 		$part = $input;
 		$part[ $batch['in'] ] = array_slice( $all, $prog['offset'], $batch['size'] );
-		$res  = sap_ai_request( sap_ai_system_prompt(), $task . "\n\n" . wp_json_encode( $part, JSON_UNESCAPED_UNICODE ), $def['schema'], array( 'purpose' => 'analysis', 'max_tokens' => $def['tokens'], 'effort' => 'low' ) );
+		$res  = sap_ai_request( sap_ai_system_prompt(), $task . "\n\n" . wp_json_encode( $part, JSON_UNESCAPED_UNICODE ), $def['schema'], array( 'purpose' => $def['model'] ?? 'analysis', 'max_tokens' => $def['tokens'], 'effort' => 'low' ) );
 		if ( is_wp_error( $res ) ) {
 			return $res;
 		}
@@ -956,7 +970,7 @@ function sap_ai_stage_run( $project, $stage, $force = false ) {
 		delete_option( $opt );
 		$res = array( $batch['out'] => $prog['out'], '_partial' => $prog['partial'] > 0 );
 	} else {
-		$res = sap_ai_request( sap_ai_system_prompt(), $task . "\n\n" . wp_json_encode( $input, JSON_UNESCAPED_UNICODE ), $def['schema'], array( 'purpose' => 'analysis', 'max_tokens' => $def['tokens'], 'effort' => 'low' ) );
+		$res = sap_ai_request( sap_ai_system_prompt(), $task . "\n\n" . wp_json_encode( $input, JSON_UNESCAPED_UNICODE ), $def['schema'], array( 'purpose' => $def['model'] ?? 'analysis', 'max_tokens' => $def['tokens'], 'effort' => 'low' ) );
 		if ( is_wp_error( $res ) ) {
 			return $res;
 		}
@@ -968,7 +982,7 @@ function sap_ai_stage_run( $project, $stage, $force = false ) {
 		$res['summary_line'] .= ' (بخشی از پاسخ به سقف طول رسید؛ موارد کامل نگه داشته شد.)';
 	}
 	sap_dataset_put( $project['id'], $key, $res, array(
-		'model' => sap_ai_model_for( 'analysis' ),
+		'model' => sap_ai_model_for( $def['model'] ?? 'analysis' ),
 		'hash'  => $hash,
 		'cost'  => sap_ai_usage()['last_cost'] ?? 0,
 		'count' => count( (array) reset( $res ) ),
@@ -998,10 +1012,23 @@ function sap_ai_stage_postprocess( $project, $stage, $res, $input ) {
 				if ( ! $m || '' === trim( (string) ( $p['primary'] ?? '' ) ) ) {
 					continue;
 				}
+				// Drop secondaries whose intent belongs to another page type (rules agree with the prompt).
+				$ptype = sap_content_type( array( 'url' => $m['url'], 'page_type' => array_key_exists( $p['page_type'] ?? '', sap_keymap_page_types() ) ? $p['page_type'] : $m['page_type'] ) );
+				$moved = array();
+				$secs  = array_values( array_filter( $strs( $p['secondary'] ?? array() ), function ( $kw ) use ( $ptype, $m, &$moved ) {
+					if ( sap_kw_misfit( $kw, $ptype, $m['title'] ) ) {
+						$moved[] = $kw;
+						return false;
+					}
+					return true;
+				} ) );
+				if ( $moved ) {
+					$p['reason'] = trim( (string) ( $p['reason'] ?? '' ) . ' (نیت این کلمات با نوع صفحه نمی‌خواند و حذف شد: ' . implode( '، ', $moved ) . ')' );
+				}
 				sap_keymap_save( $project['id'], array(
 					'url'        => $m['url'],
 					'primary_kw' => (string) $p['primary'],
-					'secondary'  => $strs( $p['secondary'] ?? array() ),
+					'secondary'  => array_slice( $secs, 0, 8 ),
 					'intent'     => array_key_exists( $p['intent'] ?? '', sap_keymap_intents() ) ? $p['intent'] : $m['intent'],
 					'page_type'  => array_key_exists( $p['page_type'] ?? '', sap_keymap_page_types() ) ? $p['page_type'] : $m['page_type'],
 					'reason'     => (string) ( $p['reason'] ?? '' ),
@@ -1081,14 +1108,16 @@ function sap_ai_stage_postprocess( $project, $stage, $res, $input ) {
 				$p['actions']        = $strs( $p['actions'] );
 				$pages[]             = $p;
 			}
-			return array( 'pages' => $pages, 'summary_line' => sprintf( 'تحلیل محتوای %s صفحه کلیدی (تایتل/متای پیشنهادی، موضوعات جاافتاده، FAQ).', sap_num( count( $pages ) ) ) );
+			sap_content_ai_to_proposals( $project, $pages );
+			return array( 'pages' => $pages, 'summary_line' => sprintf( 'تحلیل محتوای %s صفحه کلیدی (تایتل/متای پیشنهادی، موضوعات جاافتاده، FAQ) — در تب «سئو محتوا» برای تأیید.', sap_num( count( $pages ) ) ) );
 
 		case 'links':
 			$links = array();
 			foreach ( $list( $res['links'] ?? array() ) as $l ) {
 				$links[] = wp_parse_args( $l, array( 'source_url' => '', 'target_url' => '', 'anchor' => '', 'placement' => '', 'reason' => '' ) );
 			}
-			return array( 'links' => $links, 'summary_line' => sprintf( '%s پیشنهاد لینک داخلی با انکر و محل قرارگیری.', sap_num( count( $links ) ) ) );
+			sap_links_ai_to_proposals( $project, $links );
+			return array( 'links' => $links, 'summary_line' => sprintf( '%s پیشنهاد لینک داخلی با انکر و محل قرارگیری (در تب «سئو محتوا» برای تأیید).', sap_num( count( $links ) ) ) );
 
 		case 'technical':
 			$issues = array();
@@ -1097,7 +1126,8 @@ function sap_ai_stage_postprocess( $project, $stage, $res, $input ) {
 				$i['urls'] = $strs( $i['urls'] );
 				$issues[]  = $i;
 			}
-			return array( 'issues' => $issues, 'summary_line' => sprintf( '%s مشکل تکنیکال اولویت‌بندی شد (سایت‌مپ، ایندکس، اسکیما، سرعت).', sap_num( count( $issues ) ) ) );
+			sap_tech_ai_to_proposals( $project, $issues );
+			return array( 'issues' => $issues, 'summary_line' => sprintf( '%s مشکل تکنیکال اولویت‌بندی شد و در تب «سئو تکنیکال» برای تأیید شما آماده است.', sap_num( count( $issues ) ) ) );
 
 		case 'plan':
 			$res   = sap_ai_normalize_analysis( $res );
@@ -1111,5 +1141,5 @@ function sap_ai_stage_postprocess( $project, $stage, $res, $input ) {
 			$res['summary_line'] = sprintf( 'تشخیص وضعیت و %s کار مشخص برای اکشن پلن آماده شد.', sap_num( count( $res['plan'] ) ) );
 			return $res;
 	}
-	return $res;
+	return apply_filters( 'sap_ai_stage_postprocess', $res, $project, $stage, $input );
 }

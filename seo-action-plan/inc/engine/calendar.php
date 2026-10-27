@@ -28,6 +28,7 @@ const SAP_TAB_BLOG     = 'Blog';
 const SAP_TAB_BKEYWORD = 'B keyword';
 const SAP_TAB_KEYMAP   = 'نقشه کلمات';
 const SAP_TAB_LOG      = 'لاگ تغییرات';
+const SAP_TAB_UPDATES  = 'آپدیت محتوا';
 
 /* ---------------------------------------------------------------------------
  * Calendar
@@ -749,4 +750,50 @@ function sap_project_sheet_create( $project, $existing = '' ) {
 		'url' => 'https://docs.google.com/spreadsheets/d/' . $sheet_id . '/edit',
 		'msg' => 'گوگل شیت پروژه آماده شد: ' . implode( ' · ', array_filter( $msgs ) ),
 	);
+}
+
+/**
+ * Write the «content update» half of the calendar to its own tab.
+ */
+function sap_updates_write_sheet( $project ) {
+	$sheet = $project['sheet_id'];
+	$tabs  = null;
+	$sid   = sap_gs_ensure_tab( $sheet, SAP_TAB_UPDATES, $tabs );
+	if ( is_wp_error( $sid ) ) {
+		return $sid;
+	}
+	$types  = sap_content_types();
+	$status = sap_update_statuses();
+	$values = array( array( 'ماه', 'صفحه', 'آدرس', 'نوع', 'کلمه اصلی', 'کلمات فرعی', 'دلیل / هدف آپدیت', 'تایتل پیشنهادی', 'بخش‌های جدید', 'ویژگی‌ها', 'FAQ', 'وضعیت', 'تاریخ انجام' ) );
+	foreach ( sap_updates( $project['id'] ) as $u ) {
+		$b        = $u['brief'];
+		$values[] = array(
+			sap_period_label( $u['period'] ),
+			$u['title'],
+			rawurldecode( $u['url'] ),
+			$types[ $u['content_type'] ] ?? $u['content_type'],
+			$b['keyword'] ?? $u['keyword'],
+			implode( '، ', (array) ( $b['secondary'] ?? $u['secondary'] ) ),
+			$b['summary'] ?? $u['reason'],
+			$b['title'] ?? '',
+			implode( "\n", array_map( function ( $o ) {
+				return ( $o['heading'] ?? '' );
+			}, (array) ( $b['outline'] ?? array() ) ) ),
+			implode( "\n", array_map( function ( $a ) {
+				return ( $a['name'] ?? '' ) . ': ' . ( $a['hint'] ?? '' );
+			}, (array) ( $b['attributes'] ?? array() ) ) ),
+			implode( "\n", (array) ( $b['faq'] ?? array() ) ),
+			$status[ $u['status'] ] ?? $u['status'],
+			$u['done_at'] ? sap_jdate( substr( $u['done_at'], 0, 10 ), 'short' ) : '',
+		);
+	}
+	$res = sap_gs_put_tab( $sheet, SAP_TAB_UPDATES, $values );
+	if ( is_wp_error( $res ) ) {
+		return $res;
+	}
+	$fmt   = sap_gs_reset( $sid, array( 0 => 100, 1 => 200, 2 => 260, 3 => 100, 4 => 160, 5 => 220, 6 => 300, 7 => 240, 8 => 240, 9 => 220, 10 => 240, 11 => 100, 12 => 100 ) );
+	$fmt[] = sap_gs_fmt( $sid, 0, 1, 0, 13, '#1D4ED8', '#FFFFFF', true );
+	$fmt[] = array( 'updateSheetProperties' => array( 'properties' => array( 'sheetId' => $sid, 'gridProperties' => array( 'frozenRowCount' => 1 ) ), 'fields' => 'gridProperties.frozenRowCount' ) );
+	sap_gs_batch( $sheet, $fmt );
+	return sprintf( 'آپدیت محتوا (%s صفحه)', sap_num( count( $values ) - 1 ) );
 }

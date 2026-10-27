@@ -33,7 +33,7 @@ $base     = sap_project_url( $pid, 'ideas' );
 	<div class="sap-keymap-head">
 		<div>
 			<h2><?php echo sap_icon( 'spark' ); // phpcs:ignore ?>ایده‌های محتوای جدید</h2>
-			<p class="sap-muted">هوش مصنوعی از کوئری‌های اطلاعاتی سرچ کنسول که صفحه ندارند، کلمات بدون صاحب، گپ رقبا و سوالات واقعی کاربران، ایده مقاله می‌سازد: کلمه اصلی، کلمات فرعی، عنوان، هدف (کدام صفحه پولساز یا Focus را تقویت می‌کند)، ساختار و ۵ لینک داخلی. موضوعات مقالات فعلی و ایده‌های ردشده تکرار نمی‌شوند. هر ایده را که تأیید کنید، با یک کلیک وارد تقویم محتوا و گوگل شیت می‌شود.</p>
+			<p class="sap-muted">ایده‌ها فقط از «کاندیداهای تأییدشده» ساخته می‌شوند: کوئری‌های سرچ کنسول، سوالات کاربران و گپ رقبا که در نقشه کلمات، تقویم و ایده‌های قبلی هدف‌گیری نشده‌اند و سایت در آن‌ها رتبه ۱ تا ۵ ندارد. کلمات با نیت خرید به‌جای مقاله، فرصت صفحه دسته/محصول می‌شوند و کلماتی که صفحه‌ای از سایت در جایگاه ۶ تا ۲۰ دارد به «بهینه‌سازی همان صفحه» می‌روند تا کنیبال ساخته نشود. هر ایده: کلمه اصلی و فرعی، عنوان، هدف، ساختار و ۵ لینک داخلی.</p>
 		</div>
 		<div class="sap-actions">
 			<label class="sap-inline-label">تعداد <input type="number" class="is-tiny" min="3" max="16" value="10" data-sap-ideas-count></label>
@@ -41,6 +41,46 @@ $base     = sap_project_url( $pid, 'ideas' );
 		</div>
 	</div>
 </section>
+
+<?php $pool = sap_dataset_payload( $pid, 'ideas_pool' ); ?>
+<details class="sap-panel sap-pool" <?php echo $pool ? '' : 'open'; ?>>
+	<summary><b>کاندیداهای تأییدشده برای محتوای جدید</b>
+		<?php if ( $pool ) : ?><span class="sap-muted sap-small"> — <?php echo esc_html( sprintf( '%s موضوع مقاله · %s فرصت صفحه دسته/محصول · %s بهینه‌سازی صفحه فعلی · بروزرسانی %s', sap_num( count( $pool['blog'] ) ), sap_num( count( $pool['landing'] ) ), sap_num( count( $pool['optimize'] ) ), sap_jdate( $pool['at'], 'short' ) ) ); ?></span><?php endif; ?>
+	</summary>
+	<div class="sap-pool-bar">
+		<button type="button" class="sap-btn is-soft is-small" data-sap-step="ideas_pool" data-project="<?php echo esc_attr( $pid ); ?>"><?php echo sap_icon( 'refresh', 14 ); // phpcs:ignore ?>بروزرسانی کاندیداها (رایگان)</button>
+		<?php if ( $pool ) : ?>
+			<span class="sap-small sap-muted"><?php echo esc_html( sprintf( 'کنار گذاشته شد: %s کلمه با رتبه ۱ تا ۵، %s کلمه هدف‌گیری‌شده، %s کلمه برند', sap_num( $pool['excluded']['ranking'] ), sap_num( $pool['excluded']['covered'] ), sap_num( $pool['excluded']['brand'] ) ) ); ?></span>
+			<a class="sap-small" href="<?php echo esc_url( sap_project_url( $pid, 'audit' ) . '#' ); ?>">فرصت‌های صفحه و بهینه‌سازی در پیشنهادهای محتوا</a>
+		<?php endif; ?>
+	</div>
+	<?php if ( $pool && $pool['blog'] ) : ?>
+		<div class="sap-table-wrap"><table class="sap-table is-compact">
+			<thead><tr><th>کلمه اصلی</th><th>کلمات هم‌خانواده</th><th>حجم</th><th>جایگاه فعلی</th><th>منبع</th><th>دلیل</th></tr></thead>
+			<tbody>
+				<?php
+				$srcl = array( 'gsc' => 'سرچ کنسول', 'questions' => 'سوال کاربران', 'competitor' => 'گپ رقبا' );
+				foreach ( array_slice( $pool['blog'], 0, 25 ) as $t ) :
+					?>
+					<tr>
+						<td><b><?php echo esc_html( $t['keyword'] ); ?></b></td>
+						<td class="sap-small"><?php echo esc_html( implode( '، ', array_map( function ( $s ) {
+							return $s[0];
+						}, array_slice( $t['secondary'], 0, 5 ) ) ) ); ?></td>
+						<td><?php echo $t['volume'] ? esc_html( sap_num( $t['volume'] ) ) : '—'; ?></td>
+						<td><?php echo null === $t['pos'] ? 'بدون رتبه' : esc_html( sap_num( $t['pos'], 1 ) ); ?></td>
+						<td class="sap-small"><?php echo esc_html( implode( '، ', array_map( function ( $s ) use ( $srcl ) {
+							return $srcl[ $s ] ?? $s;
+						}, $t['sources'] ) ) ); ?></td>
+						<td class="sap-small sap-muted"><?php echo esc_html( implode( ' · ', array_slice( $t['evidence'], 0, 2 ) ) ); ?></td>
+					</tr>
+				<?php endforeach; ?>
+			</tbody>
+		</table></div>
+	<?php elseif ( $pool ) : ?>
+		<p class="sap-muted">کاندیدای تازه‌ای برای مقاله جدید نیست؛ کلمات پرنمایش یا هدف‌گیری شده‌اند یا سایت در آن‌ها رتبه خوب دارد. برای پیدا کردن موضوعات تازه، از تب «رقبا» گپ رقبا را بگیرید.</p>
+	<?php endif; ?>
+</details>
 
 <div class="sap-toolbar">
 	<div class="sap-seg">

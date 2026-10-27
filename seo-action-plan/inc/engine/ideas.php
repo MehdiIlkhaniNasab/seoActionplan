@@ -37,7 +37,7 @@ function sap_is_info_query( $q ) {
 /**
  * Facts for the ideas prompt.
  */
-function sap_ideas_input( $project, $count ) {
+function sap_ideas_input( $project, $count, $source = 'all' ) {
 	$pid  = $project['id'];
 	$ctx  = sap_analysis_context( $project );
 	$map  = $ctx['keymap'];
@@ -103,6 +103,24 @@ function sap_ideas_input( $project, $count ) {
 			$signals[] = array( 'rule' => sap_detectors()[ $f['detector'] ][0] ?? $f['detector'], 'keywords' => array_values( array_unique( array_filter( $kws ) ) ) );
 		}
 	}
+	// Vetted candidates (strict rules, see ideas-pool.php): the only keywords ideas may use.
+	$pool  = sap_ideas_pool( $project );
+	$cands = array();
+	foreach ( $pool['blog'] as $t ) {
+		if ( 'competitors' === $source && ! in_array( 'competitor', $t['sources'], true ) ) {
+			continue;
+		}
+		$cands[] = array(
+			'keyword'   => $t['keyword'],
+			'secondary' => array_map( function ( $s ) {
+				return $s[0];
+			}, $t['secondary'] ),
+			'volume'    => $t['volume'] ?: null,
+			'position'  => $t['pos'],
+			'intent'    => $t['intent'],
+			'evidence'  => implode( ' · ', array_slice( $t['evidence'], 0, 2 ) ),
+		);
+	}
 	$questions = array();
 	foreach ( (array) ( $ctx['ss_questions']['focuses'] ?? array() ) as $q ) {
 		foreach ( array_slice( sap_sort( (array) ( $q['rows'] ?? array() ), 'volume' ), 0, 15 ) as $r ) {
@@ -129,9 +147,8 @@ function sap_ideas_input( $project, $count ) {
 		}, $money ), 0, 45 ),
 		'existing_articles' => array_slice( array_values( array_unique( array_filter( $articles ) ) ), 0, 120 ),
 		'rejected_ideas'    => array_slice( $rejected, 0, 40 ),
-		'search_queries'    => array( 'columns' => array( 'query', 'impressions', 'best_position', 'page_now' ), 'rows' => array_slice( $queries, 0, 70 ) ),
-		'rule_signals'      => array_slice( $signals, 0, 20 ),
-		'user_questions'    => array_slice( $questions, 0, 40 ),
+		'candidates'        => array_slice( $cands, 0, 50 ),
+		'_pool'             => $pool,
 	);
 }
 
@@ -141,12 +158,29 @@ function sap_ideas_input( $project, $count ) {
  * @param string $period When set, the ideas go straight into that calendar month.
  * @return array|WP_Error {added: int, ids: int[]}
  */
-function sap_ideas_generate( $project, $count = 10, $period = '' ) {
+function sap_ideas_generate( $project, $count = 10, $period = '', $source = 'all' ) {
 	if ( ! sap_ai_connected() ) {
 		return new WP_Error( 'sap_ai_key', 'کلید هوش مصنوعی در تنظیمات وارد نشده است.' );
 	}
 	$count  = min( 16, max( 3, (int) $count ) );
-	$input  = sap_ideas_input( $project, $count );
+	$input  = sap_ideas_input( $project, $count, $source );
+	$pool   = $input['_pool'];
+	unset( $input['_pool'] );
+	if ( ! $input['candidates'] && empty( $pool['sources']['gsc'] ) && empty( $pool['sources']['questions'] ) && empty( $pool['sources']['competitor'] ) ) {
+		return new WP_Error( 'sap_ideas_pool', 'هنوز داده‌ای برای پیدا کردن کلمات تازه نیست: اول «تحلیل کامل» را بزنید تا کوئری‌های سرچ کنسول دریافت شود (و در صورت تمایل سوالات کاربران یا گپ رقبا از سئو سیگنال).' );
+	}
+	if ( ! $input['candidates'] ) {
+		return new WP_Error( 'sap_ideas_pool', 'competitors' === $source
+			? 'از گپ رقبا کلمه‌ای پیدا نشد که هنوز هدف‌گیری نشده باشد و سایت در آن رتبه ۱ تا ۵ نداشته باشد. اول «مقایسه با رقبا» را اجرا کنید یا رقیب دیگری اضافه کنید.'
+			: sprintf( 'کلمه تازه‌ای برای مقاله جدید پیدا نشد: %s کلمه را سایت از قبل در جایگاه ۱ تا ۵ دارد، %s کلمه در نقشه کلمات/تقویم هدف‌گیری شده و %s کلمه نیت خرید دارد (فرصت صفحه دسته/محصول در پیشنهادها).', sap_num( $pool['excluded']['ranking'] ), sap_num( $pool['excluded']['covered'] ), sap_num( count( $pool['landing'] ) ) ) );
+	}
+	$allowed = array();
+	foreach ( $input['candidates'] as $c ) {
+		$allowed[ sap_kw_core( $c['keyword'] ) ] = true;
+		foreach ( $c['secondary'] as $s ) {
+			$allowed[ sap_kw_core( $s ) ] = true;
+		}
+	}
 	$str    = array( 'type' => 'string' );
 	$schema = sap_ai_obj( array( 'ideas' => array( 'type' => 'array', 'items' => sap_ai_obj( array(
 		'keyword'     => array( 'type' => 'string', 'description' => 'کلمه کلیدی اصلی مقاله (Main Idea)، همان‌طور که کاربر جستجو می‌کند' ),
@@ -164,13 +198,15 @@ function sap_ideas_generate( $project, $count = 10, $period = '' ) {
 	) ) ) ) );
 	$task = implode( "\n", array(
 		sprintf( 'تو استراتژیست محتوای سئو برای یک سایت فارسی هستی. %s ایده مقاله جدید برای بلاگ پیشنهاد بده که واقعاً ترافیک و فروش بیاورد.', sap_num( $count ) ),
-		'داده‌ها: search_queries کوئری‌های واقعی سرچ کنسول که صفحه مناسبی ندارند یا صفحه اول نیستند؛ rule_signals کلمات بدون صفحه و گپ رقبا؛ user_questions سوالات واقعی کاربران با حجم جستجو؛ money_pages صفحات دسته و محصول که بلاگ باید به آن‌ها لینک بدهد و آن‌ها را تقویت کند؛ focuses اهداف فعلی پروژه.',
+		'داده‌ها: candidates کلمات کاندیدای بررسی‌شده (از سرچ کنسول، سوالات کاربران و گپ رقبا) با حجم، جایگاه فعلی، نیت و دلیل؛ money_pages صفحات دسته و محصول که بلاگ باید به آن‌ها لینک بدهد و آن‌ها را تقویت کند؛ focuses اهداف فعلی پروژه.',
 		'قواعد:',
 		'- هر ایده باید به یک داده واقعی استناد کند (evidence) و هدفش (goal) را روشن بگوید: کدام صفحه پولساز یا Focus را تقویت می‌کند.',
 		'- موضوعات existing_articles و rejected_ideas را تکرار نکن و ایده‌هایی شبیه به هم (کنیبال) نده؛ هر ایده یک نیت جستجوی مستقل داشته باشد. نظر متخصص در rejected_ideas را رعایت کن.',
 		'- کلمه اصلی را به شکلی که کاربر جستجو می‌کند بنویس (نه عنوان)، و کلمات فرعی را از نسخه‌های جستجوی همان موضوع انتخاب کن.',
 		'- لینک‌ها فقط از آدرس‌های money_pages (یا مقالات موجود اگر آدرسشان آمده) باشند؛ ترجیحاً صفحاتی که با موضوع مقاله مرتبط‌اند و انکرها متنوع و طبیعی.',
 		'- ایده‌های مرتبط با Focusها و صفحات پولساز اولویت بالاتر دارند. ایده عمومی و بی‌ربط به کسب‌وکار نده.',
+		'- مهم‌ترین قاعده: کلمه اصلی هر ایده باید دقیقاً از candidates باشد (کاندیداهایی که سیستم بررسی کرده: در نقشه کلمات/تقویم هدف‌گیری نشده‌اند، سایت در آن‌ها رتبه ۱ تا ۵ ندارد و نیتشان اطلاعاتی/مقایسه‌ای است). کلمه اصلی خارج از candidates نساز. کلمات فرعی را از secondary همان کاندیدا و نسخه‌های جستجوی همان موضوع انتخاب کن.',
+		'- نیت هر کلمه را جدی بگیر: کلمه با نیت خرید جای مقاله نیست. evidence هر ایده را از evidence کاندیدا بنویس.',
 	) );
 	$res = sap_ai_request( sap_ai_system_prompt(), $task . "\n\n" . wp_json_encode( $input, JSON_UNESCAPED_UNICODE ), $schema, array( 'purpose' => 'analysis', 'max_tokens' => 1000 + 650 * $count, 'effort' => 'low' ) );
 	if ( is_wp_error( $res ) ) {
@@ -206,9 +242,14 @@ function sap_ideas_generate( $project, $count = 10, $period = '' ) {
 	$focus_ctx = sap_focus_context( $project['id'] );
 	$ids       = array();
 	$slot      = count( sap_ideas( $project['id'], array( 'period' => $period, 'status' => 'scheduled' ) ) );
+	$dropped = 0;
 	foreach ( $ideas as $i ) {
 		$core = sap_kw_core( $i['keyword'] );
 		if ( isset( $known[ $core ] ) ) {
+			continue;
+		}
+		if ( ! isset( $allowed[ $core ] ) && ! sap_pool_covered( $i['keyword'], array_fill_keys( array_keys( $allowed ), array() ) ) ) {
+			++$dropped; // The model invented a keyword outside the vetted candidates.
 			continue;
 		}
 		$known[ $core ] = true;
@@ -255,7 +296,7 @@ function sap_ideas_generate( $project, $count = 10, $period = '' ) {
 	if ( $period ) {
 		sap_calendar_spread_dates( $project['id'], $period );
 	}
-	return array( 'added' => count( $ids ), 'ids' => $ids, 'partial' => ! empty( $res['_partial'] ) );
+	return array( 'added' => count( $ids ), 'ids' => $ids, 'partial' => ! empty( $res['_partial'] ), 'dropped' => $dropped, 'pool' => array( 'blog' => count( $pool['blog'] ), 'landing' => count( $pool['landing'] ), 'optimize' => count( $pool['optimize'] ), 'excluded' => $pool['excluded'] ) );
 }
 
 /**

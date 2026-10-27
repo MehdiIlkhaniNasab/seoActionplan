@@ -80,17 +80,45 @@ $auth  = sap_google_auth_url();
 			<label>کلید API (Anthropic)<input type="text" name="anthropic_key" dir="ltr" value="<?php echo esc_attr( sap_mask( $s['anthropic_key'] ) ); ?>" autocomplete="off" placeholder="sk-ant-…"></label>
 		</div>
 		<datalist id="sap-ai-models"><?php foreach ( sap_ai_models() as $k => $label ) : ?><option value="<?php echo esc_attr( $k ); ?>"><?php echo esc_html( $label ); ?></option><?php endforeach; ?></datalist>
+		<p class="sap-label">پروفایل هزینه (سه فیلد زیر را پر می‌کند؛ بعد ذخیره کنید)</p>
+		<div class="sap-ai-profiles">
+			<?php foreach ( sap_ai_profiles() as $pk => $pf ) : ?>
+				<button type="button" class="sap-ai-profile" data-sap-ai-profile='<?php echo esc_attr( wp_json_encode( array( 'ai_model' => $pf[1], 'ai_model_light' => $pf[2], 'ai_model_assist' => $pf[3] ) ) ); ?>'>
+					<b><?php echo esc_html( $pf[0] ); ?></b>
+					<span dir="ltr"><?php echo esc_html( $pf[1] . ' · ' . $pf[2] ); ?></span>
+					<small><?php echo esc_html( $pf[4] ); ?></small>
+					<em>حدود <?php echo esc_html( sap_num( sap_ai_estimate_run( $pf[1], $pf[2] ), 2 ) ); ?> دلار هر تحلیل کامل</em>
+				</button>
+			<?php endforeach; ?>
+		</div>
 		<div class="sap-grid-3">
-			<label>مدل تحلیل پروژه<input type="text" name="ai_model" dir="ltr" list="sap-ai-models" value="<?php echo esc_attr( $s['ai_model'] ); ?>">
-				<small>پیشنهاد: claude-sonnet-5-5 (حدود ۰٫۱ دلار هر تحلیل)</small>
+			<label>مدل تحلیل عمیق<input type="text" name="ai_model" dir="ltr" list="sap-ai-models" value="<?php echo esc_attr( $s['ai_model'] ); ?>">
+				<small>Focus، تحلیل محتوا، تکنیکال، آف‌پیج، ایده‌ها و جمع‌بندی اکشن پلن.</small>
+			</label>
+			<label>مدل سبک (کارهای حجیم و ساده)<input type="text" name="ai_model_light" dir="ltr" list="sap-ai-models" value="<?php echo esc_attr( $s['ai_model_light'] ); ?>" placeholder="خالی = همان مدل تحلیل">
+				<small>نقشه کلمات، کنیبالیزیشن، لینک داخلی و بریف‌ها؛ بیشترین توکن را مصرف می‌کنند.</small>
 			</label>
 			<label>مدل «بنویس برام»<input type="text" name="ai_model_assist" dir="ltr" list="sap-ai-models" value="<?php echo esc_attr( $s['ai_model_assist'] ); ?>">
-				<small>پیشنهاد: claude-haiku-5-5 (حدود ۰٫۰۰۱ دلار هر بار)</small>
+				<small>خروجی آماده هر تسک (تایتل، متا، FAQ و…).</small>
 			</label>
 			<label>سقف بودجه ماهانه (دلار)<input type="number" name="ai_budget" min="0" step="0.5" value="<?php echo esc_attr( $s['ai_budget'] ); ?>">
 				<small>وقتی پر شود، هوش مصنوعی تا ماه بعد متوقف می‌شود. ۰ = بدون سقف.</small>
 			</label>
 		</div>
+		<details class="sap-ai-prices">
+			<summary>مقایسه قیمت مدل‌ها (تقریبی)</summary>
+			<div class="sap-table-wrap">
+				<table class="sap-table is-compact">
+					<thead><tr><th>مدل</th><th>ورودی (دلار / ۱ میلیون توکن)</th><th>خروجی</th><th>یک تحلیل کامل اگر مدل تحلیل باشد</th></tr></thead>
+					<tbody>
+						<?php foreach ( sap_ai_model_prices() as $mk => $mp ) : ?>
+							<tr><td dir="ltr"><code><?php echo esc_html( $mk ); ?></code></td><td><?php echo esc_html( sap_num( $mp[0], 2 ) ); ?></td><td><?php echo esc_html( sap_num( $mp[1], 2 ) ); ?></td><td>~<?php echo esc_html( sap_num( sap_ai_estimate_run( $mk, sap_ai_model_for( 'light' ) ), 2 ) ); ?> دلار</td></tr>
+						<?php endforeach; ?>
+					</tbody>
+				</table>
+			</div>
+			<p class="sap-small sap-muted">قیمت‌ها تقریبی و بر اساس قیمت رسمی مدل‌هاست؛ قیمت دقیق را پنل GapGPT نشان می‌دهد. مدل‌های خیلی ارزان (nano، flash-lite) برای تحلیل عمیق فارسی ضعیف‌ترند؛ برای «مدل سبک» مناسب‌اند. هزینه واقعی هر تحلیل بعد از اجرا در همین صفحه ثبت می‌شود.</p>
+		</details>
 		<?php sap_switch( 'ai_auto', $s['ai_auto'], 'تحلیل هوشمند در همگام‌سازی خودکار هفتگی هم اجرا شود', 'اگر داده‌ها تغییر نکرده باشند، تحلیل قبلی بدون هزینه نگه داشته می‌شود.' ); ?>
 		<?php if ( 'gateway' === $s['ai_provider'] && sap_ai_connected() ) : ?>
 			<div class="sap-ai-test">
