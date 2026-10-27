@@ -119,7 +119,8 @@ function sap_ss_request( $endpoint, $body = array(), $metered = true ) {
 		return new WP_Error( 'sap_ss_http', $msg, array( 'code' => 'NETWORK' ) );
 	}
 	$code = (int) wp_remote_retrieve_response_code( $res );
-	$raw  = (string) wp_remote_retrieve_body( $res );
+	// SEO Signal prefixes its JSON with UTF-8 BOMs (often two), which json_decode rejects.
+	$raw  = preg_replace( '/^(?:\xEF\xBB\xBF|\s)+/', '', (string) wp_remote_retrieve_body( $res ) );
 	$data = json_decode( $raw, true );
 	if ( ! is_array( $data ) ) {
 		$msg = sprintf( 'پاسخ سئو سیگنال JSON نبود (HTTP %d). معمولاً یعنی فایروال یا VPN/پروکسی سرور شما درخواست را به صفحه دیگری برده یا سئو سیگنال IP خارج از ایران را رد کرده است. «تست اتصال» را در تب سئو سیگنال بزنید.', $code );

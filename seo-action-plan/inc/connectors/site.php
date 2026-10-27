@@ -66,7 +66,7 @@ function sap_site_request( $project, $method, $route, $params = array(), $timeou
 		return new WP_Error( 'sap_site_http', 'اتصال به سایت کارفرما ناموفق بود: ' . sap_net_error( $res ) );
 	}
 	$code = (int) wp_remote_retrieve_response_code( $res );
-	$data = json_decode( (string) wp_remote_retrieve_body( $res ), true );
+	$data = json_decode( preg_replace( '/^(?:\xEF\xBB\xBF|\s)+/', '', (string) wp_remote_retrieve_body( $res ) ), true ); // A BOM from a theme / plugin file breaks the JSON.
 	if ( $code >= 400 ) {
 		$msg = (string) ( $data['message'] ?? ( 'HTTP ' . $code ) );
 		if ( 403 === $code && false !== strpos( $msg, 'Invalid Sokan key' ) ) {

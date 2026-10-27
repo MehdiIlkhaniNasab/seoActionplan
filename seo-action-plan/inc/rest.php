@@ -349,6 +349,14 @@ add_action( 'rest_api_init', function () {
 			if ( ! preg_match( '#^https://(sheets\.googleapis\.com|api\.gapgpt\.app|panel\.seosignal\.net|api\.anthropic\.com)/#', $url ) && $url !== untrailingslashit( esc_url_raw( sap_setting( 'ai_base_url' ) ) ) . '/models' ) {
 				return new WP_Error( 'sap_url', 'آدرس مجاز نیست.', array( 'status' => 400 ) );
 			}
+			if ( 0 === strpos( $url, 'https://panel.seosignal.net/' ) && sap_ss_connected() ) {
+				// A 200 is not enough: run a real request and read its JSON.
+				$d    = sap_ss_diagnose();
+				$fail = array_values( array_filter( $d['steps'], function ( $s ) {
+					return false === $s['ok'];
+				} ) );
+				return array( 'ok' => $d['ok'], 'msg' => $d['ok'] ? end( $d['steps'] )['msg'] : $fail[0]['name'] . ': ' . $fail[0]['msg'] );
+			}
 			$r = sap_net_test( $url );
 			return array( 'ok' => $r['ok'], 'msg' => $r['msg'] . ' · ' . $r['via'] );
 		},
