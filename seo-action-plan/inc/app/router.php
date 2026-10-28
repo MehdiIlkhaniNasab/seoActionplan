@@ -123,6 +123,8 @@ add_action( 'template_redirect', function () {
 		status_header( 403 );
 		sap_render( 'denied' );
 	}
+	// The app screens of a large store (10,000+ products) need more than the front-end limit.
+	wp_raise_memory_limit( 'admin' );
 	sap_render( 'shell', sap_resolve_route( $route ) );
 }, 1 );
 

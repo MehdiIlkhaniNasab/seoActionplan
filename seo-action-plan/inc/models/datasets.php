@@ -24,6 +24,7 @@ function sap_dataset_labels() {
 		'ss_questions'   => 'سئو سیگنال: سوالات کاربران (Focusها)',
 		'crawl'          => 'Screaming Frog: آخرین خزش',
 		'site_inventory' => 'وردپرس: فهرست کامل محتوا (افزونه رابط)',
+		'site_inventory_rows' => 'وردپرس: ردیف‌های فهرست محتوا',
 		'impact'         => 'ارزیابی اثر اقدامات (قبل / بعد)',
 		'pages'          => 'محتوای صفحات کلیدی (متن، تیترها، اسکیما، لینک‌ها)',
 		'cwv'            => 'Core Web Vitals (PageSpeed Insights)',

@@ -64,6 +64,8 @@ function sap_sync_step( $project, $step, $force = false ) {
 	if ( function_exists( 'set_time_limit' ) ) {
 		@set_time_limit( 180 ); // phpcs:ignore WordPress.PHP.NoSilencedErrors
 	}
+	// Large stores (10,000+ products): allow the admin memory ceiling (WP_MAX_MEMORY_LIMIT).
+	wp_raise_memory_limit( 'admin' );
 	$res = call_user_func( $fn, $project, $force );
 	if ( is_wp_error( $res ) ) {
 		$res = array( 'ok' => false, 'skipped' => false, 'msg' => $res->get_error_message() );

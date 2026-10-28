@@ -74,7 +74,7 @@
 			panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
 			document.querySelectorAll('[data-sap-sync]').forEach(function (b) { b.disabled = true; });
 			var items = Array.prototype.slice.call(panel.querySelectorAll('[data-step]'));
-			items.forEach(function (li) { li.className = ''; li.querySelector('[data-msg]').textContent = ''; });
+			items.forEach(function (li) { li.className = ''; li.sapStarted = 0; li.querySelector('[data-msg]').textContent = ''; });
 			var done = panel.querySelector('[data-sap-sync-done]');
 			done.hidden = true;
 			var i = 0;
@@ -107,24 +107,65 @@
 				}
 				li.removeAttribute('data-approved');
 				li.className = 'is-run';
-				msg.textContent = 'در حال اجرا…';
-				var started = Date.now();
+				// Keep the progress of a resumable step and show a live clock, so a long step
+				// (e.g. 10,000 products) visibly moves instead of a bare «در حال اجرا…».
+				if (!li.sapStarted) { li.sapStarted = Date.now(); li.sapNote = 'در حال اجرا…'; }
+				var started = li.sapStarted;
+				var tick = function () {
+					var sec = Math.round((Date.now() - started) / 1000);
+					msg.textContent = li.sapNote + ' · ' + clock(sec);
+				};
+				tick();
+				var timer = setInterval(tick, 1000);
 				api('sync/' + project + '/' + li.getAttribute('data-step') + (force ? '?force=1' : ''), { method: 'POST' })
 					.then(function (res) {
+						clearInterval(timer);
 						if (res.more) {
 							// Resumable step: same step again until it reports done.
-							msg.textContent = res.msg || '…';
+							li.sapNote = res.msg || '…';
+							tick();
 							i--;
 							return;
 						}
+						li.sapStarted = 0;
 						li.className = res.ok ? (res.skipped ? 'is-skip' : 'is-ok') : 'is-err';
-						msg.textContent = (res.msg || '') + ' (' + Math.round((Date.now() - started) / 100) / 10 + ' ثانیه)';
+						msg.textContent = (res.msg || '') + ' (' + clock(Math.round((Date.now() - started) / 1000)) + ')';
+						if (!res.ok) { retryButton(li, msg); }
 					})
 					.catch(function (e) {
+						clearInterval(timer);
+						li.sapStarted = 0;
 						li.className = 'is-err';
 						msg.textContent = e.message;
+						retryButton(li, msg);
 					})
 					.then(next);
+			}
+			function clock(sec) {
+				return sec < 60 ? sec.toLocaleString('fa-IR') + ' ثانیه' : Math.floor(sec / 60).toLocaleString('fa-IR') + ' دقیقه و ' + (sec % 60).toLocaleString('fa-IR') + ' ثانیه';
+			}
+			// A failed step can be run again on its own; resumable steps go on from where they stopped.
+			function retryButton(li, msg) {
+				var again = document.createElement('button');
+				again.type = 'button';
+				again.className = 'sap-btn is-small is-primary';
+				again.textContent = 'ادامه از همین نقطه';
+				msg.appendChild(document.createTextNode(' '));
+				msg.appendChild(again);
+				again.addEventListener('click', function () {
+					again.remove();
+					li.className = 'is-run';
+					var t0 = Date.now();
+					msg.textContent = 'در حال اجرا…';
+					(function once() {
+						api('sync/' + project + '/' + li.getAttribute('data-step') + (force ? '?force=1' : ''), { method: 'POST' }).then(function (res) {
+							if (res.more) { msg.textContent = (res.msg || '…') + ' · ' + clock(Math.round((Date.now() - t0) / 1000)); return once(); }
+							li.className = res.ok ? (res.skipped ? 'is-skip' : 'is-ok') : 'is-err';
+							msg.textContent = res.msg || '';
+							if (!res.ok) { retryButton(li, msg); }
+						}).catch(function (e) { li.className = 'is-err'; msg.textContent = e.message; retryButton(li, msg); });
+					})();
+				});
 			}
 			next();
 		});

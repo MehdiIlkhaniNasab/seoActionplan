@@ -266,7 +266,7 @@ function sap_content_inventory( $project ) {
 			'km_status' => $km_st,
 			'checks'    => array(),
 			'misfits'   => array(),
-			'wp'        => $it ? array_intersect_key( $it, array_flip( array( 'kind', 'id', 'type', 'editor', 'thumb', 'modified', 'date', 'noindex', 'product', 'count', 'images', 'no_alt', 'seo' ) ) ) : null,
+			'wp'        => $it ?: null, // Shared, not copied: 10,000 products stay light.
 		);
 		if ( null === $row['pos'] && $queries && '' === $kw ) {
 			$row['pos'] = $queries[0][1];

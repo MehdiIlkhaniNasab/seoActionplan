@@ -53,14 +53,102 @@ function sap_site_inventory( $project_id, $refresh = false ) {
 	if ( ! $refresh && isset( $cache[ $project_id ] ) ) {
 		return $cache[ $project_id ];
 	}
+	$cache[ $project_id ] = null; // Free the old copy before building the new one.
+	global $wpdb;
 	$out = array();
-	foreach ( (array) ( sap_dataset_payload( $project_id, 'site_inventory' )['items'] ?? array() ) as $it ) {
-		if ( ! empty( $it['url'] ) ) {
-			$out[ sap_norm_url( $it['url'] ) ] = $it;
+	// Rows live in their own dataset as compact tuples (10,000 products stay light); read it
+	// directly so the decoded payload is not kept in the dataset cache too.
+	$raw = $wpdb->get_var( $wpdb->prepare( 'SELECT payload FROM ' . sap_table( 'datasets' ) . ' WHERE project_id = %d AND source = %s', $project_id, 'site_inventory_rows' ) ); // phpcs:ignore
+	if ( $raw ) {
+		$chunks = (array) ( sap_unpack( $raw )['chunks'] ?? array() );
+		unset( $raw );
+		// One chunk decoded at a time keeps the peak memory low.
+		foreach ( $chunks as $c => $packed ) {
+			foreach ( (array) sap_unpack( (string) $packed ) as $t ) {
+				$it = sap_inventory_unpack_item( $t );
+				if ( '' !== $it['url'] ) {
+					$out[ sap_norm_url( $it['url'] ) ] = $it;
+				}
+			}
+			unset( $chunks[ $c ] );
+		}
+	} else {
+		// Inventories stored before 0.13.1.
+		foreach ( (array) ( sap_dataset_payload( $project_id, 'site_inventory' )['items'] ?? array() ) as $it ) {
+			if ( ! empty( $it['url'] ) ) {
+				$out[ sap_norm_url( $it['url'] ) ] = sap_inventory_unpack_item( sap_inventory_pack_item( $it ) );
+			}
 		}
 	}
 	$cache[ $project_id ] = $out;
 	return $out;
+}
+
+/**
+ * Inventory item → compact tuple (no repeated keys in storage).
+ */
+function sap_inventory_pack_item( $it ) {
+	$seo = (array) ( $it['seo'] ?? array() );
+	$pr  = isset( $it['product'] ) ? (array) $it['product'] : null;
+	return array(
+		(string) ( $it['kind'] ?? '' ), (int) ( $it['id'] ?? 0 ), (string) ( $it['type'] ?? '' ), (string) ( $it['ctype'] ?? '' ),
+		(string) ( $it['title'] ?? '' ), (string) ( $it['url'] ?? '' ), (string) ( $it['date'] ?? '' ), (string) ( $it['modified'] ?? '' ),
+		(int) ( $it['parent'] ?? 0 ), (string) ( $it['editor'] ?? '' ), (int) ( $it['words'] ?? 0 ), (int) ( $it['images'] ?? 0 ),
+		(int) ( $it['no_alt'] ?? 0 ), (string) ( $it['thumb'] ?? '' ), empty( $it['noindex'] ) ? 0 : 1, (int) ( $it['count'] ?? 0 ),
+		array( (string) ( $seo['seo_title'] ?? '' ), (string) ( $seo['meta_description'] ?? '' ), (string) ( $seo['focus_keyword'] ?? '' ) ),
+		null === $pr ? 0 : array( (string) ( $pr['price'] ?? '' ), (string) ( $pr['sku'] ?? '' ), (string) ( $pr['stock'] ?? '' ), (string) ( $pr['ptype'] ?? '' ), (int) ( $pr['attrs'] ?? 0 ), (int) ( $pr['gallery'] ?? 0 ), (int) ( $pr['reviews'] ?? 0 ), (float) ( $pr['rating'] ?? 0 ), (int) ( $pr['short'] ?? 0 ), array_values( (array) ( $pr['cats'] ?? array() ) ) ),
+	);
+}
+
+/**
+ * Compact tuple → inventory item. Keys are literals and common values are shared
+ * strings, so 10,000 items take a fraction of the memory of decoded JSON objects.
+ */
+function sap_inventory_unpack_item( $t ) {
+	static $v = array( '' => '', 'post' => 'post', 'term' => 'term', 'page' => 'page', 'product' => 'product', 'product_cat' => 'product_cat', 'product_tag' => 'product_tag', 'post_cat' => 'post_cat', 'post_tag' => 'post_tag', 'brand' => 'brand', 'category' => 'category', 'gutenberg' => 'gutenberg', 'elementor' => 'elementor', 'classic' => 'classic', 'instock' => 'instock', 'outofstock' => 'outofstock', 'onbackorder' => 'onbackorder', 'simple' => 'simple', 'variable' => 'variable', 'grouped' => 'grouped', 'external' => 'external' );
+	$s  = function ( $x ) use ( $v ) {
+		$x = (string) $x;
+		return $v[ $x ] ?? $x;
+	};
+	$it = array(
+		'kind'     => $s( $t[0] ?? '' ),
+		'id'       => (int) ( $t[1] ?? 0 ),
+		'type'     => $s( $t[2] ?? '' ),
+		'ctype'    => $s( $t[3] ?? '' ),
+		'title'    => (string) ( $t[4] ?? '' ),
+		'url'      => (string) ( $t[5] ?? '' ),
+		'date'     => (string) ( $t[6] ?? '' ),
+		'modified' => (string) ( $t[7] ?? '' ),
+		'parent'   => (int) ( $t[8] ?? 0 ),
+		'editor'   => $s( $t[9] ?? '' ),
+		'words'    => (int) ( $t[10] ?? 0 ),
+		'images'   => (int) ( $t[11] ?? 0 ),
+		'no_alt'   => (int) ( $t[12] ?? 0 ),
+		'thumb'    => (string) ( $t[13] ?? '' ),
+		'noindex'  => ! empty( $t[14] ),
+		'count'    => (int) ( $t[15] ?? 0 ),
+		'seo'      => array(
+			'seo_title'        => (string) ( $t[16][0] ?? '' ),
+			'meta_description' => (string) ( $t[16][1] ?? '' ),
+			'focus_keyword'    => (string) ( $t[16][2] ?? '' ),
+		),
+	);
+	if ( ! empty( $t[17] ) && is_array( $t[17] ) ) {
+		$p             = $t[17];
+		$it['product'] = array(
+			'price'   => (string) $p[0],
+			'sku'     => (string) $p[1],
+			'stock'   => $s( $p[2] ),
+			'ptype'   => $s( $p[3] ),
+			'attrs'   => (int) $p[4],
+			'gallery' => (int) $p[5],
+			'reviews' => (int) $p[6],
+			'rating'  => (float) $p[7],
+			'short'   => (int) $p[8],
+			'cats'    => (array) ( $p[9] ?? array() ),
+		);
+	}
+	return $it;
 }
 
 /**
@@ -82,25 +170,46 @@ function sap_step_site_inventory( $project, $force = false ) {
 	$ds   = sap_dataset( $pid, 'site_inventory' );
 	$opt  = 'sap_inv_prog_' . $pid;
 	$prog = get_option( $opt );
+	// A run left half-way more than a day ago starts over (the site has changed since).
+	if ( is_array( $prog ) && ( ! isset( $prog['per'] ) || (int) ( $prog['at'] ?? 0 ) < time() - DAY_IN_SECONDS ) ) {
+		sap_inventory_chunks_clear( $pid, $prog );
+		$prog = null;
+	}
 	if ( ! is_array( $prog ) ) {
 		if ( ! $force && $ds && strtotime( $ds['fetched_at'] ) > time() - DAY_IN_SECONDS ) {
-			return sap_skip( sprintf( 'فهرست محتوای سایت امروز گرفته شده (%s صفحه).', sap_num( count( (array) $ds['payload']['items'] ) ) ) );
+			return sap_skip( sprintf( 'فهرست محتوای سایت امروز گرفته شده (%s صفحه).', sap_num( (int) ( $ds['meta']['count'] ?? 0 ) ) ) );
 		}
-		$prog = array( 'sources' => null, 'i' => 0, 'page' => 1, 'items' => array(), 'meta' => array() );
+		// Items are kept in small chunks (one option per page) so a 10,000-product store
+		// never rewrites one huge option on every call.
+		$prog = array( 'sources' => null, 'i' => 0, 'done' => 0, 'per' => 100, 'count' => 0, 'counts' => array(), 'chunks' => 0, 'meta' => array(), 'started' => time() );
 	}
-	$t0 = microtime( true );
-	for ( $n = 0; $n < 6 && microtime( true ) - $t0 < 25; $n++ ) {
+	// Short calls: a host or proxy that cuts requests at 30–60 s never kills the step,
+	// and the next call goes on from the same point.
+	$t0   = microtime( true );
+	$errs = 0;
+	while ( microtime( true ) - $t0 < 15 ) {
 		$src = null === $prog['sources'] ? '' : ( $prog['sources'][ $prog['i'] ]['key'] ?? null );
 		if ( null === $src ) {
 			break; // All sources read.
 		}
-		$res = sap_site_request( $project, 'GET', 'inventory', array( 'source' => $src, 'page' => $prog['page'], 'per' => 150 ), 60 );
+		$per = (int) $prog['per'];
+		$t1  = microtime( true );
+		$res = sap_site_request( $project, 'GET', 'inventory', array( 'source' => $src, 'page' => (int) floor( $prog['done'] / $per ) + 1, 'per' => $per ), 45 );
 		if ( is_wp_error( $res ) ) {
-			delete_option( $opt );
 			if ( false !== strpos( $res->get_error_message(), 'قدیمی' ) || 'sap_site_404' === $res->get_error_code() ) {
+				sap_inventory_chunks_clear( $pid, $prog );
+				delete_option( $opt );
 				return new WP_Error( 'sap_inv_old', 'افزونه رابط روی سایت کارفرما قدیمی است؛ برای فهرست کامل محتوا نسخه ۱٫۳ لازم است (فایل seoreport-connector-1.3.0.zip).' );
 			}
-			return $res;
+			// Slow site (timeout / 5xx): smaller pages and try again; the progress is kept.
+			if ( $per > 25 && $errs < 2 ) {
+				$prog['per'] = (int) ( $per / 2 );
+				++$errs;
+				continue;
+			}
+			$prog['at'] = time();
+			update_option( $opt, $prog, false );
+			return new WP_Error( 'sap_inv_slow', sprintf( 'سایت کارفرما دیر جواب داد (%s). %s صفحه تا اینجا دریافت شده و ذخیره است؛ دوباره اجرا کنید تا از همین نقطه ادامه دهد.', $res->get_error_message(), sap_num( $prog['count'] ) ) );
 		}
 		if ( null === $prog['sources'] ) {
 			$prog['sources'] = array_values( array_filter( (array) ( $res['sources'] ?? array() ), function ( $s ) {
@@ -109,31 +218,58 @@ function sap_step_site_inventory( $project, $force = false ) {
 			$prog['meta']    = array( 'seo_plugin' => (string) ( $res['seo_plugin'] ?? '' ), 'front' => (int) ( $res['front'] ?? 0 ), 'shop' => (int) ( $res['shop'] ?? 0 ) );
 			continue;
 		}
+		$items = array();
 		foreach ( (array) ( $res['items'] ?? array() ) as $it ) {
-			if ( empty( $it['url'] ) ) {
-				continue;
+			if ( ! empty( $it['url'] ) ) {
+				$it['ctype'] = sap_inventory_ctype( $it );
+				$items[]     = sap_inventory_pack_item( $it );
+				$prog['counts'][ $it['ctype'] ] = ( $prog['counts'][ $it['ctype'] ] ?? 0 ) + 1;
 			}
-			$it['ctype']     = sap_inventory_ctype( $it );
-			$prog['items'][] = $it;
 		}
-		if ( ! empty( $res['more'] ) && count( $prog['items'] ) < 20000 ) {
-			++$prog['page'];
+		if ( $items ) {
+			update_option( 'sap_inv_chunk_' . $pid . '_' . $prog['chunks'], sap_pack( $items ), false );
+			++$prog['chunks'];
+			$prog['count'] += count( $items );
+		}
+		$got           = count( (array) ( $res['items'] ?? array() ) );
+		$prog['done'] += $got;
+		if ( ! empty( $res['more'] ) && $got > 0 && $prog['count'] < 20000 ) {
+			// Pages that take long: halve the page size (the offset stays a multiple of it).
+			if ( microtime( true ) - $t1 > 12 && $per > 25 ) {
+				$prog['per'] = (int) ( $per / 2 );
+			}
 		} else {
 			++$prog['i'];
-			$prog['page'] = 1;
+			$prog['done'] = 0;
 		}
 	}
 	$total = array_sum( array_column( (array) $prog['sources'], 'total' ) );
-	if ( null !== $prog['sources'] && isset( $prog['sources'][ $prog['i'] ] ) ) {
+	if ( null === $prog['sources'] || isset( $prog['sources'][ $prog['i'] ] ) ) {
+		$prog['at'] = time();
 		update_option( $opt, $prog, false );
-		return array( 'more' => true, 'msg' => sprintf( 'دریافت فهرست محتوا از وردپرس: %s از %s…', sap_num( count( $prog['items'] ) ), sap_num( $total ) ) );
+		$cur  = $prog['sources'][ $prog['i'] ]['label'] ?? '';
+		$pct  = $total ? min( 99, (int) floor( $prog['count'] / $total * 100 ) ) : 0;
+		$rate = $prog['count'] / max( 1, time() - $prog['started'] );
+		$left = $rate > 0 && $total > $prog['count'] ? (int) ceil( ( $total - $prog['count'] ) / $rate / 60 ) : 0;
+		return array(
+			'more' => true,
+			'pct'  => $pct,
+			'msg'  => sprintf( 'دریافت فهرست محتوا از وردپرس: %s از %s (%s٪)%s%s', sap_num( $prog['count'] ), sap_num( $total ), sap_num( $pct ), '' !== $cur ? ' — ' . $cur : '', $left ? ' · حدود ' . sap_num( $left ) . ' دقیقه مانده' : '' ),
+		);
 	}
+	// The stored chunks (compact tuples, already packed) become the rows dataset as they are.
+	$chunks = array();
+	for ( $c = 0; $c < $prog['chunks']; $c++ ) {
+		$chunks[] = (string) get_option( 'sap_inv_chunk_' . $pid . '_' . $c, '' );
+	}
+	$counts = (array) $prog['counts'];
+	$count  = (int) $prog['count'];
+	sap_inventory_chunks_clear( $pid, $prog );
 	delete_option( $opt );
-	$counts = array();
-	foreach ( $prog['items'] as $it ) {
-		$counts[ $it['ctype'] ] = ( $counts[ $it['ctype'] ] ?? 0 ) + 1;
-	}
-	sap_dataset_put( $pid, 'site_inventory', array_merge( $prog['meta'], array( 'items' => $prog['items'], 'sources' => $prog['sources'] ) ), array( 'count' => count( $prog['items'] ), 'counts' => $counts ) );
+	// Rows apart from the small meta dataset that many screens read.
+	sap_dataset_put( $pid, 'site_inventory_rows', array( 'chunks' => $chunks ), array( 'count' => $count ) );
+	sap_dataset_put( $pid, 'site_inventory', array_merge( $prog['meta'], array( 'sources' => $prog['sources'] ) ), array( 'count' => $count, 'counts' => $counts ) );
+	unset( $chunks, $prog );
 	sap_site_inventory( $pid, true );
 	$fixed = sap_keymap_fix_types( sap_project( $pid ) );
 	$types = sap_content_types();
@@ -142,6 +278,15 @@ function sap_step_site_inventory( $project, $force = false ) {
 		$parts[] = sap_num( $c ) . ' ' . ( $types[ $t ] ?? $t );
 	}
 	return array( 'msg' => sprintf( 'فهرست کامل محتوای وردپرس دریافت شد: %s.%s', implode( '، ', $parts ), $fixed ? ' نوع ' . sap_num( $fixed ) . ' صفحه در نقشه کلمات اصلاح شد.' : '' ) );
+}
+
+/**
+ * Remove the stored chunks of an inventory run.
+ */
+function sap_inventory_chunks_clear( $project_id, $prog ) {
+	for ( $c = 0; $c < (int) ( $prog['chunks'] ?? 0 ); $c++ ) {
+		delete_option( 'sap_inv_chunk_' . $project_id . '_' . $c );
+	}
 }
 
 /**
