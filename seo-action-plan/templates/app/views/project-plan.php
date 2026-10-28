@@ -106,6 +106,18 @@ if ( sap_period_current() === $period && ! $tasks ) :
 endif;
 ?>
 
+<details class="sap-panel sap-custom" data-sap-custom="<?php echo esc_attr( $pid ); ?>" data-period="<?php echo esc_attr( $period ); ?>">
+	<summary><?php echo sap_icon( 'spark', 16 ); // phpcs:ignore ?><b>تعریف کار با توضیح خودتان</b><small class="sap-muted">بنویسید چه می‌خواهید؛ هوش مصنوعی آن را به کارهای قابل واگذاری با مراحل، چک‌لیست صفحات و ساعت تبدیل می‌کند</small></summary>
+	<form data-sap-custom-form>
+		<label class="sap-field"><span>برای کدام Focus؟</span>
+			<select name="focus_id"><option value="0">— بدون Focus —</option><?php foreach ( $focuses as $f ) : ?><option value="<?php echo esc_attr( $f['id'] ); ?>"><?php echo esc_html( $f['name'] ); ?></option><?php endforeach; ?></select>
+		</label>
+		<label class="sap-field is-wide"><span>چه کاری لازم است؟</span><textarea name="brief" rows="4" required placeholder="مثلاً: برای همه محصولات دسته‌بندی دستمال کفش، ویژگی‌های محصول از کارفرما گرفته شود، در ویژگی‌های ووکامرس ثبت شود و توضیحات محصولات کامل و جامع نوشته شود."></textarea></label>
+		<button type="submit" class="sap-btn is-primary" <?php disabled( ! sap_ai_connected() ); ?>><?php echo sap_icon( 'spark', 16 ); // phpcs:ignore ?>تبدیل به کار</button>
+	</form>
+	<div data-sap-custom-out></div>
+</details>
+
 <section class="sap-panel sap-capacity">
 	<div>
 		<b>اکشن پلن <?php echo esc_html( sap_period_label( $period ) ); ?></b>

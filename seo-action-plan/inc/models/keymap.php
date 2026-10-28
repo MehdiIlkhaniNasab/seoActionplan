@@ -35,6 +35,28 @@ function sap_keymap_intents() {
 	);
 }
 
+/**
+ * What the page is in the keyword map: a target with its own keyword, a
+ * product whose title is its keyword, no keyword at all, or pruned.
+ */
+function sap_keymap_statuses() {
+	return array(
+		'target'    => 'هدف: کلمه کلیدی دارد',
+		'title'     => 'محصول: عنوان = کلمه اصلی',
+		'none'      => 'بدون کلمه کلیدی',
+		'noindex'   => 'noindex شود',
+		'prune_410' => 'هرس: حذف (410)',
+		'prune_301' => 'هرس: ادغام و ریدایرکت 301',
+	);
+}
+
+/**
+ * Does a status keep a keyword?
+ */
+function sap_keymap_has_kw( $status ) {
+	return in_array( $status, array( 'target', 'title', '' ), true );
+}
+
 function sap_keymap_page_types() {
 	return array(
 		'home'     => 'صفحه اصلی',
@@ -82,7 +104,10 @@ function sap_keymap_hydrate( $row ) {
 	$row['secondary'] = sap_list( (string) $row['secondary'] );
 	$row['reason']    = (string) $row['reason'];
 	$row['url']       = (string) $row['url'];
-	$row['core']      = '' !== $row['primary_kw'] ? sap_kw_core( $row['primary_kw'] ) : '';
+	$row['status']    = (string) ( $row['status'] ?? '' ) ?: 'target';
+	$row['redirect_to'] = (string) ( $row['redirect_to'] ?? '' );
+	// Pages without a keyword (contact, policies, pruned…) own nothing.
+	$row['core']      = '' !== $row['primary_kw'] && sap_keymap_has_kw( $row['status'] ) ? sap_kw_core( $row['primary_kw'] ) : '';
 	return $row;
 }
 
@@ -142,6 +167,12 @@ function sap_keymap_save( $project_id, $data, $force = false ) {
 		}
 		if ( isset( $data['focus_id'] ) ) {
 			$fields['focus_id'] = (int) $data['focus_id'];
+		}
+		if ( isset( $data['status'] ) && isset( sap_keymap_statuses()[ $data['status'] ] ) ) {
+			$fields['status'] = $data['status'];
+		}
+		if ( isset( $data['redirect_to'] ) ) {
+			$fields['redirect_to'] = esc_url_raw( (string) $data['redirect_to'] );
 		}
 		$fields['source'] = $source;
 		if ( isset( $data['confirmed'] ) ) {

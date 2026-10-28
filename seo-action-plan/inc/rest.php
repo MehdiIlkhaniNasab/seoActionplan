@@ -388,6 +388,40 @@ add_action( 'rest_api_init', function () {
 			return '' === $html ? new WP_Error( 'sap_404', 'این صفحه در فهرست محتوا نیست.', array( 'status' => 404 ) ) : array( 'ok' => true, 'html' => $html );
 		} ),
 	) );
+	// Custom tasks from the SEO manager's own brief: draft (for approval), then commit.
+	register_rest_route( $ns, '/plan/(?P<project>\d+)/custom', array(
+		'methods'             => 'POST',
+		'permission_callback' => 'sap_can',
+		'callback'            => $project_route( function ( $project, $req ) {
+			if ( 'commit' === $req->get_param( 'do' ) ) {
+				$period = sap_period_sanitize( (string) ( $req->get_param( 'period' ) ?: sap_period_current() ) );
+				$n      = sap_custom_tasks_commit( $project, (array) $req->get_param( 'picked' ), $period );
+				return $n ? array( 'ok' => true, 'msg' => sprintf( '%s کار به اکشن پلن %s اضافه شد.', sap_num( $n ), sap_period_label( $period ) ) ) : new WP_Error( 'sap_none', 'کاری انتخاب نشده یا پیش‌نویس منقضی شده؛ دوباره بسازید.', array( 'status' => 400 ) );
+			}
+			$draft = sap_custom_tasks_draft( $project, (string) $req->get_param( 'brief' ), (int) $req->get_param( 'focus_id' ) );
+			if ( is_wp_error( $draft ) ) {
+				return $draft;
+			}
+			ob_start();
+			sap_view( 'custom-draft', array( 'project' => $project, 'draft' => $draft ) );
+			return array( 'ok' => true, 'html' => (string) ob_get_clean(), 'count' => count( $draft['tasks'] ) );
+		} ),
+	) );
+	// A calendar article from a keyword you give.
+	register_rest_route( $ns, '/ideas/(?P<project>\d+)/keyword', array(
+		'methods'             => 'POST',
+		'permission_callback' => 'sap_can',
+		'callback'            => $project_route( function ( $project, $req ) {
+			$period = sap_period_sanitize( (string) ( $req->get_param( 'period' ) ?: sap_period_current() ) );
+			$id     = sap_idea_from_keyword( $project, (string) $req->get_param( 'keyword' ), (string) $req->get_param( 'secondary' ), (string) $req->get_param( 'notes' ), $period );
+			if ( is_wp_error( $id ) ) {
+				return $id;
+			}
+			$idea = sap_idea( $id );
+			$warn = array_slice( (array) $idea['evidence'], 1 );
+			return array( 'ok' => true, 'id' => $id, 'msg' => sprintf( 'مقاله «%s» با بریف، تیترها و لینک‌ها به تقویم %s اضافه شد', $idea['title'] ?: $idea['keyword'], sap_period_label( $period ) ) . ( $warn ? ' — هشدار: ' . implode( ' ', $warn ) : '' ) . sap_calendar_sync_sheet( sap_project( $project['id'] ) ) );
+		} ),
+	) );
 	register_rest_route( $ns, '/offpage/(?P<project>\d+)/collect', array(
 		'methods'             => 'POST',
 		'permission_callback' => 'sap_can',
@@ -599,11 +633,64 @@ add_action( 'rest_api_init', function () {
 				sap_keymap( $pid, true );
 				return array( 'ok' => true, 'msg' => sprintf( '%s صفحه تأیید شد', sap_num( (int) $n ) ) );
 			}
+			$project = sap_project( $pid );
+			if ( 'bulk' === $req->get_param( 'do' ) ) {
+				$status = sanitize_key( (string) $req->get_param( 'status' ) );
+				if ( ! isset( sap_keymap_statuses()[ $status ] ) && 'suggest' !== $status ) {
+					return new WP_Error( 'sap_status', 'وضعیت نامعتبر.', array( 'status' => 400 ) );
+				}
+				$n = 0;
+				foreach ( array_slice( array_filter( array_map( 'esc_url_raw', (array) $req->get_param( 'urls' ) ) ), 0, 500 ) as $u ) {
+					$it    = sap_site_item( $pid, $u );
+					$ctype = $it ? $it['ctype'] : sap_content_type( sap_keymap( $pid )[ sap_norm_url( $u ) ] ?? array( 'url' => $u, 'page_type' => sap_guess_page_type( $u ) ) );
+					$title = $it ? $it['title'] : sap_page_title( $pid, $u );
+					$sg    = sap_keymap_suggest( $project, $u, $ctype, $title, $it );
+					$st    = 'suggest' === $status ? $sg['status'] : $status;
+					$data  = array( 'url' => $u, 'title' => $title, 'status' => $st, 'source' => 'manual', 'confirmed' => 1, 'page_type' => $it ? sap_inventory_page_type( $ctype, $it ) : ( sap_keymap( $pid )[ sap_norm_url( $u ) ]['page_type'] ?? sap_guess_page_type( $u ) ) );
+					if ( 'title' === $st ) {
+						$data['primary_kw'] = sap_product_title_kw( $title );
+					}
+					if ( 'prune_301' === $st ) {
+						$data['redirect_to'] = $sg['redirect'];
+					}
+					if ( in_array( $st, array( 'prune_301', 'prune_410' ), true ) && '' !== $sg['reason'] ) {
+						$data['reason'] = $sg['reason'];
+					}
+					sap_keymap_save( $pid, $data, true );
+					++$n;
+				}
+				return array( 'ok' => true, 'msg' => sprintf( 'وضعیت %s صفحه ثبت شد', sap_num( $n ) ) );
+			}
+			if ( 'prune_task' === $req->get_param( 'do' ) ) {
+				$lines = array();
+				foreach ( sap_keymap( $pid, true ) as $m ) {
+					if ( 'prune_410' === $m['status'] ) {
+						$lines[] = '410 (حذف): ' . rawurldecode( $m['url'] );
+					} elseif ( 'prune_301' === $m['status'] ) {
+						$lines[] = '301: ' . rawurldecode( $m['url'] ) . ' ← ' . ( '' !== $m['redirect_to'] ? rawurldecode( $m['redirect_to'] ) : '(مقصد را مشخص کنید)' );
+					}
+				}
+				if ( ! $lines ) {
+					return new WP_Error( 'sap_empty', 'صفحه‌ای با وضعیت هرس در نقشه کلمات نیست.', array( 'status' => 400 ) );
+				}
+				$tid = sap_task_save( array(
+					'project_id' => $pid,
+					'title'      => sprintf( 'هرس محتوا: %s صفحه کم‌ارزش (410 و ریدایرکت 301)', sap_num( count( $lines ) ) ),
+					'notes'      => "چرا: این صفحات کلمه هدف و بازدید ندارند و بودجه خزش و اعتبار سایت را پخش می‌کنند. مسیر را برای صفحات مهم باز کنید.\n\nمراحل:\n۱. قبل از حذف، بک‌لینک و فروش هر صفحه را چک کنید.\n۲. صفحات 301 را با Rank Math › Redirections به مقصد ریدایرکت کنید.\n۳. صفحات 410 را حذف و در Rank Math وضعیت 410 بدهید.\n۴. لینک‌های داخلی به این صفحات را اصلاح و سایت‌مپ را بروز کنید.\n\n" . implode( "\n", $lines ),
+					'context'    => 'technical',
+					'status'     => 'next',
+					'period'     => sap_period_current(),
+					'effort'     => max( 1, round( count( $lines ) * 0.15, 1 ) ),
+					'source'     => 'manual',
+				) );
+				return array( 'ok' => true, 'id' => $tid, 'msg' => sprintf( 'کار «هرس محتوا» با %s صفحه به اکشن پلن %s اضافه شد', sap_num( count( $lines ) ), sap_period_label( sap_period_current() ) ) );
+			}
 			$url = esc_url_raw( (string) $req->get_param( 'url' ) );
 			if ( '' === $url ) {
 				return new WP_Error( 'sap_url', 'آدرس صفحه لازم است.', array( 'status' => 400 ) );
 			}
-			$id = sap_keymap_save( $pid, array(
+			$status = sanitize_key( (string) $req->get_param( 'status' ) );
+			$data   = array(
 				'url'        => $url,
 				'title'      => (string) $req->get_param( 'title' ),
 				'primary_kw' => (string) $req->get_param( 'primary_kw' ),
@@ -612,8 +699,23 @@ add_action( 'rest_api_init', function () {
 				'page_type'  => sanitize_key( (string) $req->get_param( 'page_type' ) ),
 				'source'     => 'manual',
 				'confirmed'  => 1,
-			), true );
-			return array( 'ok' => true, 'id' => $id, 'msg' => 'ذخیره و تأیید شد؛ در تحلیل بعدی اعمال می‌شود' );
+			);
+			if ( isset( sap_keymap_statuses()[ $status ] ) ) {
+				$data['status']      = $status;
+				$data['redirect_to'] = (string) $req->get_param( 'redirect_to' );
+			}
+			$id   = sap_keymap_save( $pid, $data, true );
+			$m    = sap_keymap( $pid, true )[ sap_norm_url( $url ) ] ?? null;
+			$warn = '';
+			if ( $m && '' !== $m['core'] ) {
+				foreach ( sap_keymap( $pid ) as $k => $o ) {
+					if ( $k !== $m['url_key'] && $o['core'] === $m['core'] ) {
+						$warn = sprintf( ' — هشدار: «%s» کلمه اصلی «%s» هم هست؛ هر کلمه باید فقط یک صاحب داشته باشد.', $m['primary_kw'], $o['title'] ?: sap_short_url( $o['url'], 50 ) );
+						break;
+					}
+				}
+			}
+			return array( 'ok' => true, 'id' => $id, 'warn' => '' !== $warn, 'msg' => 'ذخیره و تأیید شد' . $warn );
 		},
 	) );
 

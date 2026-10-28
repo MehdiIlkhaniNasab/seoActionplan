@@ -168,6 +168,8 @@ function sap_install() {
 		source varchar(10) NOT NULL DEFAULT 'auto',
 		confirmed tinyint(1) NOT NULL DEFAULT 0,
 		reason text NULL,
+		status varchar(12) NOT NULL DEFAULT 'target',
+		redirect_to text NULL,
 		updated_at datetime NOT NULL DEFAULT '0000-00-00 00:00:00',
 		PRIMARY KEY  (id),
 		UNIQUE KEY project_url (project_id,url_key)

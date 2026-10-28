@@ -469,12 +469,52 @@
 		var btn = form.querySelector('[type="submit"]');
 		btn.disabled = true;
 		post('keymap/' + pid, data).then(function (res) {
-			toast(res.msg);
+			toast(res.msg, !!res.warn);
 			if (!box) { location.reload(); return; }
 			form.classList.add('is-confirmed');
+			form.setAttribute('data-id', res.id || form.getAttribute('data-id'));
 			var chip = form.querySelector('.sap-km-meta .sap-chip');
 			if (chip) { chip.textContent = 'تأیید شده'; chip.className = 'sap-chip is-src-manual'; }
 		}).catch(function (e) { toast(e.message, true); }).then(function () { btn.disabled = false; });
+	});
+	document.addEventListener('change', function (ev) {
+		var sel = ev.target.closest('[data-sap-km-status]');
+		if (sel) {
+			var row = sel.closest('.sap-km-row');
+			var red = row.querySelector('.is-redirect');
+			if (red) { red.hidden = sel.value !== 'prune_301'; }
+			row.className = row.className.replace(/\bis-st-[a-z0-9_]+\b/, '') + ' is-st-' + sel.value;
+		}
+		if (ev.target.matches('[data-sap-km-all]')) {
+			document.querySelectorAll('[data-sap-km-pick]').forEach(function (c) { c.checked = ev.target.checked; });
+		}
+	});
+	document.addEventListener('click', function (ev) {
+		var q = ev.target.closest('[data-sap-km-q]');
+		if (q) {
+			var row = q.closest('.sap-km-row');
+			row.querySelector('[name="primary_kw"]').value = q.getAttribute('data-sap-km-q');
+			var st = row.querySelector('[data-sap-km-status]');
+			if (st && ['none', 'noindex', 'prune_410', 'prune_301'].indexOf(st.value) !== -1) { st.value = 'target'; st.dispatchEvent(new Event('change', { bubbles: true })); }
+			row.querySelector('[name="primary_kw"]').focus();
+		}
+		var bar = ev.target.closest('[data-sap-km-bulk]');
+		if (!bar) { return; }
+		var pid = bar.getAttribute('data-sap-km-bulk');
+		var go = ev.target.closest('[data-sap-km-bulk-go]');
+		var prune = ev.target.closest('[data-sap-km-prune-task]');
+		if (go) {
+			var urls = Array.prototype.map.call(document.querySelectorAll('[data-sap-km-pick]:checked'), function (c) { return c.value; });
+			if (!urls.length) { toast('اول صفحه‌ها را تیک بزنید.', true); return; }
+			var status = bar.querySelector('[data-sap-km-bulk-status]').value;
+			if (/^prune/.test(status) && !window.confirm(urls.length + ' صفحه برای هرس علامت بخورد؟ (چیزی روی سایت حذف نمی‌شود؛ فقط در نقشه و اکشن پلن ثبت می‌شود)')) { return; }
+			busy(go, '…');
+			post('keymap/' + pid, { do: 'bulk', urls: urls, status: status }).then(function (res) { toast(res.msg); setTimeout(function () { location.reload(); }, 600); }).catch(function (e) { toast(e.message, true); idle(go); });
+		}
+		if (prune) {
+			busy(prune, '…');
+			post('keymap/' + pid, { do: 'prune_task' }).then(function (res) { toast(res.msg); idle(prune); }).catch(function (e) { toast(e.message, true); idle(prune); });
+		}
 	});
 	document.addEventListener('click', function (ev) {
 		var btn = ev.target.closest('[data-sap-keymap-confirm-all]');
@@ -769,6 +809,43 @@
 		post('net/test', { url: b.getAttribute('data-sap-net-test') }).then(function (res) {
 			out.textContent = b.textContent.replace('تست اتصال ', '') + ': ' + res.msg; out.className = res.ok ? 'sap-ok' : 'sap-bad';
 		}).catch(function (e) { out.textContent = e.message; out.className = 'sap-bad'; }).then(function () { idle(b); });
+	});
+
+	/* ---- Custom tasks from a brief; calendar article from your keyword ---- */
+	document.addEventListener('submit', function (ev) {
+		var f = ev.target;
+		if (f.matches('[data-sap-custom-form]')) {
+			ev.preventDefault();
+			var box = f.closest('[data-sap-custom]');
+			var out = box.querySelector('[data-sap-custom-out]');
+			var b = f.querySelector('[type=submit]');
+			busy(b, 'در حال تحلیل و ساخت کارها… (۲۰ تا ۶۰ ثانیه)');
+			post('plan/' + box.getAttribute('data-sap-custom') + '/custom', { brief: f.brief.value, focus_id: f.focus_id.value }).then(function (res) {
+				idle(b);
+				out.innerHTML = res.html;
+			}).catch(function (e) { toast(e.message, true); idle(b); });
+		}
+		if (f.matches('[data-sap-kwidea]')) {
+			ev.preventDefault();
+			var bt = f.querySelector('[type=submit]');
+			busy(bt, 'در حال ساخت بریف… (۱۵ تا ۴۰ ثانیه)');
+			post('ideas/' + f.getAttribute('data-sap-kwidea') + '/keyword', { keyword: f.keyword.value, secondary: f.secondary.value, notes: f.notes.value, period: f.getAttribute('data-period') }).then(function (res) {
+				toast(res.msg, /هشدار/.test(res.msg || ''));
+				setTimeout(function () { location.reload(); }, 2200);
+			}).catch(function (e) { toast(e.message, true); idle(bt); });
+		}
+	});
+	document.addEventListener('click', function (ev) {
+		var c = ev.target.closest('[data-sap-custom-commit]');
+		if (!c) { return; }
+		var box = c.closest('[data-sap-custom]');
+		var picked = Array.prototype.map.call(box.querySelectorAll('[data-sap-custom-pick]:checked'), function (x) { return x.value; });
+		if (!picked.length) { toast('حداقل یک کار را انتخاب کنید.', true); return; }
+		busy(c, '…');
+		post('plan/' + box.getAttribute('data-sap-custom') + '/custom', { do: 'commit', picked: picked, period: box.getAttribute('data-period') }).then(function (res) {
+			toast(res.msg);
+			setTimeout(function () { location.reload(); }, 900);
+		}).catch(function (e) { toast(e.message, true); idle(c); });
 	});
 
 	/* ---- Screaming Frog wizard: steps, scope, connection test (polls the agent's ping) ---- */

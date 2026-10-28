@@ -76,7 +76,7 @@ function sap_content_start( $project, $url, $task_id = 0 ) {
 	if ( count( $page['blocks'] ) < 2 ) {
 		return new WP_Error( 'sap_content_empty', 'محتوای اصلی این صفحه پیدا نشد (ممکن است با جاوااسکریپت ساخته شود). در فاز بعد، محتوا مستقیم از افزونه رابط سایت خوانده می‌شود.' );
 	}
-	return sap_revision_save( array(
+	$rid = sap_revision_save( array(
 		'project_id' => $project['id'],
 		'task_id'    => (int) $task_id,
 		'url'        => $url,
@@ -89,6 +89,10 @@ function sap_content_start( $project, $url, $task_id = 0 ) {
 		'progress'   => array( 'step' => 'audit', 'chunk' => 0 ),
 		'user_id'    => get_current_user_id(),
 	) );
+	if ( $rid && ! is_wp_error( $rid ) ) {
+		sap_update_from_revision( sap_revision( $rid ), 'started' ); // Part of this month's content updates.
+	}
+	return $rid;
 }
 
 /**
@@ -447,6 +451,7 @@ function sap_content_approve( $rev, $accepted ) {
 	}
 	unset( $e );
 	sap_revision_save( array( 'edits' => $edits, 'status' => 'approved' ), $rev['id'] );
+	sap_update_from_revision( sap_revision( $rev['id'] ), 'approved' );
 	$on     = array_filter( $edits, function ( $e ) {
 		return $e['accept'];
 	} );
@@ -530,6 +535,7 @@ function sap_content_site_action( $rev, $do, $extra = array() ) {
 			$prog['site']['state']        = 'published';
 			$prog['site']['published_at'] = sap_now();
 			sap_revision_save( array( 'progress' => $prog, 'status' => 'published' ), $rev['id'] );
+			sap_update_from_revision( sap_revision( $rev['id'] ), 'published' );
 			$task = $rev['task_id'] ? sap_task( $rev['task_id'] ) : null;
 			sap_activity_add( $rev['project_id'], array(
 				'focus_id'     => $task['focus_id'] ?? 0,

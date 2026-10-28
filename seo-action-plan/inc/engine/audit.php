@@ -234,10 +234,11 @@ function sap_content_inventory( $project ) {
 		}
 		$p      = $pages[ $k ] ?? null;
 		$c      = $crawl[ $k ] ?? null;
-		$kw     = $m ? (string) $m['primary_kw'] : '';
+		$km_st  = $m ? $m['status'] : '';
+		$kw     = $m && sap_keymap_has_kw( $km_st ) ? (string) $m['primary_kw'] : '';
 		$kw_src = '' !== $kw ? 'map' : '';
 		$focus  = $it ? trim( (string) ( $it['seo']['focus_keyword'] ?? '' ) ) : '';
-		if ( '' === $kw && '' !== $focus ) {
+		if ( '' === $kw && '' !== $focus && ! in_array( $km_st, array( 'none', 'noindex', 'prune_410', 'prune_301' ), true ) ) {
 			$kw     = $focus;
 			$kw_src = 'seo';
 		}
@@ -253,7 +254,7 @@ function sap_content_inventory( $project ) {
 			'type'      => $type,
 			'kw'        => $kw,
 			'kw_src'    => $kw_src,
-			'secondary' => $m ? $m['secondary'] : array(),
+			'secondary' => $m && sap_keymap_has_kw( $km_st ) ? $m['secondary'] : array(),
 			'queries'   => $queries,
 			'focus_id'  => $m ? (int) $m['focus_id'] : 0,
 			'pos'       => '' !== $kw && isset( $best[ $k . '|' . sap_kw_key( $kw ) ] ) ? round( (float) $best[ $k . '|' . sap_kw_key( $kw ) ]['position'], 1 ) : null,
@@ -262,6 +263,7 @@ function sap_content_inventory( $project ) {
 			'words'     => $it ? (int) $it['words'] : ( $p ? (int) $p['words'] : ( $c ? (int) ( $c['words'] ?? 0 ) : null ) ),
 			'read'      => (bool) ( $p || $it ),
 			'home'      => $home,
+			'km_status' => $km_st,
 			'checks'    => array(),
 			'misfits'   => array(),
 			'wp'        => $it ? array_intersect_key( $it, array_flip( array( 'kind', 'id', 'type', 'editor', 'thumb', 'modified', 'date', 'noindex', 'product', 'count', 'images', 'no_alt', 'seo' ) ) ) : null,
@@ -279,7 +281,7 @@ function sap_content_inventory( $project ) {
 		$is_term   = in_array( $type, array( 'product_cat', 'product_tag', 'brand', 'post_cat', 'post_tag' ), true );
 		// Words of the description itself: a category page's HTML also counts the product grid.
 		$words     = $it ? (int) $it['words'] : ( $p ? (int) $p['words'] : null );
-		if ( '' === $kw && 'page' !== $type && ! $home ) {
+		if ( '' === $kw && 'page' !== $type && ! $home && ! in_array( $km_st, array( 'none', 'noindex', 'prune_410', 'prune_301' ), true ) ) {
 			$fail( 'کلمه کلیدی اصلی ندارد (نه در نقشه کلمات، نه در افزونه سئو)', 15 );
 		}
 		if ( '' !== $kw && $title && false === mb_strpos( sap_norm_text( $title ), sap_norm_text( sap_kw_core( $kw ) ) ) && ! array_intersect( sap_tokens( sap_kw_core( $kw ) ), sap_tokens( $title ) ) ) {

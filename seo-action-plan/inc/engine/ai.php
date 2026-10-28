@@ -550,6 +550,9 @@ function sap_ai_stages() {
 				'- برای صفحه محصول، نام محصول/مدل؛ برای مقاله، موضوع اصلی مقاله؛ برای دسته، نام دسته به شکلی که کاربر جستجو می‌کند.',
 				'- secondary: کلمات فرعی و هم‌کانسپتی که همین صفحه باید پوشش دهد (هم‌معنی، نسخه‌های خرید/قیمت، زیرموضوع‌ها) — نه کلمات کلی‌تر یا موضوعات صفحات دیگر. حداکثر ۶ کلمه دقیق؛ فله‌ای کلمه نده.',
 				'- نیت هر کلمه باید با نوع صفحه بخواند: صفحه محصول فقط کلمات مخصوص همان محصول/مدل را می‌گیرد (مثلاً برای «چسب کفش ۱۰۵»: «چسب ۱۰۵»، «قیمت چسب کفش ۱۰۵»)؛ کلمات عمومی خرید مثل «خرید چسب کفش» یا «چسب کتونی» نیاز کاربر به مقایسه چند محصول است و مال صفحه دسته‌بندی است، نه یک محصول. کلمات اطلاعاتی (چیست، چگونه، روش، آموزش) مال مقاله‌اند و نباید به صفحه دسته یا محصول داده شوند.',
+				'- قانون یک صاحب: هر کلمه فقط کلمه اصلی یک صفحه است. کلمات taken_keywords صاحب دارند؛ آن‌ها را به صفحه دیگری نده. دو صفحه از همین فهرست هم کلمه اصلی یکسان نگیرند.',
+				'- اولویت نوع صفحه: کلمه عمومی مال دسته‌بندی/برند/برچسب است، کلمه اطلاعاتی مال مقاله، و محصول فقط نام خودش را می‌گیرد.',
+				'- اگر صفحه واقعاً کلمه هدفی ندارد (صفحه کاربردی یا موضوع نامشخص)، primary را خالی بگذار؛ کلمه زورکی نساز.',
 				'- id هر صفحه را عیناً برگردان.',
 			) ),
 		),
@@ -674,8 +677,15 @@ function sap_ai_stage_input( $project, $stage, $ctx ) {
 	switch ( $stage ) {
 		case 'keymap':
 			$pages = array();
+			$taken = array();
 			foreach ( sap_keymap( $pid ) as $k => $m ) {
-				if ( $m['confirmed'] || in_array( $m['source'], array( 'manual', 'sheet' ), true ) || ( $ctx['page_impr'][ $k ] ?? 0 ) < 1 ) {
+				if ( '' !== $m['core'] && ( $m['confirmed'] || in_array( $m['source'], array( 'manual', 'sheet' ), true ) ) ) {
+					$taken[] = $m['primary_kw'];
+				}
+			}
+			foreach ( sap_keymap( $pid ) as $k => $m ) {
+				// Products keep their name; pages without a keyword need no AI.
+				if ( $m['confirmed'] || in_array( $m['source'], array( 'manual', 'sheet' ), true ) || ( $ctx['page_impr'][ $k ] ?? 0 ) < 1 || in_array( $m['status'], array( 'title', 'none', 'noindex', 'prune_410', 'prune_301' ), true ) || 'product' === sap_content_type( $m ) ) {
 					continue;
 				}
 				$p = $ctx['pages'][ $k ] ?? null;
@@ -689,7 +699,7 @@ function sap_ai_stage_input( $project, $stage, $ctx ) {
 					'title'     => $p['title'] ?? $m['title'],
 					'h1'        => $p ? implode( ' | ', $p['h1'] ) : '',
 					'h2'        => $p ? array_slice( $p['h2'], 0, 5 ) : array(),
-					'type'      => $m['page_type'],
+					'type'      => sap_content_types()[ sap_content_type( $m ) ] ?? $m['page_type'],
 					'queries'   => $q,
 				);
 			}
@@ -697,7 +707,7 @@ function sap_ai_stage_input( $project, $stage, $ctx ) {
 				return ( $ctx['page_impr'][ $b ] ?? 0 ) <=> ( $ctx['page_impr'][ $a ] ?? 0 );
 			} );
 			$pages = array_slice( array_values( $pages ), 0, 40 );
-			return $pages ? array( 'site' => sap_project_domain( $project ), 'brand_terms' => $project['brand_terms'], 'pages' => $pages ) : null;
+			return $pages ? array( 'site' => sap_project_domain( $project ), 'brand_terms' => $project['brand_terms'], 'taken_keywords' => array_slice( $taken, 0, 80 ), 'pages' => $pages ) : null;
 
 		case 'focus':
 			$cands = array();
@@ -934,15 +944,10 @@ function sap_ai_stage_run( $project, $stage, $force = false ) {
 		return array( 'skipped' => 'داده‌های این بخش از تحلیل قبلی تغییری نکرده؛ نتیجه قبلی نگه داشته شد (بدون هزینه).' );
 	}
 	if ( 'plan' === $stage ) {
-		$task = implode( "\n", array(
-			'داده‌های پروژه سئو در JSON زیر است: خلاصه سرچ کنسول، Focusها، یافته‌های قوانین (findings با id) و نتیجه تحلیل‌های تخصصی قبلی (stage_cannibal، stage_content، stage_links، stage_technical).',
-			'هر جا expert_note آمده، نظر خود متخصص سئو است؛ آن را رعایت کن (اگر گفته کاری لازم نیست، آن را در پلن نیاور).',
-			'۱. وضعیت پروژه را تشخیص بده (summary)، سلامت هر حوزه را نمره ۰ تا ۱۰۰ بده (health) و برای هر Focus یک بینش کلیدی بنویس. نقاط قوت (wins) و ریسک‌ها (risks) را کوتاه فهرست کن.',
-			sprintf( '۲. اکشن پلن این ماه: ۸ تا ۱۵ کار مشخص در سقف %s ساعت، مرتب‌شده بر اساس اثر، با هفته پیشنهادی ۱ تا ۴. کارها را از نتایج تحلیل‌های تخصصی بساز و خروجی آماده آن‌ها را در deliverable بگذار: تایتل/متای پیشنهادی، FAQ، فهرست لینک‌های داخلی (مبدأ ← مقصد: انکر)، راه‌حل تکنیکال. کارهای هم‌نوع کوچک را در یک کار ادغام کن (مثلاً «۸ لینک داخلی به دسته X»). idهای finding مرتبط را در finding_ids بگذار. کارهای this_month را تکرار نکن.', sap_num( $project['capacity_hours'] ) ),
-		) );
-	} else {
-		$task = apply_filters( 'sap_ai_stage_task', $def['task'], $stage );
+		return sap_ai_plan_run_parts( $project, $input, $hash, $key, $def );
 	}
+	$task = apply_filters( 'sap_ai_stage_task', $def['task'], $stage );
+
 	// Big inputs go in small batches (one batch per call): no answer comes near the
 	// token limit, and each item gets the model's full attention.
 	$batch = $def['batch'] ?? null;
@@ -986,6 +991,155 @@ function sap_ai_stage_run( $project, $stage, $force = false ) {
 		'hash'  => $hash,
 		'cost'  => sap_ai_usage()['last_cost'] ?? 0,
 		'count' => count( (array) reset( $res ) ),
+	) );
+	return $res;
+}
+
+/* ---------------------------------------------------------------------------
+ * Action plan in parts: one long answer (diagnosis + 15 tasks with steps and
+ * ready deliverables) reaches the output limit and is cut. The plan is built
+ * in four short calls instead — diagnosis, technical, content, growth — each
+ * with its own share of the month's hours, then merged.
+ * ------------------------------------------------------------------------- */
+
+/**
+ * Parts of the action plan: label, work areas, specialist stages, share of hours, max tasks.
+ */
+function sap_ai_plan_parts() {
+	return array(
+		'diagnosis' => array( 'label' => 'تشخیص وضعیت پروژه', 'areas' => array(), 'stages' => array(), 'share' => 0, 'max' => 0 ),
+		'technical' => array( 'label' => 'کارهای تکنیکال', 'areas' => array( 'technical' ), 'stages' => array( 'technical' ), 'share' => 0.25, 'max' => 5 ),
+		'content'   => array( 'label' => 'بهینه‌سازی و آپدیت محتوا', 'areas' => array( 'content_update', 'onpage', 'cro', 'research' ), 'stages' => array( 'content', 'cannibal' ), 'share' => 0.4, 'max' => 6 ),
+		'growth'    => array( 'label' => 'لینک داخلی، محتوای جدید و اعتبار', 'areas' => array( 'internal_links', 'content_new', 'offpage', 'management' ), 'stages' => array( 'links' ), 'share' => 0.35, 'max' => 5 ),
+	);
+}
+
+/**
+ * Run the next part of the plan; the step runner calls again while 'more' is set.
+ */
+function sap_ai_plan_run_parts( $project, $input, $hash, $key, $def ) {
+	$parts = sap_ai_plan_parts();
+	$names = array_keys( $parts );
+	$opt   = 'sap_ai_prog_' . $project['id'] . '_plan';
+	$prog  = get_option( $opt );
+	if ( ! is_array( $prog ) || ( $prog['hash'] ?? '' ) !== $hash ) {
+		$prog = array( 'hash' => $hash, 'i' => 0, 'diag' => array(), 'plan' => array(), 'partial' => 0, 'cost' => 0 );
+	}
+	$name = $names[ $prog['i'] ];
+	$part = $parts[ $name ];
+	$cap  = (float) $project['capacity_hours'];
+	$base = array_intersect_key( $input, array_flip( array( 'project', 'focuses', 'search_console', 'rank_tracker', 'technical', 'content_sheet' ) ) );
+	$done = array_map( function ( $t ) {
+		return $t['title'];
+	}, $prog['plan'] );
+	$this_month = array_column( (array) ( $input['this_month'] ?? array() ), 'title' );
+	$item_schema = sap_ai_analysis_schema()['properties']['plan'];
+	if ( 'diagnosis' === $name ) {
+		$schema = sap_ai_analysis_schema();
+		unset( $schema['properties']['plan'] );
+		$schema['required'] = array_values( array_diff( $schema['required'], array( 'plan' ) ) );
+		$data   = $base + array( 'findings' => array_map( function ( $f ) {
+			return array( $f['area'], $f['title'], $f['focus'] );
+		}, (array) ( $input['findings'] ?? array() ) ) );
+		foreach ( array( 'cannibal', 'content', 'links', 'technical' ) as $st ) {
+			if ( ! empty( $input[ 'stage_' . $st ]['summary'] ) ) {
+				$data[ 'stage_' . $st ] = $input[ 'stage_' . $st ]['summary'];
+			}
+		}
+		$task   = implode( "\n", array(
+			'داده‌های پروژه سئو در JSON زیر است: خلاصه سرچ کنسول، Focusها و یافته‌ها (حوزه، عنوان، Focus).',
+			'وضعیت پروژه را تشخیص بده (summary با عدد)، سلامت هر حوزه را نمره ۰ تا ۱۰۰ بده (health)، برای هر Focus یک بینش کلیدی بنویس و نقاط قوت (wins) و ریسک‌ها (risks) را کوتاه فهرست کن. کار و تسک ننویس.',
+		) );
+		$tokens = 2500;
+	} else {
+		$schema = sap_ai_obj( array( 'plan' => $item_schema ) );
+		$data   = $base;
+		$data['findings'] = array_values( array_filter( (array) ( $input['findings'] ?? array() ), function ( $f ) use ( $part ) {
+			return in_array( $f['area'], $part['areas'], true );
+		} ) );
+		foreach ( $part['stages'] as $st ) {
+			if ( isset( $input[ 'stage_' . $st ] ) ) {
+				$data[ 'stage_' . $st ] = $input[ 'stage_' . $st ];
+			}
+		}
+		if ( 'growth' === $name ) {
+			$pool = sap_dataset_payload( $project['id'], 'ideas_pool' );
+			if ( $pool ) {
+				$data['new_content_candidates'] = array_slice( array_column( (array) ( $pool['blog'] ?? array() ), 'keyword' ), 0, 15 );
+			}
+		}
+		if ( ! $data['findings'] && count( $data ) === count( $base ) ) {
+			$prog['i']++; // Nothing for this part.
+			return sap_ai_plan_next( $project, $prog, $opt, $key, $hash, $def, $input );
+		}
+		$hours = max( 2, round( $cap * $part['share'] ) );
+		$task  = implode( "\n", array(
+			'داده‌های پروژه سئو در JSON زیر است: خلاصه سرچ کنسول، Focusها، یافته‌های قوانین (findings با id) و نتیجه تحلیل تخصصی همین حوزه.',
+			'هر جا expert_note آمده، نظر خود متخصص سئو است؛ آن را رعایت کن.',
+			sprintf( 'فقط کارهای حوزه «%s» را برای اکشن پلن این ماه بنویس: حداکثر %s کار مشخص در سقف حدود %s ساعت، مرتب‌شده بر اساس اثر روی Focus و هدف، با هفته پیشنهادی ۱ تا ۴.', $part['label'], sap_num( $part['max'] ), sap_num( $hours ) ),
+			'هر کار: عنوان با نام صفحه/کلمه، دلیل با عدد، مراحل کوتاه، و خروجی آماده در deliverable (تایتل/متا، FAQ، لینک‌ها «مبدأ ← مقصد: انکر»، راه‌حل تکنیکال) — کوتاه و کاربردی. کارهای هم‌نوع کوچک را ادغام کن. idهای finding مرتبط را در finding_ids بگذار.',
+			( $this_month || $done ) ? 'این کارها از قبل در پلن هستند؛ تکرار نکن: ' . implode( ' | ', array_slice( array_merge( $this_month, $done ), 0, 30 ) ) : '',
+		) );
+		$tokens = 4000;
+	}
+	$res = sap_ai_request( sap_ai_system_prompt(), $task . "\n\n" . wp_json_encode( $data, JSON_UNESCAPED_UNICODE ), $schema, array( 'purpose' => 'analysis', 'max_tokens' => $tokens, 'effort' => 'low' ) );
+	if ( is_wp_error( $res ) ) {
+		return $res;
+	}
+	$prog['partial'] += empty( $res['_partial'] ) ? 0 : 1;
+	$prog['cost']    += (float) ( sap_ai_usage()['last_cost'] ?? 0 );
+	unset( $res['_partial'] );
+	if ( 'diagnosis' === $name ) {
+		$prog['diag'] = $res;
+	} else {
+		foreach ( (array) ( $res['plan'] ?? array() ) as $it ) {
+			if ( is_array( $it ) ) {
+				$it['_part']    = $name;
+				$prog['plan'][] = $it;
+			}
+		}
+	}
+	$prog['i']++;
+	return sap_ai_plan_next( $project, $prog, $opt, $key, $hash, $def, $input );
+}
+
+/**
+ * Save progress and ask for the next part, or merge and store the plan.
+ */
+function sap_ai_plan_next( $project, $prog, $opt, $key, $hash, $def, $input ) {
+	$parts = sap_ai_plan_parts();
+	$names = array_keys( $parts );
+	if ( $prog['i'] < count( $names ) ) {
+		update_option( $opt, $prog, false );
+		return array( 'more' => true, 'summary_line' => sprintf( 'اکشن پلن، بخش %s از %s: %s…', sap_num( $prog['i'] + 1 ), sap_num( count( $names ) ), $parts[ $names[ $prog['i'] ] ]['label'] ) );
+	}
+	delete_option( $opt );
+	// Merge: by impact, then week; drop near-duplicate titles.
+	$rank = array( 'high' => 0, 'medium' => 1, 'low' => 2 );
+	$plan = $prog['plan'];
+	usort( $plan, function ( $a, $b ) use ( $rank ) {
+		return array( $rank[ $a['impact'] ?? 'medium' ] ?? 1, (int) ( $a['week'] ?? 2 ) ) <=> array( $rank[ $b['impact'] ?? 'medium' ] ?? 1, (int) ( $b['week'] ?? 2 ) );
+	} );
+	$seen = array();
+	$out  = array();
+	foreach ( $plan as $it ) {
+		$k = sap_norm_text( (string) ( $it['title'] ?? '' ) );
+		if ( '' === $k || isset( $seen[ $k ] ) ) {
+			continue;
+		}
+		$seen[ $k ] = true;
+		unset( $it['_part'] );
+		$out[] = $it;
+	}
+	$res = sap_ai_stage_postprocess( $project, 'plan', array_merge( (array) $prog['diag'], array( 'plan' => $out ) ), $input );
+	if ( $prog['partial'] ) {
+		$res['summary_line'] .= ' (پاسخ بخشی به سقف طول رسید؛ موارد کامل نگه داشته شد.)';
+	}
+	sap_dataset_put( $project['id'], $key, $res, array(
+		'model' => sap_ai_model_for( 'analysis' ),
+		'hash'  => $hash,
+		'cost'  => $prog['cost'],
+		'count' => count( $res['plan'] ),
 	) );
 	return $res;
 }
@@ -1036,7 +1190,8 @@ function sap_ai_stage_postprocess( $project, $stage, $res, $input ) {
 				) );
 				++$n;
 			}
-			// Re-run the rules so cannibalization is judged with the new keyword map.
+			// Strict ownership / page-type rules, then re-run the detectors with the new map.
+			sap_keymap_enforce( $project );
 			$run = sap_run_detectors( $project );
 			sap_findings_sync( $project['id'], $run['findings'], $run['ran'] );
 			return array( 'pages' => array(), 'count' => $n, 'summary_line' => sprintf( 'کلمه اصلی %s صفحه تشخیص داده شد؛ در تب «نقشه کلمات» بررسی و تأیید کنید.', sap_num( $n ) ) );

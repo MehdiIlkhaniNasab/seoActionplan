@@ -556,6 +556,7 @@ function sap_step_keymap( $project ) {
 	$st  = sap_keymap_build( $project );
 	$inv = sap_keymap_from_inventory( $project );
 	sap_keymap_fix_types( $project );
+	$rules = sap_keymap_enforce( $project );
 	$st['pages'] = count( sap_keymap( $project['id'], true ) );
 	if ( ! $st['pages'] ) {
 		return sap_skip( 'هنوز صفحه‌ای برای نقشه کلمات نیست (اول سرچ کنسول را همگام کنید).' );
@@ -564,7 +565,8 @@ function sap_step_keymap( $project ) {
 	$conf = count( array_filter( $map, function ( $m ) {
 		return $m['confirmed'] || in_array( $m['source'], array( 'manual', 'sheet' ), true );
 	} ) );
-	return array( 'msg' => sprintf( 'کلمه اصلی %s صفحه مشخص شد (%s از شیت یا تأیید شما، بقیه تشخیص خودکار)%s.', sap_num( $st['pages'] ), sap_num( $conf ), $inv ? '؛ ' . sap_num( $inv ) . ' صفحه از فهرست وردپرس اضافه شد' : '' ) );
+	$fixed = $rules['owner'] + $rules['title'] + $rules['none'];
+	return array( 'msg' => sprintf( 'کلمه اصلی %s صفحه مشخص شد (%s از شیت یا تأیید شما، بقیه تشخیص خودکار)%s%s.', sap_num( $st['pages'] ), sap_num( $conf ), $inv ? '؛ ' . sap_num( $inv ) . ' صفحه از فهرست وردپرس اضافه شد' : '', $fixed ? '؛ قوانین نقشه کلمات ' . sap_num( $fixed ) . ' ردیف را اصلاح کرد (یک صاحب برای هر کلمه، نام محصول برای محصولات، صفحات بدون کلمه)' : '' ) );
 }
 function sap_step_ai_keymap( $project, $force = false ) {
 	return sap_ai_stage_step( $project, 'keymap', $force );

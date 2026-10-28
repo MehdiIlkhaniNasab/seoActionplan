@@ -643,16 +643,17 @@ function sap_keymap_write_sheet( $project ) {
 	foreach ( (array) ( sap_dataset_payload( $project['id'], 'gsc_pages' )['cur'] ?? array() ) as $r ) {
 		$impr[ sap_norm_url( $r['page'] ) ] = $r;
 	}
-	$values = array( array( 'صفحه', 'آدرس', 'نوع صفحه', 'کلمه کلیدی اصلی', 'کلمات فرعی و هم‌کانسپت', 'نیت جستجو', 'منبع', 'تأیید شده', 'نمایش ۲۸ روز', 'کلیک ۲۸ روز' ) );
+	$values = array( array( 'صفحه', 'آدرس', 'نوع صفحه', 'کلمه کلیدی اصلی', 'کلمات فرعی و هم‌کانسپت', 'نیت جستجو', 'منبع', 'تأیید شده', 'نمایش ۲۸ روز', 'کلیک ۲۸ روز', 'وضعیت', 'ریدایرکت به' ) );
+	$ctypes = sap_content_types();
 	foreach ( sap_keymap( $project['id'] ) as $k => $m ) {
-		$values[] = array( $m['title'], rawurldecode( $m['url'] ), sap_keymap_page_types()[ $m['page_type'] ] ?? '', $m['primary_kw'], implode( '، ', $m['secondary'] ), sap_keymap_intents()[ $m['intent'] ] ?? '', sap_keymap_sources()[ $m['source'] ] ?? $m['source'], $m['confirmed'] || 'sheet' === $m['source'] ? 'بله' : '', (int) ( $impr[ $k ]['impressions'] ?? 0 ), (int) ( $impr[ $k ]['clicks'] ?? 0 ) );
+		$values[] = array( $m['title'], rawurldecode( $m['url'] ), $ctypes[ sap_content_type( $m ) ] ?? ( sap_keymap_page_types()[ $m['page_type'] ] ?? '' ), sap_keymap_has_kw( $m['status'] ) ? $m['primary_kw'] : '', implode( '، ', $m['secondary'] ), sap_keymap_intents()[ $m['intent'] ] ?? '', sap_keymap_sources()[ $m['source'] ] ?? $m['source'], $m['confirmed'] || 'sheet' === $m['source'] ? 'بله' : '', (int) ( $impr[ $k ]['impressions'] ?? 0 ), (int) ( $impr[ $k ]['clicks'] ?? 0 ), sap_keymap_statuses()[ $m['status'] ] ?? '', rawurldecode( $m['redirect_to'] ) );
 	}
 	$res = sap_gs_put_tab( $sheet, SAP_TAB_KEYMAP, $values );
 	if ( is_wp_error( $res ) ) {
 		return $res;
 	}
-	$fmt   = sap_gs_reset( $sid, array( 0 => 220, 1 => 280, 2 => 90, 3 => 180, 4 => 320, 5 => 100, 6 => 120, 7 => 80, 8 => 100, 9 => 100 ) );
-	$fmt[] = sap_gs_fmt( $sid, 0, 1, 0, 10, '#1D4ED8', '#FFFFFF', true );
+	$fmt   = sap_gs_reset( $sid, array( 0 => 220, 1 => 280, 2 => 110, 3 => 180, 4 => 320, 5 => 100, 6 => 120, 7 => 80, 8 => 100, 9 => 100, 10 => 170, 11 => 240 ) );
+	$fmt[] = sap_gs_fmt( $sid, 0, 1, 0, 12, '#1D4ED8', '#FFFFFF', true );
 	$fmt[] = array( 'updateSheetProperties' => array( 'properties' => array( 'sheetId' => $sid, 'gridProperties' => array( 'frozenRowCount' => 1 ) ), 'fields' => 'gridProperties.frozenRowCount' ) );
 	sap_gs_batch( $sheet, $fmt );
 	return sprintf( 'نقشه کلمات (%s صفحه)', sap_num( count( $values ) - 1 ) );

@@ -48,9 +48,9 @@ function sap_inventory_page_type( $ctype, $item = array(), $front = 0 ) {
 /**
  * Inventory items keyed by normalized URL (empty when not synced).
  */
-function sap_site_inventory( $project_id ) {
+function sap_site_inventory( $project_id, $refresh = false ) {
 	static $cache = array();
-	if ( isset( $cache[ $project_id ] ) ) {
+	if ( ! $refresh && isset( $cache[ $project_id ] ) ) {
 		return $cache[ $project_id ];
 	}
 	$out = array();
@@ -134,6 +134,7 @@ function sap_step_site_inventory( $project, $force = false ) {
 		$counts[ $it['ctype'] ] = ( $counts[ $it['ctype'] ] ?? 0 ) + 1;
 	}
 	sap_dataset_put( $pid, 'site_inventory', array_merge( $prog['meta'], array( 'items' => $prog['items'], 'sources' => $prog['sources'] ) ), array( 'count' => count( $prog['items'] ), 'counts' => $counts ) );
+	sap_site_inventory( $pid, true );
 	$fixed = sap_keymap_fix_types( sap_project( $pid ) );
 	$types = sap_content_types();
 	$parts = array();

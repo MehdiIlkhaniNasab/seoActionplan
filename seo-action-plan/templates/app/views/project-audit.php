@@ -181,15 +181,20 @@ $here  = sap_project_url( $pid, 'audit', $args + ( $pg > 1 ? array( 'pg' => $pg 
 							</td>
 							<td class="sap-audit-kw">
 								<?php if ( '' !== $r['kw'] ) : ?>
-									<b><?php echo esc_html( $r['kw'] ); ?></b><?php if ( 'seo' === $r['kw_src'] ) : ?> <small class="sap-chip" title="کلمه کانونی افزونه سئو؛ در نقشه کلمات نیست">افزونه سئو</small><?php endif; ?>
+									<b class="sap-audit-kwtxt" title="<?php echo esc_attr( $r['kw'] ); ?>"><?php echo esc_html( $r['kw'] ); ?></b><?php if ( 'seo' === $r['kw_src'] ) : ?> <small class="sap-chip" title="کلمه کانونی افزونه سئو؛ در نقشه کلمات نیست">افزونه سئو</small><?php endif; ?>
 								<?php else : ?>
 									<span class="sap-muted">بدون کلمه</span>
 								<?php endif; ?>
 								<?php if ( $r['secondary'] ) : ?><small class="sap-muted"> + <?php echo esc_html( sap_num( count( $r['secondary'] ) ) ); ?> فرعی</small><?php endif; ?>
 								<?php if ( $r['queries'] && sap_kw_key( $r['queries'][0][0] ) !== sap_kw_key( $r['kw'] ) ) : ?><small class="sap-audit-topq" title="پرنمایش‌ترین کوئری سرچ کنسول">🔎 <?php echo esc_html( $r['queries'][0][0] ); ?></small><?php endif; ?>
-								<?php foreach ( $r['misfits'] as $mf ) : ?>
-									<span class="sap-chip is-warn" title="<?php echo esc_attr( 'نیت این کلمه مناسب ' . ( $types[ $mf['better'] ] ?? $mf['better'] ) . ' است' ); ?>">«<?php echo esc_html( $mf['keyword'] ); ?>» ← <?php echo esc_html( $types[ $mf['better'] ] ?? $mf['better'] ); ?></span>
-								<?php endforeach; ?>
+								<?php if ( $r['misfits'] ) : ?>
+									<span class="sap-audit-misfit" title="<?php echo esc_attr( implode( "\n", array_map( function ( $mf ) use ( $types ) {
+										return '«' . $mf['keyword'] . '» ← مناسب ' . ( $types[ $mf['better'] ] ?? $mf['better'] );
+									}, $r['misfits'] ) ) ); ?>">⚠ <?php echo esc_html( sap_num( count( $r['misfits'] ) ) ); ?> کلمه با نیت نامناسب</span>
+								<?php endif; ?>
+								<?php if ( ! empty( $r['km_status'] ) && ! sap_keymap_has_kw( $r['km_status'] ) ) : ?>
+									<span class="sap-audit-misfit is-muted"><?php echo esc_html( sap_keymap_statuses()[ $r['km_status'] ] ); ?></span>
+								<?php endif; ?>
 							</td>
 							<td><?php echo null === $r['pos'] ? '—' : esc_html( sap_num( $r['pos'], 1 ) ); ?></td>
 							<td class="sap-nowrap"><?php echo esc_html( sap_num( $r['clicks'] ) . ' / ' . sap_num( $r['impr'] ) ); ?></td>

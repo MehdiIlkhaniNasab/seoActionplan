@@ -24,6 +24,7 @@ function sap_detectors() {
 		'cannibal'       => array( 'کنیبالیزیشن', array( 'gsc_qp' ) ),
 		'kw_conflict'    => array( 'دو صفحه با کلمه اصلی یکسان (نقشه کلمات)', array( 'keymap' ) ),
 		'kw_unowned'     => array( 'کلمه پرنمایش بدون صفحه اختصاصی', array( 'gsc_qp', 'keymap' ) ),
+		'kw_rank_mismatch' => array( 'صفحه دیگری برای کلمه هدف رتبه بهتری دارد (احتمال کنیبال)', array( 'gsc_qp', 'keymap' ) ),
 		'decay'          => array( 'افت ترافیک صفحات', array( 'gsc_pages' ) ),
 		'sitemaps'       => array( 'سلامت سایت‌مپ‌ها', array( 'gsc_sitemaps' ) ),
 		'cal_todo'       => array( 'محتوای منتشرنشده تقویم', array( 'sheet_calendar' ) ),
@@ -1728,6 +1729,35 @@ function sap_detect_cwv( $ctx ) {
 			'evidence' => array( 'cols' => array( 'm' => 'شاخص', 'v' => 'مقدار (p75)', 'cat' => 'وضعیت' ), 'items' => $bad ),
 			'severity' => $poor ? 55 : 35,
 			'effort'   => 3,
+		);
+	}
+	return $out;
+}
+
+/**
+ * The target page of a keyword is not the page Google ranks best for it:
+ * possible cannibalization, or the map points at the wrong page.
+ */
+function sap_detect_kw_rank_mismatch( $ctx ) {
+	$out = array();
+	foreach ( sap_keymap_rank_conflicts( $ctx['project'], max( 5, (int) $ctx['settings']['min_impressions'] / 2 ) ) as $c ) {
+		$out[] = array(
+			'key'        => 'rm:' . sap_kw_key( $c['kw'] ),
+			'context'    => 'content_update',
+			'title'      => sprintf( 'کلمه «%s»: گوگل به‌جای «%s»، صفحه «%s» را بالاتر نشان می‌دهد', $c['kw'], $c['title'], $c['other_title'] ),
+			'detail'     => sprintf( 'صفحه هدف در نقشه کلمات %s، ولی «%s» جایگاه %s با %s نمایش دارد. احتمال کنیبال: سریع بررسی کنید. اگر صفحه دیگر بهتر جواب نیت را می‌دهد، صفحه هدف را در نقشه کلمات عوض کنید؛ وگرنه کلمه را از تایتل/H1 صفحه دیگر بردارید، از آن به صفحه هدف با همین انکر لینک بدهید و محتوای صفحه هدف را تقویت کنید.', null === $c['pos'] ? 'برای این کلمه اصلاً رتبه ندارد' : 'در جایگاه ' . sap_num( $c['pos'], 1 ) . ' است', $c['other_title'], sap_num( $c['other_pos'], 1 ), sap_num( $c['other_impr'] ) ),
+			'url'        => $c['url'],
+			'keyword'    => $c['kw'],
+			'evidence'   => array(
+				'cols'    => array( 'page' => 'صفحه', 'role' => 'نقش', 'pos' => 'جایگاه', 'impr' => 'نمایش' ),
+				'items'   => array(
+					array( 'url' => $c['url'], 'page' => $c['title'], 'role' => 'صفحه هدف (نقشه کلمات)', 'pos' => null === $c['pos'] ? '—' : $c['pos'], 'impr' => $c['impr'] ),
+					array( 'url' => $c['other'], 'page' => $c['other_title'], 'role' => 'صفحه رقیب در گوگل', 'pos' => $c['other_pos'], 'impr' => $c['other_impr'] ),
+				),
+			),
+			'severity'   => min( 70, 35 + (int) round( $c['other_impr'] / 20 ) ),
+			'confidence' => 0.7,
+			'effort'     => 1,
 		);
 	}
 	return $out;

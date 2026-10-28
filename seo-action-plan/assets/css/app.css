@@ -1295,3 +1295,54 @@ body.sap-sheet-open { overflow: hidden; }
 .sap-sfw-test { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
 .sap-sfw .sap-actions form { display: inline; margin: 0; }
 .sap-spin.is-tiny { display: inline-block; width: 12px; height: 12px; border-width: 2px; vertical-align: middle; }
+
+/* ---- Keyword map v2 ---- */
+.sap-keymap .sap-km-row { grid-template-columns: minmax(230px, 1.4fr) minmax(150px, 1fr) minmax(180px, 1.3fr) minmax(150px, 190px); align-items: end; }
+.sap-keymap .sap-km-row > * { min-width: 0; }
+.sap-keymap .sap-km-meta { grid-column: 1 / -1; justify-content: flex-start; }
+.sap-keymap .sap-km-meta .sap-btn { margin-inline-start: auto; }
+.sap-keymap .is-redirect { grid-column: span 2; }
+.sap-km-page { flex-direction: row !important; gap: 8px !important; align-items: flex-start; }
+.sap-km-page > div { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.sap-km-page .sap-page-link, .sap-km-page a { font-weight: 800; }
+.sap-km-pick { padding-top: 3px; }
+.sap-km-qs { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 2px; }
+.sap-km-q { border: 1px dashed var(--line-2); background: var(--soft); color: var(--ink-2); border-radius: 8px; padding: 1px 7px; font: inherit; font-size: 11.5px; cursor: pointer; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sap-km-q:hover { border-color: var(--accent); color: var(--accent-ink); background: var(--accent-soft); }
+.sap-km-q i { font-style: normal; color: var(--muted); font-size: 10.5px; }
+.sap-fit { display: inline-flex; gap: 4px; align-items: center; padding: 3px 9px; border-radius: 99px; font-size: 12px; background: var(--soft); cursor: help; }
+.sap-fit b { font-weight: 900; }
+.sap-fit.is-good { background: #DCFCE7; color: #15803D; } .sap-fit.is-warn { background: #FEF3C7; color: #B45309; } .sap-fit.is-bad { background: #FEE2E2; color: #B91C1C; }
+.sap-km-row.is-st-none, .sap-km-row.is-st-noindex { border-inline-start-color: #94A3B8; background: #FAFBFD; }
+.sap-km-row.is-st-prune_410, .sap-km-row.is-st-prune_301 { border-inline-start-color: #9333EA; background: #FCFAFF; }
+.sap-km-row.is-st-title { border-inline-start-color: #0EA5E9; }
+.sap-km-row.is-st-none input[name="primary_kw"], .sap-km-row.is-st-none input[name="secondary"], .sap-km-row.is-st-noindex input[name="primary_kw"], .sap-km-row.is-st-prune_410 input[name="primary_kw"], .sap-km-row.is-st-prune_301 input[name="primary_kw"] { opacity: .45; }
+.sap-km-alerts { border: 1px solid #F7CACA; background: #FFFBFB; }
+.sap-km-alerts h3 { color: #8E2B25; }
+.sap-km-alerts ul { list-style: none; margin: 0 0 8px; padding: 0; display: grid; gap: 8px; }
+.sap-km-alerts li { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; padding: 8px 12px; border-radius: 12px; background: #fff; border: 1px solid var(--line); font-size: 13px; }
+.sap-km-vs { color: var(--ink-2); }
+@media (max-width: 900px) {
+	.sap-keymap .sap-km-row { grid-template-columns: 1fr; }
+	.sap-keymap .is-redirect { grid-column: auto; }
+}
+.sap-audit-kw { width: 230px; }
+.sap-audit-kwtxt { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; line-height: 1.7; }
+.sap-audit-topq { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 230px; }
+.sap-audit-misfit { display: inline-block; margin-top: 4px; padding: 1px 8px; border-radius: 8px; font-size: 11.5px; background: #FFF4E5; color: #9A5B00; cursor: help; white-space: nowrap; }
+.sap-audit-misfit.is-muted { background: var(--soft); color: var(--muted); }
+.sap-audit-page { max-width: 360px; }
+.sap-audit-title { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.sap-keymap .sap-km-row { padding: 10px 12px; gap: 6px 12px; }
+.sap-keymap .sap-km-field span { font-size: 11px; }
+
+/* ---- Custom tasks / keyword idea ---- */
+.sap-custom summary, .sap-kwidea summary { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: center; cursor: pointer; }
+.sap-custom summary small, .sap-kwidea summary small { flex-basis: 100%; font-size: 12px; }
+.sap-custom form, .sap-kwidea form { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); gap: 10px 14px; margin-top: 12px; align-items: end; }
+.sap-kwidea form { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.sap-custom .is-wide, .sap-kwidea .is-wide { grid-column: 1 / -1; }
+.sap-custom form .sap-btn, .sap-kwidea form .sap-btn { justify-self: start; }
+.sap-custom-draft { margin-top: 14px; display: grid; gap: 12px; }
+.sap-custom-draft .sap-ar-diag span { line-height: 2; }
+@media (max-width: 700px) { .sap-custom form, .sap-kwidea form { grid-template-columns: 1fr; } }

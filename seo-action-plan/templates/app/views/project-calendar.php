@@ -161,6 +161,15 @@ $updone  = count( array_filter( $updates, function ( $u ) {
 </section>
 
 <h2 class="sap-section-title">۲. تولید محتوای جدید</h2>
+<details class="sap-panel sap-kwidea">
+	<summary><?php echo sap_icon( 'plus', 16 ); // phpcs:ignore ?><b>مقاله با کلمه کلیدی خودتان</b><small class="sap-muted">کلمه اصلی و فرعی را بدهید؛ هوش مصنوعی بریف، تیترها، FAQ، لینک‌های داخلی و منابع را در ساختار تقویم می‌سازد</small></summary>
+	<form data-sap-kwidea="<?php echo esc_attr( $pid ); ?>" data-period="<?php echo esc_attr( $period ); ?>">
+		<label class="sap-field"><span>کلمه کلیدی اصلی</span><input type="text" name="keyword" required placeholder="مثلاً روش بستن بند کفش"></label>
+		<label class="sap-field"><span>کلمات فرعی (اختیاری، با ، جدا کنید)</span><input type="text" name="secondary" placeholder="بستن بند کفش ورزشی، گره بند کفش"></label>
+		<label class="sap-field is-wide"><span>توضیح و نکات (اختیاری)</span><textarea name="notes" rows="2" placeholder="مخاطب، زاویه، صفحه‌ای که باید تقویت شود، چیزهایی که حتماً باشد…"></textarea></label>
+		<button type="submit" class="sap-btn is-primary" <?php disabled( ! sap_ai_connected() ); ?>><?php echo sap_icon( 'spark', 16 ); // phpcs:ignore ?>ساخت بریف و افزودن به <?php echo esc_html( sap_period_label( $period ) ); ?></button>
+	</form>
+</details>
 <section class="sap-panel sap-cal">
 	<div class="sap-cal-head">
 		<span class="sap-cal-m"><?php echo esc_html( $label ); ?></span>
