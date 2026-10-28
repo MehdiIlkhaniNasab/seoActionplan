@@ -18,6 +18,17 @@
 
 defined( 'ABSPATH' ) || exit;
 
+/**
+ * Sokan's REST answers are JSON read by the app: a PHP warning printed by a site with
+ * display_errors on («<br /> <b>Warning</b>…») would break them. Log, don't print.
+ */
+add_filter( 'rest_pre_dispatch', function ( $result, $server, $request ) {
+	if ( 0 === strpos( (string) $request->get_route(), '/seoactionplan/v1/' ) ) {
+		@ini_set( 'display_errors', '0' ); // phpcs:ignore WordPress.PHP.NoSilencedErrors, WordPress.PHP.IniSet
+	}
+	return $result;
+}, 1, 3 );
+
 add_action( 'rest_api_init', function () {
 	$ns = 'seoactionplan/v1';
 

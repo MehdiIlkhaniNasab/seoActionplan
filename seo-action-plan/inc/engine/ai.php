@@ -858,16 +858,16 @@ function sap_ai_stage_input( $project, $stage, $ctx ) {
 			$issues = array();
 			foreach ( sap_findings_active( $pid ) as $f ) {
 				if ( in_array( $f['context'], array( 'technical', 'onpage' ), true ) ) {
-					$issues[] = array( $f['title'], array_slice( array_column( (array) ( $f['evidence']['items'] ?? array() ), 'page' ), 0, 5 ) );
+					$issues[] = array( $f['title'], array_slice( array_column( array_filter( (array) ( $f['evidence']['items'] ?? array() ), 'is_array' ), 'page' ), 0, 5 ) );
 				}
 			}
 			$schema = array();
 			foreach ( $ctx['pages'] as $p ) {
-				$schema[] = array( sap_short_url( $p['url'], 80 ), $p['schema'], $p['schema_errors'], $p['no_alt'] );
+				$schema[] = array( sap_short_url( (string) ( $p['url'] ?? '' ), 80 ), (array) ( $p['schema'] ?? array() ), (int) ( $p['schema_errors'] ?? 0 ), (int) ( $p['no_alt'] ?? 0 ) );
 			}
 			$cwv = array();
 			foreach ( (array) ( $ctx['cwv']['pages'] ?? array() ) as $c ) {
-				$cwv[] = array( 'url' => sap_short_url( $c['url'], 80 ), 'lab_score' => $c['score'], 'field' => $c['field'], 'lab' => $c['lab'] );
+				$cwv[] = array( 'url' => sap_short_url( (string) ( $c['url'] ?? '' ), 80 ), 'lab_score' => $c['score'] ?? null, 'field' => $c['field'] ?? null, 'lab' => $c['lab'] ?? null );
 			}
 			return array(
 				'site'         => sap_project_domain( $project ),
@@ -876,15 +876,15 @@ function sap_ai_stage_input( $project, $stage, $ctx ) {
 				'issues'       => array_slice( $issues, 0, 30 ),
 				'schema_pages' => array( 'columns' => array( 'url', 'types', 'jsonld_errors', 'images_without_alt' ), 'rows' => $schema ),
 				'cwv_mobile'   => $cwv,
-				'robots'       => isset( $ctx['robots'] ) ? array( 'code' => $ctx['robots']['code'], 'rules' => array_slice( (array) $ctx['robots']['rules'], 0, 30 ), 'sitemaps' => $ctx['robots']['sitemaps'], 'blocked_paths' => array_values( array_map( function ( $t ) {
-					return $t['path'];
-				}, array_filter( (array) $ctx['robots']['tests'], function ( $t ) {
-					return ! $t['allowed'];
+				'robots'       => isset( $ctx['robots'] ) ? array( 'code' => $ctx['robots']['code'] ?? 0, 'rules' => array_slice( (array) ( $ctx['robots']['rules'] ?? array() ), 0, 30 ), 'sitemaps' => $ctx['robots']['sitemaps'] ?? array(), 'blocked_paths' => array_values( array_map( function ( $t ) {
+					return $t['path'] ?? '';
+				}, array_filter( (array) ( $ctx['robots']['tests'] ?? array() ), function ( $t ) {
+					return is_array( $t ) && empty( $t['allowed'] );
 				} ) ) ) ) : null,
-				'sitemap_check' => isset( $ctx['sitemap_check'] ) ? array( 'root' => $ctx['sitemap_check']['root'], 'files' => count( (array) $ctx['sitemap_check']['maps'] ), 'urls' => $ctx['sitemap_check']['total'] ?? 0, 'important_missing' => array_slice( array_column( (array) ( $ctx['sitemap_check']['missing'] ?? array() ), 'url' ), 0, 10 ), 'bad_urls' => array_slice( (array) ( $ctx['sitemap_check']['bad'] ?? array() ), 0, 10 ) ) : null,
+				'sitemap_check' => isset( $ctx['sitemap_check'] ) ? array( 'root' => $ctx['sitemap_check']['root'] ?? '', 'files' => count( (array) ( $ctx['sitemap_check']['maps'] ?? array() ) ), 'urls' => $ctx['sitemap_check']['total'] ?? 0, 'important_missing' => array_slice( array_column( (array) ( $ctx['sitemap_check']['missing'] ?? array() ), 'url' ), 0, 10 ), 'bad_urls' => array_slice( (array) ( $ctx['sitemap_check']['bad'] ?? array() ), 0, 10 ) ) : null,
 				'index_status'  => isset( $ctx['gsc_inspect'] ) ? array_map( function ( $r ) {
-					return array( sap_short_url( $r['url'], 70 ), $r['verdict'] ?? '', $r['coverage'] ?? '', $r['g_canon'] && $r['u_canon'] && $r['g_canon'] !== $r['u_canon'] ? 'canonical_mismatch' : '' );
-				}, array_slice( (array) $ctx['gsc_inspect']['rows'], 0, 15 ) ) : null,
+					return array( sap_short_url( (string) ( $r['url'] ?? '' ), 70 ), $r['verdict'] ?? '', $r['coverage'] ?? '', ! empty( $r['g_canon'] ) && ! empty( $r['u_canon'] ) && $r['g_canon'] !== $r['u_canon'] ? 'canonical_mismatch' : '' );
+				}, array_slice( (array) ( $ctx['gsc_inspect']['rows'] ?? array() ), 0, 15 ) ) : null,
 			);
 
 		case 'plan':
@@ -1282,6 +1282,12 @@ function sap_ai_stage_postprocess( $project, $stage, $res, $input ) {
 			$issues = array();
 			foreach ( $list( $res['issues'] ?? array() ) as $i ) {
 				$i         = wp_parse_args( $i, array( 'area' => 'crawl', 'priority' => 'medium', 'title' => '', 'detail' => '', 'fix' => '', 'urls' => array() ) );
+				// Models sometimes answer a text field with a list: keep everything as text.
+				foreach ( array( 'area', 'priority', 'title', 'detail', 'fix' ) as $fld ) {
+					$i[ $fld ] = is_array( $i[ $fld ] ) ? implode( "\n", array_filter( array_map( function ( $x ) {
+						return is_scalar( $x ) ? (string) $x : '';
+					}, $i[ $fld ] ) ) ) : (string) $i[ $fld ];
+				}
 				$i['urls'] = $strs( $i['urls'] );
 				$issues[]  = $i;
 			}

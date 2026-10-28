@@ -66,7 +66,30 @@ function sap_sync_step( $project, $step, $force = false ) {
 	}
 	// Large stores (10,000+ products): allow the admin memory ceiling (WP_MAX_MEMORY_LIMIT).
 	wp_raise_memory_limit( 'admin' );
-	$res = call_user_func( $fn, $project, $force );
+	// A PHP warning printed on a site with display_errors on would break the JSON answer
+	// («Unexpected token '<'»): keep stray output out, note our own warnings, and turn
+	// exceptions into a readable step error.
+	$warn = array();
+	set_error_handler( function ( $no, $str, $file, $line ) use ( &$warn ) { // phpcs:ignore WordPress.PHP.DevelopmentFunctions
+		if ( ! ( error_reporting() & $no ) ) {
+			return false;
+		}
+		if ( false !== strpos( wp_normalize_path( $file ), wp_normalize_path( SAP_DIR ) ) && count( $warn ) < 3 ) {
+			$warn[] = $str . ' (' . str_replace( wp_normalize_path( SAP_DIR ), '', wp_normalize_path( $file ) ) . ':' . $line . ')';
+		}
+		return true;
+	}, E_WARNING | E_NOTICE | E_USER_WARNING | E_USER_NOTICE | E_DEPRECATED | E_USER_DEPRECATED );
+	ob_start();
+	try {
+		$res = call_user_func( $fn, $project, $force );
+	} catch ( Throwable $e ) {
+		$res = new WP_Error( 'sap_step_error', 'خطای داخلی در این مرحله: ' . $e->getMessage() . ' (' . str_replace( wp_normalize_path( SAP_DIR ), '', wp_normalize_path( $e->getFile() ) ) . ':' . $e->getLine() . ')' );
+	}
+	ob_end_clean();
+	restore_error_handler();
+	if ( $warn ) {
+		error_log( 'Sokan step ' . $step . ': ' . implode( ' | ', $warn ) ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions
+	}
 	if ( is_wp_error( $res ) ) {
 		$res = array( 'ok' => false, 'skipped' => false, 'msg' => $res->get_error_message() );
 	}

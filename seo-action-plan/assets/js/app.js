@@ -8,7 +8,19 @@
 		opts.headers = Object.assign({ 'X-WP-Nonce': SAP.nonce }, opts.headers || {});
 		opts.credentials = 'same-origin';
 		return fetch(SAP.rest + path, opts).then(function (r) {
-			return r.json().then(function (j) {
+			return r.text().then(function (txt) {
+				var j;
+				try {
+					j = JSON.parse(txt);
+				} catch (e) {
+					// The server printed something else (a PHP error page or warning): show its text, not «Unexpected token».
+					var start = txt.indexOf('{"');
+					try { j = start > 0 ? JSON.parse(txt.slice(start)) : null; } catch (e2) { j = null; }
+					if (!j) {
+						var plain = (new DOMParser().parseFromString(txt, 'text/html').body.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 300);
+						throw new Error('پاسخ نامعتبر از سرور (HTTP ' + r.status + '): ' + (plain || 'خالی'));
+					}
+				}
 				if (!r.ok) { var err = new Error((j && j.message) || ('HTTP ' + r.status)); err.status = r.status; err.code = j && j.code; throw err; }
 				return j;
 			});
