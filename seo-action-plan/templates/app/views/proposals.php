@@ -37,6 +37,7 @@ $prio     = array( 'high' => 'اولویت بالا', 'medium' => 'متوسط', 
 				</select>
 				<button class="sap-btn is-primary" type="submit" name="do" value="plan"><?php echo sap_icon( 'check' ); // phpcs:ignore ?>تأیید و افزودن به اکشن پلن</button>
 				<button class="sap-btn is-ghost" type="submit" name="do" value="someday">شاید بعداً</button>
+				<button class="sap-btn is-ghost" type="submit" name="do" value="resolve">حل شده</button>
 				<button class="sap-btn is-ghost is-danger" type="submit" name="do" value="dismiss">رد</button>
 			</div>
 			<ul class="sap-proposal-list">
@@ -45,6 +46,9 @@ $prio     = array( 'high' => 'اولویت بالا', 'medium' => 'متوسط', 
 					$p   = $f['evidence']['priority'] ?? ( $f['score'] >= 60 ? 'high' : ( $f['score'] >= 35 ? 'medium' : 'low' ) );
 					$sec = $f['evidence']['section'] ?? ( function_exists( 'sap_tech_section_of' ) ? sap_tech_section_of( $f ) : '' );
 					$ai  = 0 === strpos( $f['detector'], 'ai_' );
+					$tri = $f['evidence']['triage'] ?? '';
+					$tier = $f['evidence']['tier'] ?? '';
+					$nc   = count( sap_comments( 'finding', $f['id'] ) );
 					?>
 					<li class="sap-proposal is-<?php echo esc_attr( $p ); ?>">
 						<input type="checkbox" name="ids[]" value="<?php echo esc_attr( $f['id'] ); ?>" aria-label="انتخاب">
@@ -53,6 +57,7 @@ $prio     = array( 'high' => 'اولویت بالا', 'medium' => 'متوسط', 
 								<b><?php echo esc_html( $f['title'] ); ?></b>
 								<span class="sap-chip is-prio-<?php echo esc_attr( $p ); ?>"><?php echo esc_html( $prio[ $p ] ?? $p ); ?></span>
 								<span class="sap-chip"><?php echo esc_html( $ai ? 'تحلیل هوشمند' : 'قانون خودکار' ); ?></span>
+								<?php if ( 'minor' === $tier ) : ?><span class="sap-chip is-minor" title="<?php echo esc_attr( $tri ); ?>">جزئی — در گزارش کارفرما مهم حساب نمی‌شود</span><?php endif; ?>
 								<?php if ( $sec && isset( $sections[ $sec ] ) ) : ?><span class="sap-chip is-soft"><?php echo esc_html( $sections[ $sec ] ); ?></span><?php endif; ?>
 								<?php if ( $f['focus_id'] && isset( $fnames[ $f['focus_id'] ] ) ) : ?><span class="sap-chip is-focus"><?php echo esc_html( $fnames[ $f['focus_id'] ] ); ?></span><?php endif; ?>
 								<span class="sap-muted sap-small"><?php echo esc_html( sap_num( $f['effort'], 1 ) ); ?> ساعت</span>
@@ -76,8 +81,17 @@ $prio     = array( 'high' => 'اولویت بالا', 'medium' => 'متوسط', 
 									</ul>
 								<?php endif; ?>
 							</details>
+							<?php if ( '' !== $tri ) : ?><p class="sap-small sap-proposal-triage"><?php echo sap_icon( 'spark', 13 ); // phpcs:ignore ?><span><b>بازبینی کارشناسی:</b> <?php echo esc_html( $tri ); ?></span></p><?php endif; ?>
+							<details class="sap-proposal-notes" <?php echo $nc ? 'open' : ''; ?>>
+								<summary>یادداشت من<?php echo $nc ? ' (' . esc_html( sap_num( $nc ) ) . ')' : ''; ?></summary>
+								<?php sap_view( 'comments', array( 'type' => 'finding', 'object_id' => $f['id'], 'project_id' => $pid ) ); ?>
+							</details>
 						</div>
-						<button class="sap-btn is-small is-soft" type="submit" name="quick" value="plan:<?php echo esc_attr( $f['id'] ); ?>">تأیید</button>
+						<div class="sap-proposal-acts">
+							<button class="sap-btn is-small is-soft" type="submit" name="quick" value="plan:<?php echo esc_attr( $f['id'] ); ?>" title="افزودن به اکشن پلن">تأیید</button>
+							<button class="sap-btn is-small is-ghost is-good" type="submit" name="quick" value="resolve:<?php echo esc_attr( $f['id'] ); ?>" title="همین الان حل شده است؛ ۳۰ روز دوباره پیشنهاد نمی‌شود">✓ حل شد</button>
+							<button class="sap-btn is-small is-ghost is-danger" type="submit" name="quick" value="dismiss:<?php echo esc_attr( $f['id'] ); ?>" title="این مورد مشکل نیست؛ حذف از پیشنهادها">حذف</button>
+						</div>
 					</li>
 				<?php endforeach; ?>
 			</ul>

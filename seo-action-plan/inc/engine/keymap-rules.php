@@ -49,8 +49,21 @@ function sap_keymap_type_weight( $ctype ) {
  * Pages that need no keyword: contact, about, policies, cart, account…
  */
 function sap_is_utility_page( $title, $url ) {
-	$t = sap_norm_text( (string) $title . ' ' . rawurldecode( (string) wp_parse_url( (string) $url, PHP_URL_PATH ) ) );
-	return (bool) preg_match( '/تماس|درباره|قوانین|مقررات|شرایط|حریم|خصوصی|مرجوع|بازگشت کالا|بازگرداندن|ضمانت بازگشت|سبد خرید|تسویه|پرداخت|حساب کاربری|ورود|ثبت ?نام|پیگیری سفارش|علاقه ?مندی|مقایسه محصولات|نقشه سایت|همکاری|استخدام|contact|about|terms|privacy|policy|refund|return|cart|checkout|my-account|account|login|register|wishlist|compare|track|sitemap|careers/u', $t );
+	$fa = '/(?<!\p{L})(تماس با ما|درباره ما|قوانین|مقررات|شرایط استفاده|حریم خصوصی|مرجوعی|بازگشت کالا|ضمانت بازگشت|سبد ?خرید|پیش ?فاکتور|تسویه حساب|پرداخت|سفارش ?های من|حساب ?کاربری|ورود|ثبت ?نام|پیگیری ?سفارش|علاقه ?مندی ?ها|مقایسه ?محصولات|نقشه سایت|همکاری با ما|استخدام)(?!\p{L})/u';
+	if ( '' !== (string) $title && preg_match( $fa, sap_norm_text( (string) $title ) ) ) {
+		return true;
+	}
+	if ( '' !== (string) $title && preg_match( '/^(contact( us)?|about( us)?|terms.*|privacy.*|refund.*|returns?|cart|checkout|my account|wishlist|compare|login|register|careers)$/i', trim( (string) $title ) ) ) {
+		return true;
+	}
+	// URL: a whole path segment that is a known utility slug.
+	$en = array( 'contact', 'contact-us', 'about', 'about-us', 'terms', 'terms-and-conditions', 'privacy', 'privacy-policy', 'refund', 'refund-policy', 'returns', 'cart', 'checkout', 'my-account', 'account', 'login', 'register', 'wishlist', 'compare', 'track-order', 'order-tracking', 'careers' );
+	foreach ( explode( '/', trim( rawurldecode( (string) wp_parse_url( (string) $url, PHP_URL_PATH ) ), '/' ) ) as $seg ) {
+		if ( in_array( strtolower( $seg ), $en, true ) || preg_match( $fa, sap_norm_text( str_replace( array( '-', '_' ), ' ', $seg ) ) ) ) {
+			return true;
+		}
+	}
+	return false;
 }
 
 /**
@@ -252,6 +265,11 @@ function sap_keymap_enforce( $project ) {
 		}
 		$t  = $ctype( $m );
 		$tt = $title( $m );
+		if ( sap_url_has_params( $m['url'] ) && 'none' !== $m['status'] ) {
+			sap_keymap_save( $pid, array( 'url' => $m['url'], 'status' => 'none', 'primary_kw' => '', 'secondary' => array(), 'reason' => 'آدرس پارامتردار (فیلتر/مرتب‌سازی) نسخه‌ای از صفحه اصلی است؛ کلمه کلیدی مال صفحه اصلی است.', 'source' => 'auto' ), true );
+			++$stats['none'];
+			continue;
+		}
 		if ( 'page' === $t && sap_is_utility_page( $tt, $m['url'] ) && 'none' !== $m['status'] ) {
 			sap_keymap_save( $pid, array( 'url' => $m['url'], 'status' => 'none', 'primary_kw' => '', 'secondary' => array(), 'reason' => 'صفحه کاربردی؛ کلمه کلیدی لازم ندارد.', 'source' => 'auto' ), true );
 			++$stats['none'];

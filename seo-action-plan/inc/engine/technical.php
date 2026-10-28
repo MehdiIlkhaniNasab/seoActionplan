@@ -256,10 +256,24 @@ function sap_step_sitemap_check( $project ) {
 		$impr[ sap_norm_url( $r['page'] ) ] = (int) $r['impressions'];
 	}
 	$missing = array();
+	$skipped = 0;
+	$crawl_c = array();
+	foreach ( (array) ( sap_dataset_payload( $project['id'], 'crawl' )['rows'] ?? array() ) as $r ) {
+		$crawl_c[ sap_norm_url( $r['url'] ) ] = $r;
+	}
 	foreach ( sap_keymap( $project['id'] ) as $k => $m ) {
-		if ( ! isset( $urls[ $k ] ) && 'home' !== $m['page_type'] && ( $impr[ $k ] ?? 0 ) > 0 ) {
-			$missing[] = array( 'url' => $m['url'], 'title' => $m['title'], 'impr' => $impr[ $k ] ?? 0 );
+		if ( isset( $urls[ $k ] ) || 'home' === $m['page_type'] || ( $impr[ $k ] ?? 0 ) <= 0 ) {
+			continue;
 		}
+		// Only real, indexable canonical pages belong in a sitemap: not filter / paginated /
+		// cart pages, not pages canonicalised to a URL that is in the sitemap, not noindex.
+		$canon = (string) ( $crawl_c[ $k ]['canon'] ?? '' );
+		$clean = strtok( $m['url'], '?' );
+		if ( sap_url_skip_reason( $project['id'], $m['url'], $m['title'] ) || isset( $urls[ sap_norm_url( $clean ) ] ) || ( '' !== $canon && isset( $urls[ sap_norm_url( $canon ) ] ) ) ) {
+			++$skipped;
+			continue;
+		}
+		$missing[] = array( 'url' => $m['url'], 'title' => $m['title'], 'impr' => $impr[ $k ] ?? 0 );
 	}
 	usort( $missing, function ( $a, $b ) {
 		return $b['impr'] <=> $a['impr'];
@@ -288,6 +302,7 @@ function sap_step_sitemap_check( $project ) {
 		'other_host'  => array_slice( $other, 0, 20 ),
 		'in_robots'   => in_array( $root, (array) ( sap_dataset_payload( $project['id'], 'robots' )['sitemaps'] ?? array() ), true ),
 		'crawl_known' => (bool) $crawl,
+		'skipped'     => $skipped,
 	) );
 	return array( 'msg' => sprintf( 'سایت‌مپ %s: %s فایل، %s آدرس؛ %s صفحه مهم در سایت‌مپ نیست، %s آدرس خراب یا غیرقابل‌ایندکس.', sap_short_url( $root, 40 ), sap_num( count( $maps ) ), sap_num( count( $urls ) ), sap_num( count( $missing ) ), sap_num( count( $bad ) ) ) );
 }
@@ -323,7 +338,9 @@ function sap_important_urls( $project, $limit = 15 ) {
 		if ( count( $urls ) >= $limit ) {
 			break;
 		}
-		$urls[ $k ] = $m['url'];
+		if ( '' === sap_url_skip_reason( $pid, $m['url'], $m['title'] ) ) {
+			$urls[ $k ] = $m['url'];
+		}
 	}
 	return array_values( $urls );
 }
@@ -451,7 +468,7 @@ function sap_detect_sitemap_check( $ctx ) {
 		return array( array( 'key' => 'none', 'context' => 'technical', 'title' => 'سایت‌مپ XML قابل خواندن پیدا نشد', 'detail' => 'در رنک‌مث بخش Sitemap Settings را فعال کنید و آدرس /sitemap_index.xml را در مرورگر باز کنید؛ اگر خطا یا صفحه خالی می‌دهد، کش/فایروال را بررسی کنید. سپس آن را در سرچ کنسول ثبت کنید.', 'severity' => 75, 'effort' => 0.5, 'evidence' => array( 'section' => 'sitemap' ) ) );
 	}
 	if ( $s['missing'] ) {
-		$out[] = array( 'key' => 'missing', 'context' => 'technical', 'title' => sprintf( '%s صفحه مهم در سایت‌مپ نیست', sap_num( count( $s['missing'] ) ) ), 'detail' => 'این صفحات در گوگل نمایش دارند و در نقشه کلمات هستند ولی در سایت‌مپ نیامده‌اند؛ معمولاً یعنی نوع محتوا یا طبقه‌بندی آن در تنظیمات سایت‌مپ رنک‌مث غیرفعال است یا صفحه noindex/کنونیکال شده.', 'url' => $s['missing'][0]['url'], 'severity' => 50, 'effort' => 0.5, 'impact' => array_sum( array_column( $s['missing'], 'impr' ) ) / 10, 'evidence' => array( 'section' => 'sitemap', 'cols' => array( 'title' => 'صفحه', 'url' => 'آدرس', 'impr' => 'نمایش' ), 'items' => array_slice( $s['missing'], 0, 25 ) ) );
+		$out[] = array( 'key' => 'missing', 'context' => 'technical', 'title' => sprintf( '%s صفحه مهم در سایت‌مپ نیست', sap_num( count( $s['missing'] ) ) ), 'detail' => 'این صفحات قابل‌ایندکس، کنونیکال خودشان و دارای نمایش در گوگل هستند ولی در سایت‌مپ نیامده‌اند؛ معمولاً یعنی نوع محتوا یا طبقه‌بندی آن در تنظیمات سایت‌مپ رنک‌مث غیرفعال است.' . ( ! empty( $s['skipped'] ) ? ' (' . sap_num( $s['skipped'] ) . ' آدرس دیگر — فیلتر، صفحه‌بندی، سبد خرید، کنونیکال‌شده به صفحه‌ای که در سایت‌مپ هست یا noindex — عمداً حساب نشد.)' : '' ), 'url' => $s['missing'][0]['url'], 'severity' => 50, 'effort' => 0.5, 'impact' => array_sum( array_column( $s['missing'], 'impr' ) ) / 10, 'evidence' => array( 'section' => 'sitemap', 'cols' => array( 'title' => 'صفحه', 'url' => 'آدرس', 'impr' => 'نمایش' ), 'items' => array_slice( $s['missing'], 0, 25 ) ) );
 	}
 	if ( $s['bad'] ) {
 		$out[] = array( 'key' => 'bad', 'context' => 'technical', 'title' => sprintf( '%s آدرس خراب، ریدایرکت یا noindex داخل سایت‌مپ', sap_num( count( $s['bad'] ) ) ), 'detail' => 'سایت‌مپ فقط باید آدرس‌های ۲۰۰ و قابل‌ایندکس را داشته باشد. این آدرس‌ها را از سایت‌مپ حذف کنید (یا مشکل خود صفحه را حل کنید).', 'severity' => 45, 'effort' => 1, 'evidence' => array( 'section' => 'sitemap', 'cols' => array( 'url' => 'آدرس', 'why' => 'مشکل' ), 'items' => array_slice( $s['bad'], 0, 25 ) ) );
@@ -550,9 +567,13 @@ function sap_tech_checklist( $project ) {
 		$items   = $by_sec[ $key ] ?? array();
 		$penalty = 0;
 		foreach ( $items as $f ) {
-			$penalty += min( 40, max( 5, (float) $f['score'] / 2.5 ) );
+			// A finding's weight follows its score (importance of the pages it touches) and the
+			// expert triage: critical ones weigh most, minor ones barely count.
+			$tier     = $f['evidence']['tier'] ?? '';
+			$penalty += 'minor' === $tier ? 1 : ( 'critical' === $tier ? min( 30, max( 15, (float) $f['score'] / 3 ) ) : min( 20, max( 2, (float) $f['score'] / 4 ) ) );
 		}
-		$score  = $have ? max( 0, 100 - (int) round( $penalty ) ) : null;
+		// Diminishing returns: many small issues do not sink a section to zero.
+		$score  = $have ? (int) round( 100 * exp( -$penalty / 90 ) ) : null;
 		$status = null === $score ? 'nodata' : ( $score >= 85 ? 'good' : ( $score >= 60 ? 'warn' : 'bad' ) );
 		$ages   = array();
 		foreach ( $have as $src ) {

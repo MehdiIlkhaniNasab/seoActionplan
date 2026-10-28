@@ -1287,8 +1287,10 @@ function sap_focus_pillar( $ctx, $fid ) {
  * Indexable HTML 200 pages of the crawl.
  */
 function sap_crawl_pages( $ctx ) {
-	return array_filter( (array) ( $ctx['crawl']['rows'] ?? array() ), function ( $r ) {
-		return 200 === $r['code'] && $r['idx'] && false !== strpos( $r['type'], 'html' );
+	$pid = $ctx['project']['id'];
+	// Real pages only: no filter / paginated / cart / canonicalised / noindex URLs.
+	return array_filter( (array) ( $ctx['crawl']['rows'] ?? array() ), function ( $r ) use ( $pid ) {
+		return 200 === $r['code'] && $r['idx'] && false !== strpos( $r['type'], 'html' ) && '' === sap_url_skip_reason( $pid, $r['url'], $r['title'] );
 	} );
 }
 
@@ -1297,6 +1299,27 @@ function sap_crawl_pages( $ctx ) {
  */
 function sap_crawl_list_findings( $ctx, $items, $base ) {
 	$out = array();
+	// Pages that matter (traffic, money pages, focus) are the finding; the rest is a minor note.
+	$pid   = $ctx['project']['id'];
+	$minor = array();
+	$items = array_values( array_filter( $items, function ( $i ) use ( $pid, &$minor ) {
+		if ( 'low' === sap_url_importance( $pid, $i['url'] ) ) {
+			$minor[] = $i;
+			return false;
+		}
+		return true;
+	} ) );
+	if ( $minor ) {
+		$f             = $base;
+		$f['key']      = $base['key'] . ':minor';
+		$f['title']    = sprintf( $base['title'], sap_num( count( $minor ) ) ) . ' (صفحات بدون نمایش — جزئی)';
+		$f['detail']   = $base['detail'] . "\n\nاین صفحات در ۲۸ روز اخیر در گوگل نمایش نداشته‌اند و صفحه پولساز یا Focus نیستند؛ اولویت پایین.";
+		$f['severity'] = min( 12, (float) $base['severity'] * 0.3 );
+		$f['evidence'] = array( 'cols' => $base['cols'], 'items' => array_slice( $minor, 0, 40 ), 'tier' => 'minor' );
+		$f['effort']   = min( 4, max( 0.25, $base['per_item'] * count( $minor ) ) );
+		unset( $f['cols'], $f['per_item'] );
+		$out[] = $f;
+	}
 	foreach ( sap_split_by_focus( $ctx, $items ) as $fid => $list ) {
 		$list = sap_sort( $list, 'impr' );
 		$f    = $base;

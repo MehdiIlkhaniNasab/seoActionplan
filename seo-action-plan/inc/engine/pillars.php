@@ -55,6 +55,10 @@ function sap_proposals_put( $project, $source, $items ) {
 		if ( '' === trim( (string) $i['title'] ) ) {
 			continue;
 		}
+		// The same kind of work on this page was done / planned / changed on the site recently: don't suggest it again.
+		if ( '' !== (string) $i['url'] && ( '' !== $i['kind'] || 'technical' !== $i['context'] ) && sap_recently_handled( $project['id'], (string) $i['url'], (string) $i['kind'], (string) $i['context'] ) ) {
+			continue;
+		}
 		list( $fid, $w ) = sap_focus_match( $fc, (string) $i['url'], (string) $i['keyword'] );
 		$findings[]      = array(
 			'detector'   => 'ai_' . $source,

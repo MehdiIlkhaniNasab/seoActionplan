@@ -34,6 +34,7 @@ $inspect = (array) ( sap_dataset_payload( $pid, 'gsc_inspect' )['rows'] ?? array
 			<button type="button" class="sap-btn is-primary" data-sap-step="robots,sitemap_check,gsc_inspect,analyze" data-project="<?php echo esc_attr( $pid ); ?>" data-force><?php echo sap_icon( 'refresh' ); // phpcs:ignore ?>بررسی دوباره robots، سایت‌مپ و ایندکس (رایگان)</button>
 			<button type="button" class="sap-btn is-soft" data-sap-step="cwv,analyze" data-project="<?php echo esc_attr( $pid ); ?>" data-force>تست دوباره سرعت</button>
 			<button type="button" class="sap-btn is-soft" data-sap-step="ai_technical" data-project="<?php echo esc_attr( $pid ); ?>" data-force <?php disabled( ! sap_ai_connected() ); ?>><?php echo sap_icon( 'spark' ); // phpcs:ignore ?>تحلیل هوشمند تکنیکال</button>
+			<button type="button" class="sap-btn is-soft" data-sap-step="ai_triage" data-project="<?php echo esc_attr( $pid ); ?>" data-force <?php disabled( ! sap_ai_connected() ); ?> title="هوش مصنوعی هر مشکل را با داده خزش بازبینی می‌کند: واقعی، جزئی یا غیرمشکل (با دلیل)"><?php echo sap_icon( 'check' ); // phpcs:ignore ?>بازبینی کارشناسی مشکلات</button>
 		</div>
 		<?php if ( $ai ) : ?><p class="sap-small sap-muted">آخرین تحلیل هوشمند: <?php echo esc_html( sap_jdate( $ai['fetched_at'], 'short' ) . ' · ' . ( $ai['payload']['summary_line'] ?? '' ) ); ?></p><?php endif; ?>
 	</div>
@@ -95,6 +96,9 @@ $inspect = (array) ( sap_dataset_payload( $pid, 'gsc_inspect' )['rows'] ?? array
 						<?php endforeach; ?>
 					</tbody>
 				</table></div>
+				<?php if ( ! empty( $smap['skipped'] ) ) : ?>
+					<p class="sap-small sap-muted"><?php echo esc_html( sap_num( $smap['skipped'] ) ); ?> آدرس (فیلتر و پارامتردار، صفحه‌بندی، سبد خرید، کنونیکال‌شده به صفحه‌ای که در سایت‌مپ هست، noindex) لازم نیست در سایت‌مپ باشد و حساب نشد.</p>
+				<?php endif; ?>
 				<?php if ( $smap['missing'] ) : ?>
 					<p class="sap-label">صفحات مهمی که در سایت‌مپ نیستند</p>
 					<ul class="sap-small"><?php foreach ( array_slice( $smap['missing'], 0, 15 ) as $m ) : ?><li><?php echo sap_page_link( $m['url'], $m['title'] ?: rawurldecode( $m['url'] ) ); // phpcs:ignore ?> <span class="sap-muted">· <?php echo esc_html( sap_num( $m['impr'] ) ); ?> نمایش</span></li><?php endforeach; ?></ul>

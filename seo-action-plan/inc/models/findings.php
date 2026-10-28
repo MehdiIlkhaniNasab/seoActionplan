@@ -75,7 +75,9 @@ function sap_findings_sync( $project_id, $findings, $detectors ) {
 	$now   = sap_now();
 	$seen  = array();
 	$stats = array( 'new' => 0, 'updated' => 0, 'resolved' => 0 );
+	$user_done = function_exists( 'sap_user_resolved' ) ? sap_user_resolved( $project_id ) : array();
 	foreach ( $findings as $f ) {
+		$f  = apply_filters( 'sap_finding_pre_sync', $f, $project_id );
 		$fp = substr( hash( 'sha256', $f['detector'] . '|' . $f['key'] ), 0, 40 );
 		if ( isset( $seen[ $fp ] ) ) {
 			continue;
@@ -98,7 +100,8 @@ function sap_findings_sync( $project_id, $findings, $detectors ) {
 		$old = $wpdb->get_row( $wpdb->prepare( "SELECT id, status FROM $table WHERE project_id = %d AND fingerprint = %s", $project_id, $fp ), ARRAY_A ); // phpcs:ignore
 		if ( $old ) {
 			// A resolved finding that shows up again is reopened; dismissed stays dismissed.
-			if ( 'resolved' === $old['status'] ) {
+			// …unless you marked it resolved in the last 30 days (the data behind it may not be refreshed yet).
+			if ( 'resolved' === $old['status'] && ( $user_done[ $fp ] ?? 0 ) < time() - 30 * DAY_IN_SECONDS ) {
 				$data['status'] = 'open';
 			}
 			$wpdb->update( $table, $data, array( 'id' => (int) $old['id'] ) );

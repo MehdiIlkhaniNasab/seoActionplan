@@ -741,7 +741,7 @@ add_action( 'rest_api_init', function () {
 		},
 	) );
 
-	// Quick finding action (plan / someday / dismiss / reopen) without page reload.
+	// Quick finding action (plan / someday / dismiss / reopen / resolve) without page reload.
 	register_rest_route( $ns, '/finding/(?P<id>\d+)', array(
 		'methods'             => 'POST',
 		'permission_callback' => 'sap_can',
@@ -764,6 +764,9 @@ add_action( 'rest_api_init', function () {
 			} elseif ( 'reopen' === $do ) {
 				sap_finding_set_status( $f['id'], 'open' );
 				$msg = 'به صندوق ورودی برگشت';
+			} elseif ( 'resolve' === $do ) {
+				sap_finding_mark_resolved( $f );
+				$msg = 'به‌عنوان حل‌شده ثبت شد؛ تا ۳۰ روز دوباره پیشنهاد نمی‌شود';
 			} else {
 				return new WP_Error( 'sap_do', 'عملیات نامعتبر.', array( 'status' => 400 ) );
 			}

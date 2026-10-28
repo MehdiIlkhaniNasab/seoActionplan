@@ -22,19 +22,28 @@ function sap_report_technical( $project, $from, $to ) {
 	$pid  = $project['id'];
 	$list = sap_tech_checklist( $project );
 	$secs = array();
+	// Minor items (pages without impressions, AI-triaged as cosmetic) are
+	// counted apart so the client report does not inflate the problems.
+	$is_minor = function ( $f ) {
+		return 'minor' === ( $f['evidence']['tier'] ?? '' ) || (int) $f['score'] <= 12;
+	};
 	foreach ( $list as $k => $s ) {
+		$major  = array_values( array_filter( $s['items'], function ( $f ) use ( $is_minor ) {
+			return ! $is_minor( $f );
+		} ) );
 		$secs[] = array(
 			'key'    => $k,
 			'label'  => $s['label'],
 			'score'  => $s['score'],
 			'status' => $s['status'],
-			'issues' => count( $s['items'] ),
+			'issues' => count( $major ),
+			'minor'  => count( $s['items'] ) - count( $major ),
 			'kpis'   => array_map( function ( $kp ) {
 				return array( 'value' => $kp[0], 'label' => $kp[1], 'tone' => $kp[2] );
 			}, $s['kpis'] ),
 			'top'    => array_slice( array_map( function ( $f ) {
 				return $f['title'];
-			}, $s['items'] ), 0, 3 ),
+			}, $major ), 0, 3 ),
 		);
 	}
 	$tech_det = array();

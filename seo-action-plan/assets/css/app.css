@@ -1108,6 +1108,15 @@ details > .sap-months { margin-top: 12px; }
 .sap-proposal-top b { font-size: 14px; margin-inline-end: 4px; }
 .sap-proposal details summary { cursor: pointer; font-size: 12.5px; font-weight: 700; color: var(--accent-ink); }
 .sap-proposal-detail { font-size: 13px; line-height: 1.95; color: var(--ink-2); margin: 6px 0; }
+.sap-proposal-acts { display: flex; flex-direction: column; gap: 6px; flex-shrink: 0; }
+.sap-proposal-acts .sap-btn { justify-content: center; min-width: 76px; }
+.sap-btn.is-good { color: #15803D; border-color: #BBF0D0; } .sap-btn.is-good:hover { background: #ECFDF3; }
+.sap-chip.is-minor { background: #F1F5F9; color: #64748B; font-weight: 500; }
+.sap-proposal-triage { display: flex; gap: 6px; align-items: flex-start; color: var(--ink-2); background: #F8FAFF; border-radius: 10px; padding: 6px 10px; margin: 2px 0; }
+.sap-proposal-triage svg { flex-shrink: 0; margin-top: 4px; color: var(--accent); }
+.sap-proposal-notes summary { color: var(--ink-2) !important; font-weight: 500 !important; }
+.sap-proposal-notes .sap-comments { margin-top: 6px; }
+@media (max-width: 640px) { .sap-proposal { flex-wrap: wrap; } .sap-proposal-main { flex-basis: calc(100% - 30px); } .sap-proposal-acts { flex-direction: row; width: 100%; } .sap-proposal-acts .sap-btn { flex: 1; } }
 .sap-deliverable { background: #F8FAFF !important; color: var(--ink) !important; border: 1px solid #DCE6F7; text-align: right !important; font-family: var(--font) !important; font-size: 13px !important; line-height: 1.9; white-space: pre-wrap; }
 
 .sap-audit-groups { margin-bottom: 14px; }

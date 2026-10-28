@@ -357,8 +357,8 @@ function sap_keymap_build( $project ) {
 	$map = sap_keymap( $pid );
 	foreach ( array_unique( $urls ) as $url ) {
 		$k = sap_norm_url( $url );
-		if ( isset( $sheet[ $k ] ) ) {
-			continue;
+		if ( isset( $sheet[ $k ] ) || sap_url_has_params( $url ) || preg_match( '#/page/\d+/?$#', (string) wp_parse_url( $url, PHP_URL_PATH ) ) ) {
+			continue; // Filter / sort / paginated URLs are versions of a page, not pages.
 		}
 		$title = $title_of( $url );
 		$type  = sap_guess_page_type( $url );

@@ -321,6 +321,8 @@ add_action( 'admin_post_sap_findings', function () {
 			sap_finding_set_status( $id, 'dismissed' );
 		} elseif ( 'reopen' === $do ) {
 			sap_finding_set_status( $id, 'open' );
+		} elseif ( 'resolve' === $do ) {
+			sap_finding_mark_resolved( $f );
 		}
 		++$n;
 	}
@@ -329,6 +331,7 @@ add_action( 'admin_post_sap_findings', function () {
 		'someday' => 'به «شاید بعداً» منتقل شد',
 		'dismiss' => 'رد شد',
 		'reopen'  => 'دوباره باز شد',
+		'resolve' => 'به‌عنوان حل‌شده ثبت شد',
 	);
 	sap_back( sap_return_url( sap_project_url( $pid, 'findings' ) ), sprintf( '%s مورد %s.', sap_num( $n ), $labels[ $do ] ?? 'بروز شد' ), $n > 0 );
 } );

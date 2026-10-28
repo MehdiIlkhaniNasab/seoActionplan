@@ -165,6 +165,10 @@ function sap_content_step( $rev ) {
 	$prog    = $rev['progress'];
 	$blocks  = (array) ( $rev['original']['blocks'] ?? array() );
 	$facts   = sap_content_facts( $project, $rev['url'] );
+	$recent  = array_slice( array_column( sap_recent_work( $project['id'] )[ sap_norm_url( $rev['url'] ) ] ?? array(), 'what' ), 0, 6 );
+	if ( $recent ) {
+		$facts['recent_work'] = $recent; // Don't redo what was just done on this page.
+	}
 	if ( ! empty( $rev['original']['site'] ) ) {
 		$site              = $rev['original']['site'];
 		$facts['wordpress'] = sap_site_ai_facts( array( 'type' => $site['type'] ?? '', 'seo' => $site['seo'] ?? array(), 'details' => array( 'images' => $site['images'] ?? array(), 'product' => $site['product'] ?? null, 'term' => $site['term'] ?? null ) ) );
