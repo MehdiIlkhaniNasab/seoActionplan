@@ -461,3 +461,65 @@ function sap_keymap_rows( $project, $tab ) {
 	unset( $r );
 	return $rows;
 }
+
+/**
+ * Health of the keyword map: share of important pages with a decision, and the
+ * problems left (two owners, ranking conflicts, pruning not done).
+ *
+ * @return array{score:int|null, important:int, decided:int, with_kw:int, dup:int, rank:int, prune:int}
+ */
+function sap_keymap_health( $project ) {
+	$pid  = $project['id'];
+	$map  = sap_keymap( $pid );
+	$inv  = sap_site_inventory( $pid );
+	$ctx  = sap_keymap_rules_ctx( $project );
+	$imp  = array();
+	foreach ( $inv as $k => $it ) {
+		$impr = (int) ( $ctx['impr'][ $k ]['impressions'] ?? 0 );
+		if ( ( in_array( $it['ctype'], array( 'product_cat', 'brand', 'product_tag' ), true ) && empty( $it['noindex'] ) && (int) ( $it['count'] ?? 1 ) > 0 ) || $impr >= 10 ) {
+			$imp[ $k ] = true;
+		}
+	}
+	foreach ( $map as $k => $m ) {
+		if ( (int) ( $ctx['impr'][ $k ]['impressions'] ?? 0 ) >= 10 ) {
+			$imp[ $k ] = true; // Mapped pages with traffic, wherever they live.
+		}
+	}
+	if ( ! $inv ) {
+		foreach ( $ctx['impr'] as $k => $r ) {
+			if ( (int) $r['impressions'] >= (int) sap_setting( 'min_impressions', 50 ) ) {
+				$imp[ $k ] = true;
+			}
+		}
+		foreach ( $map as $k => $m ) {
+			$imp[ $k ] = true;
+		}
+	}
+	$h = array( 'score' => null, 'important' => count( $imp ), 'decided' => 0, 'with_kw' => 0, 'dup' => 0, 'rank' => 0, 'prune' => 0 );
+	foreach ( array_keys( $imp ) as $k ) {
+		$m = $map[ $k ] ?? null;
+		if ( $m && ( '' !== $m['core'] || ! sap_keymap_has_kw( $m['status'] ) ) ) {
+			++$h['decided'];
+		}
+		if ( $m && '' !== $m['core'] ) {
+			++$h['with_kw'];
+		}
+	}
+	$own = array();
+	foreach ( $map as $k => $m ) {
+		if ( '' !== $m['core'] && 'home' !== $m['page_type'] ) {
+			$own[ $m['core'] ] = ( $own[ $m['core'] ] ?? 0 ) + 1;
+		}
+		if ( in_array( $m['status'], array( 'prune_410', 'prune_301' ), true ) ) {
+			++$h['prune'];
+		}
+	}
+	$h['dup']  = count( array_filter( $own, function ( $n ) {
+		return $n > 1;
+	} ) );
+	$h['rank'] = count( sap_keymap_rank_conflicts( $project ) );
+	if ( $h['important'] ) {
+		$h['score'] = max( 0, min( 100, (int) round( 100 * $h['decided'] / $h['important'] ) - 4 * $h['dup'] - 3 * $h['rank'] ) );
+	}
+	return $h;
+}

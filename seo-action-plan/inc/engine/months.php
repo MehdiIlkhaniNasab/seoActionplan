@@ -255,6 +255,12 @@ function sap_month_report( $project, $period = '', $from = '', $to = '' ) {
 			}, $m['next_plan'] ) ),
 		),
 		'focuses'        => $m['focuses'],
+		'pillars'        => sap_report_pillars( $project, $period, $m ),
+		'impact'         => sap_report_impact( $project ),
+		'next_by_pillar' => array_reduce( (array) $m['next_plan'], function ( $acc, $i ) {
+			$acc[ sap_pillars()[ sap_pillar_of_context( $i['category'] ?? '' ) ][0] ][] = $i;
+			return $acc;
+		}, array() ),
 		'resets'         => (int) ( $m['resets'] ?? 0 ),
 		'generated_at'   => sap_now(),
 		'plugin_version' => SAP_VERSION,

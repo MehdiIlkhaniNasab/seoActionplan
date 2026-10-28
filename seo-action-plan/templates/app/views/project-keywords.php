@@ -110,6 +110,10 @@ $ctx   = sap_keymap_rules_ctx( $project );
 			<button type="button" class="sap-btn" data-sap-step="keymap,analyze" data-project="<?php echo esc_attr( $pid ); ?>"><?php echo sap_icon( 'refresh' ); // phpcs:ignore ?>بازخوانی و اعمال قوانین (رایگان)</button>
 		</div>
 	</div>
+	<?php $kh = sap_keymap_health( $project ); ?>
+	<?php if ( null !== $kh['score'] ) : ?>
+		<p class="sap-km-health"><b class="<?php echo $kh['score'] >= 85 ? 'sap-ok' : ( $kh['score'] >= 60 ? '' : 'sap-bad' ); ?>">سلامت نقشه کلمات: <?php echo esc_html( sap_num( $kh['score'] ) ); ?></b> · <?php echo esc_html( sprintf( '%s از %s صفحه مهم تعیین‌تکلیف شده (%s با کلمه کلیدی) · %s کلمه با دو صاحب · %s تداخل رتبه · %s صفحه در صف هرس', sap_num( $kh['decided'] ), sap_num( $kh['important'] ), sap_num( $kh['with_kw'] ), sap_num( $kh['dup'] ), sap_num( $kh['rank'] ), sap_num( $kh['prune'] ) ) ); ?></p>
+	<?php endif; ?>
 	<?php if ( ! $inv_on ) : ?>
 		<p class="sap-alert is-warn">فهرست وردپرس گرفته نشده؛ فقط صفحاتی که در سرچ کنسول نمایش دارند دیده می‌شوند و نوع آن‌ها از آدرس حدس زده می‌شود. در <a href="<?php echo esc_url( sap_project_url( $pid, 'audit' ) ); ?>">تحلیل محتوا</a> «دریافت فهرست کامل از وردپرس» را بزنید.</p>
 	<?php endif; ?>

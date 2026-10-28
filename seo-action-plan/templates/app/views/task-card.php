@@ -21,6 +21,7 @@ $post    = esc_url( admin_url( 'admin-post.php' ) );
 		<?php if ( $manager ) : ?>
 			<input type="checkbox" class="sap-task-pick" value="<?php echo esc_attr( $t['id'] ); ?>" aria-label="انتخاب">
 			<button type="button" class="sap-task-del" data-sap-task-del="<?php echo esc_attr( $t['id'] ); ?>" title="حذف کار" aria-label="حذف کار"><?php echo sap_icon( 'trash', 14 ); // phpcs:ignore ?></button>
+			<button type="button" class="sap-task-repeat<?php echo 0 === strpos( (string) $t['recurring'], 'p' ) ? ' is-on' : ''; ?>" data-sap-task-repeat="<?php echo esc_attr( $t['id'] ); ?>" title="تکرار ماهانه: هر ماه خودکار به اکشن پلن اضافه شود" aria-label="تکرار ماهانه"><?php echo sap_icon( 'refresh', 14 ); // phpcs:ignore ?></button>
 		<?php endif; ?>
 		<span class="sap-task-title"><?php echo esc_html( $t['title'] ); ?></span>
 		<span class="sap-task-meta">

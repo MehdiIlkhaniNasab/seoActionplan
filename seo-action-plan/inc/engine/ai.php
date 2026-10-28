@@ -1029,6 +1029,10 @@ function sap_ai_plan_run_parts( $project, $input, $hash, $key, $def ) {
 	$part = $parts[ $name ];
 	$cap  = (float) $project['capacity_hours'];
 	$base = array_intersect_key( $input, array_flip( array( 'project', 'focuses', 'search_console', 'rank_tracker', 'technical', 'content_sheet' ) ) );
+	$learn = sap_impact_feedback( $project['id'] );
+	if ( $learn ) {
+		$base['impact_feedback'] = $learn; // What worked / did not on this site (measured before / after).
+	}
 	$done = array_map( function ( $t ) {
 		return $t['title'];
 	}, $prog['plan'] );
@@ -1075,7 +1079,7 @@ function sap_ai_plan_run_parts( $project, $input, $hash, $key, $def ) {
 		$hours = max( 2, round( $cap * $part['share'] ) );
 		$task  = implode( "\n", array(
 			'داده‌های پروژه سئو در JSON زیر است: خلاصه سرچ کنسول، Focusها، یافته‌های قوانین (findings با id) و نتیجه تحلیل تخصصی همین حوزه.',
-			'هر جا expert_note آمده، نظر خود متخصص سئو است؛ آن را رعایت کن.',
+			'هر جا expert_note آمده، نظر خود متخصص سئو است؛ آن را رعایت کن. impact_feedback نتیجه سنجیده‌شده اقدامات قبلی همین سایت است: نوع کارهایی که رشد آورده‌اند اولویت بگیرند و کارهایی که نتیجه نداده‌اند با روش بهتر یا اصلاح‌شده پیشنهاد شوند.',
 			sprintf( 'فقط کارهای حوزه «%s» را برای اکشن پلن این ماه بنویس: حداکثر %s کار مشخص در سقف حدود %s ساعت، مرتب‌شده بر اساس اثر روی Focus و هدف، با هفته پیشنهادی ۱ تا ۴.', $part['label'], sap_num( $part['max'] ), sap_num( $hours ) ),
 			'هر کار: عنوان با نام صفحه/کلمه، دلیل با عدد، مراحل کوتاه، و خروجی آماده در deliverable (تایتل/متا، FAQ، لینک‌ها «مبدأ ← مقصد: انکر»، راه‌حل تکنیکال) — کوتاه و کاربردی. کارهای هم‌نوع کوچک را ادغام کن. idهای finding مرتبط را در finding_ids بگذار.',
 			( $this_month || $done ) ? 'این کارها از قبل در پلن هستند؛ تکرار نکن: ' . implode( ' | ', array_slice( array_merge( $this_month, $done ), 0, 30 ) ) : '',

@@ -811,6 +811,21 @@
 		}).catch(function (e) { out.textContent = e.message; out.className = 'sap-bad'; }).then(function () { idle(b); });
 	});
 
+	/* ---- Monthly repeating tasks ---- */
+	document.addEventListener('click', function (ev) {
+		var rp = ev.target.closest('[data-sap-task-repeat]');
+		if (rp) {
+			ev.preventDefault();
+			ev.stopPropagation();
+			post('task/' + rp.getAttribute('data-sap-task-repeat') + '/repeat').then(function (res) { toast(res.msg); rp.classList.toggle('is-on', !!res.on); }).catch(function (e) { toast(e.message, true); });
+		}
+		var pr = ev.target.closest('[data-sap-plan-recurring]');
+		if (pr) {
+			busy(pr, '…');
+			post('plan/' + pr.getAttribute('data-sap-plan-recurring') + '/recurring', { period: pr.getAttribute('data-period') }).then(function (res) { toast(res.msg); setTimeout(function () { location.reload(); }, 800); }).catch(function (e) { toast(e.message, true); idle(pr); });
+		}
+	}, true);
+
 	/* ---- Custom tasks from a brief; calendar article from your keyword ---- */
 	document.addEventListener('submit', function (ev) {
 		var f = ev.target;

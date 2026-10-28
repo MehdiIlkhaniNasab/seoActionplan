@@ -422,6 +422,28 @@ add_action( 'rest_api_init', function () {
 			return array( 'ok' => true, 'id' => $id, 'msg' => sprintf( 'مقاله «%s» با بریف، تیترها و لینک‌ها به تقویم %s اضافه شد', $idea['title'] ?: $idea['keyword'], sap_period_label( $period ) ) . ( $warn ? ' — هشدار: ' . implode( ' ', $warn ) : '' ) . sap_calendar_sync_sheet( sap_project( $project['id'] ) ) );
 		} ),
 	) );
+	// Repeat a task every month (project template) / add this month's repeating tasks.
+	register_rest_route( $ns, '/task/(?P<id>\d+)/repeat', array(
+		'methods'             => 'POST',
+		'permission_callback' => 'sap_can',
+		'callback'            => function ( WP_REST_Request $req ) {
+			$t = sap_task( (int) $req['id'] );
+			if ( ! $t ) {
+				return new WP_Error( 'sap_task', 'کار پیدا نشد.', array( 'status' => 404 ) );
+			}
+			$on = sap_task_toggle_recurring( $t );
+			return array( 'ok' => true, 'on' => $on, 'msg' => $on ? 'این کار هر ماه خودکار به اکشن پلن اضافه می‌شود.' : 'تکرار ماهانه این کار برداشته شد.' );
+		},
+	) );
+	register_rest_route( $ns, '/plan/(?P<project>\d+)/recurring', array(
+		'methods'             => 'POST',
+		'permission_callback' => 'sap_can',
+		'callback'            => $project_route( function ( $project, $req ) {
+			$period = sap_period_sanitize( (string) ( $req->get_param( 'period' ) ?: sap_period_current() ) );
+			$n      = sap_plan_add_recurring( $project['id'], $period );
+			return array( 'ok' => true, 'msg' => $n ? sprintf( '%s کار ماهانه ثابت به %s اضافه شد.', sap_num( $n ), sap_period_label( $period ) ) : 'کارهای ماهانه این ماه از قبل در برنامه هستند.' );
+		} ),
+	) );
 	register_rest_route( $ns, '/offpage/(?P<project>\d+)/collect', array(
 		'methods'             => 'POST',
 		'permission_callback' => 'sap_can',

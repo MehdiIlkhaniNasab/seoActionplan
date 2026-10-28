@@ -59,6 +59,7 @@ function sap_project_tabs_all() {
 		'calendar' => array( 'تقویم محتوا', 'clock' ),
 		'ideas'    => array( 'ایده‌های محتوا', 'spark' ),
 		'activity' => array( 'لاگ اقدامات', 'log' ),
+		'impact'   => array( 'ارزیابی اثر اقدامات', 'target' ),
 		'focuses'  => array( 'Focus و اهداف', 'target' ),
 		'graph'    => array( 'گراف کلمات و صفحات', 'link' ),
 		'seosignal' => array( 'سئو سیگنال', 'research' ),
@@ -83,7 +84,7 @@ function sap_project_groups() {
 		'content'   => array( 'سئو محتوا', 'log', array( 'audit', 'keywords', 'calendar', 'ideas', 'content' ) ),
 		'offpage'   => array( 'آف‌پیج', 'link', array( 'offpage' ) ),
 		'keywords'  => array( 'رقبا و داده‌ها', 'research', array( 'competitors', 'seosignal', 'graph' ) ),
-		'work'      => array( 'برنامه و اجرا', 'list', array( 'plan', 'findings', 'activity' ) ),
+		'work'      => array( 'برنامه و اجرا', 'list', array( 'plan', 'impact', 'findings', 'activity' ) ),
 	);
 }
 

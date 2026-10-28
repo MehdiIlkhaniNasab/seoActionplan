@@ -63,6 +63,10 @@ $args = array( 'fnames' => $fnames, 'here' => $here, 'focuses' => $focuses, 'ope
 			<label class="sap-inline-label">ظرفیت <input type="number" name="capacity" min="1" value="<?php echo esc_attr( (int) $cap ); ?>" class="is-tiny"> ساعت</label>
 			<button class="sap-btn is-primary" type="submit"><?php echo sap_icon( 'spark' ); // phpcs:ignore ?><?php echo $tasks ? 'تکمیل هوشمند برنامه' : 'ساخت اکشن پلن هوشمند'; ?></button>
 		</form>
+		<?php $tpl_n = count( sap_project_recurring( $pid ) ); ?>
+		<?php if ( $tpl_n ) : ?>
+			<button type="button" class="sap-btn" data-sap-plan-recurring="<?php echo esc_attr( $pid ); ?>" data-period="<?php echo esc_attr( $period ); ?>" title="کارهایی که «تکرار ماهانه» گرفته‌اند"><?php echo sap_icon( 'refresh', 16 ); // phpcs:ignore ?>کارهای ماهانه ثابت (<?php echo esc_html( sap_num( $tpl_n ) ); ?>)</button>
+		<?php endif; ?>
 		<?php if ( $cols['next'] || $cols['doing'] || $cols['waiting'] || $cols['inbox'] ) : ?>
 			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
 				<?php sap_form_fields( 'sap_plan_carry', array( 'project_id' => $pid, 'from' => $period ) ); ?>

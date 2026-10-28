@@ -38,6 +38,29 @@ function sap_plan_add_recurring( $project_id, $period ) {
 		}
 	}
 	$n = 0;
+	// The project's own monthly tasks («تکرار ماهانه» on a task card).
+	foreach ( sap_project_recurring( $project_id ) as $key => $r ) {
+		if ( isset( $have[ $key ] ) ) {
+			continue;
+		}
+		sap_task_save( array(
+			'project_id' => $project_id,
+			'focus_id'   => (int) ( $r['focus_id'] ?? 0 ),
+			'title'      => $r['title'],
+			'notes'      => (string) ( $r['notes'] ?? '' ),
+			'context'    => $r['context'],
+			'status'     => 'next',
+			'period'     => $period,
+			'effort'     => (float) $r['effort'],
+			'url'        => (string) ( $r['url'] ?? '' ),
+			'keyword'    => (string) ( $r['keyword'] ?? '' ),
+			'recurring'  => $key,
+		) );
+		++$n;
+	}
+	if ( ! sap_setting( 'use_recurring' ) ) {
+		return $n;
+	}
 	foreach ( sap_recurring_tasks() as $r ) {
 		$key = 'r' . substr( md5( $r['title'] ), 0, 12 );
 		if ( isset( $have[ $key ] ) ) {
@@ -74,7 +97,7 @@ function sap_plan_generate( $project_id, $period, $args = array() ) {
 		'max_tasks' => 40,
 	) );
 	$capacity = (float) $args['capacity'];
-	$rec      = sap_setting( 'use_recurring' ) ? sap_plan_add_recurring( $project_id, $period ) : 0;
+	$rec      = sap_setting( 'use_recurring' ) || sap_project_recurring( $project_id ) ? sap_plan_add_recurring( $project_id, $period ) : 0;
 	$ai       = sap_ai_plan_to_tasks( $project, $period, $capacity );
 	$used     = sap_plan_used_hours( $project_id, $period );
 	$min      = $ai['added'] || sap_dataset( $project_id, 'ai_analysis' ) ? 60 : 0; // After AI: critical items only.
@@ -152,4 +175,40 @@ function sap_weekly_review( $project_id ) {
 		'new_found'   => $new,
 		'open_period' => $open_period,
 	);
+}
+
+/**
+ * Monthly task templates of a project: key => {title, context, effort, notes, url, keyword, focus_id}.
+ */
+function sap_project_recurring( $project_id ) {
+	$p = sap_project( $project_id );
+	return $p ? (array) ( $p['options']['recurring_tpl'] ?? array() ) : array();
+}
+
+/**
+ * Make a task repeat every month (or stop it).
+ *
+ * @return bool True when it now repeats.
+ */
+function sap_task_toggle_recurring( $task ) {
+	$tpl = sap_project_recurring( $task['project_id'] );
+	$key = 0 === strpos( (string) $task['recurring'], 'p' ) ? $task['recurring'] : 'p' . substr( md5( $task['title'] ), 0, 12 );
+	if ( isset( $tpl[ $key ] ) ) {
+		unset( $tpl[ $key ] );
+		sap_project_set_option( $task['project_id'], 'recurring_tpl', $tpl );
+		sap_task_save( array( 'recurring' => '' ), $task['id'] );
+		return false;
+	}
+	$tpl[ $key ] = array(
+		'title'    => $task['title'],
+		'context'  => $task['context'],
+		'effort'   => (float) $task['effort'],
+		'notes'    => mb_substr( (string) $task['notes'], 0, 3000 ),
+		'url'      => (string) $task['url'],
+		'keyword'  => (string) $task['keyword'],
+		'focus_id' => (int) $task['focus_id'],
+	);
+	sap_project_set_option( $task['project_id'], 'recurring_tpl', $tpl );
+	sap_task_save( array( 'recurring' => $key ), $task['id'] );
+	return true;
 }

@@ -25,6 +25,7 @@ function sap_detectors() {
 		'kw_conflict'    => array( 'دو صفحه با کلمه اصلی یکسان (نقشه کلمات)', array( 'keymap' ) ),
 		'kw_unowned'     => array( 'کلمه پرنمایش بدون صفحه اختصاصی', array( 'gsc_qp', 'keymap' ) ),
 		'kw_rank_mismatch' => array( 'صفحه دیگری برای کلمه هدف رتبه بهتری دارد (احتمال کنیبال)', array( 'gsc_qp', 'keymap' ) ),
+		'anchor_mismatch'  => array( 'انکر لینک داخلی با کلمه صفحه دیگری', array( 'pages', 'keymap' ) ),
 		'decay'          => array( 'افت ترافیک صفحات', array( 'gsc_pages' ) ),
 		'sitemaps'       => array( 'سلامت سایت‌مپ‌ها', array( 'gsc_sitemaps' ) ),
 		'cal_todo'       => array( 'محتوای منتشرنشده تقویم', array( 'sheet_calendar' ) ),
@@ -1758,6 +1759,50 @@ function sap_detect_kw_rank_mismatch( $ctx ) {
 			'severity'   => min( 70, 35 + (int) round( $c['other_impr'] / 20 ) ),
 			'confidence' => 0.7,
 			'effort'     => 1,
+		);
+	}
+	return $out;
+}
+
+/**
+ * Internal links whose anchor is the keyword of one page but point to another:
+ * they tell Google the wrong page is the answer for that keyword.
+ */
+function sap_detect_anchor_mismatch( $ctx ) {
+	$by = array();
+	foreach ( (array) ( $ctx['pages']['pages'] ?? array() ) as $src => $p ) {
+		foreach ( (array) ( $p['links'] ?? array() ) as $l ) {
+			$core   = sap_kw_core( (string) ( $l[1] ?? '' ) );
+			$owners = (array) ( $ctx['kw_index']['primary'][ $core ] ?? array() );
+			if ( '' === $core || 1 !== count( $owners ) ) {
+				continue;
+			}
+			$to    = sap_norm_url( (string) $l[0] );
+			$owner = $owners[0];
+			if ( $to === $owner || $src === $owner || '' === $to ) {
+				continue;
+			}
+			$by[ $core ][] = array( 'src' => $p['url'] ?? $src, 'anchor' => $l[1], 'to' => $l[0], 'owner' => $ctx['keymap'][ $owner ]['url'] );
+		}
+	}
+	$out = array();
+	foreach ( array_slice( $by, 0, 15, true ) as $core => $links ) {
+		$owner = $links[0]['owner'];
+		$items = array();
+		foreach ( array_slice( $links, 0, 8 ) as $l ) {
+			$items[] = array( 'url' => $l['src'], 'page' => sap_ctx_title( $ctx, $l['src'] ), 'anchor' => $l['anchor'], 'to' => sap_ctx_title( $ctx, $l['to'] ) );
+		}
+		$out[] = array(
+			'key'        => 'am:' . $core,
+			'context'    => 'internal_links',
+			'title'      => sprintf( 'انکر «%s» به صفحه اشتباه لینک شده (%s لینک)', $links[0]['anchor'], sap_num( count( $links ) ) ),
+			'detail'     => sprintf( 'این عبارت کلمه اصلی «%s» در نقشه کلمات است، ولی لینک‌ها با همین انکر به صفحه دیگری می‌روند و به گوگل سیگنال اشتباه می‌دهند. مقصد لینک‌ها را به صفحه صاحب کلمه عوض کنید یا انکر را متناسب با صفحه مقصد تغییر دهید.', sap_ctx_title( $ctx, $owner ) ),
+			'url'        => $owner,
+			'keyword'    => (string) $links[0]['anchor'],
+			'evidence'   => array( 'cols' => array( 'page' => 'صفحه مبدأ', 'anchor' => 'انکر', 'to' => 'مقصد فعلی' ), 'items' => $items ),
+			'severity'   => min( 55, 25 + 5 * count( $links ) ),
+			'confidence' => 0.8,
+			'effort'     => 0.25 * min( 8, count( $links ) ),
 		);
 	}
 	return $out;

@@ -229,6 +229,40 @@ $top3 = array_slice( $open, 0, 3 );
 	</section>
 <?php endif; ?>
 
+<?php
+$wk     = sap_week_digest( $project );
+$tscore = sap_tech_score( sap_tech_checklist( $project ) );
+$kh     = sap_keymap_health( $project );
+$imp    = sap_impact_summary( $pid );
+$tone   = function ( $v ) {
+	return null === $v ? '' : ( $v >= 85 ? 'is-good' : ( $v >= 60 ? 'is-warn' : 'is-bad' ) );
+};
+?>
+<section class="sap-panel sap-week">
+	<div class="sap-panel-head">
+		<h2><?php echo sap_icon( 'clock' ); // phpcs:ignore ?>این هفته و کارنامه پروژه</h2>
+		<a href="<?php echo esc_url( sap_project_url( $pid, 'impact' ) ); ?>">ارزیابی اثر اقدامات ←</a>
+	</div>
+	<div class="sap-week-cards">
+		<a class="<?php echo esc_attr( $tone( $tscore ) ); ?>" href="<?php echo esc_url( sap_project_url( $pid, 'technical' ) ); ?>"><b><?php echo null === $tscore ? '—' : esc_html( sap_num( $tscore ) ); ?></b><span>سلامت تکنیکال</span></a>
+		<a class="<?php echo esc_attr( $tone( $kh['score'] ) ); ?>" href="<?php echo esc_url( sap_project_url( $pid, 'keywords' ) ); ?>"><b><?php echo null === $kh['score'] ? '—' : esc_html( sap_num( $kh['score'] ) ); ?></b><span>سلامت نقشه کلمات</span><small><?php echo esc_html( sprintf( '%s از %s صفحه مهم تعیین‌تکلیف شده', sap_num( $kh['decided'] ), sap_num( $kh['important'] ) ) ); ?></small></a>
+		<a href="<?php echo esc_url( sap_project_url( $pid, 'impact' ) ); ?>"><b><span class="sap-ok"><?php echo esc_html( sap_num( $imp['growth'] ) ); ?></span> / <span class="sap-bad"><?php echo esc_html( sap_num( $imp['decline'] ) ); ?></span></b><span>اقدامات با رشد / افت</span><small><?php echo esc_html( sprintf( '%s اقدام سنجیده‌شده', sap_num( $imp['total'] ) ) ); ?></small></a>
+		<a href="<?php echo esc_url( sap_project_url( $pid, 'plan' ) ); ?>" class="<?php echo $wk['overdue'] ? 'is-bad' : ''; ?>"><b><?php echo esc_html( sap_num( count( $wk['done'] ) ) ); ?></b><span>کار انجام‌شده در ۷ روز</span><small><?php echo esc_html( sprintf( '%s عقب‌افتاده · %s سررسید هفته آینده', sap_num( count( $wk['overdue'] ) ), sap_num( count( $wk['due'] ) ) ) ); ?></small></a>
+	</div>
+	<?php if ( $wk['by_focus'] ) : ?>
+		<ul class="sap-week-focus">
+			<?php foreach ( $wk['by_focus'] as $fname => $x ) : ?>
+				<li><b><?php echo esc_html( $fname ); ?></b><span><?php echo esc_html( sprintf( '%s کار انجام شد (%s ساعت)', sap_num( $x['done'] ), sap_num( $x['hours'], 1 ) ) ); ?></span><?php if ( $x['overdue'] ) : ?><span class="sap-bad"><?php echo esc_html( sap_num( $x['overdue'] ) ); ?> عقب‌افتاده</span><?php endif; ?></li>
+			<?php endforeach; ?>
+		</ul>
+	<?php endif; ?>
+	<?php if ( $wk['overdue'] ) : ?>
+		<p class="sap-small sap-muted">عقب‌افتاده‌ها: <?php echo esc_html( implode( ' · ', array_map( function ( $t ) {
+			return $t['title'];
+		}, array_slice( $wk['overdue'], 0, 4 ) ) ) ); ?></p>
+	<?php endif; ?>
+</section>
+
 <div class="sap-grid-2">
 	<section class="sap-panel">
 		<div class="sap-panel-head">
