@@ -103,6 +103,8 @@ add_action( 'admin_post_sap_save_settings', function () {
 	$changes['serp_provider']  = 'serpapi' === sap_post( 'serp_provider' ) ? 'serpapi' : 'serper';
 	$changes['serp_gl']        = sanitize_key( (string) sap_post( 'serp_gl', 'ir' ) ) ?: 'ir';
 	$changes['serp_hl']        = sanitize_key( (string) sap_post( 'serp_hl', 'fa' ) ) ?: 'fa';
+	$changes['geo_model']      = preg_replace( '/[^a-zA-Z0-9._:\/-]/', '', (string) sap_post( 'geo_model', '' ) );
+	$changes['hourly_cost']    = max( 0, (float) sap_post( 'hourly_cost', 0 ) );
 	foreach ( array( 'sms_key', 'tg_token', 'bale_token', 'serp_key' ) as $k ) {
 		$v = trim( (string) sap_post( $k ) );
 		if ( '' !== $v && false === strpos( $v, '•' ) ) {
@@ -166,6 +168,10 @@ add_action( 'admin_post_sap_save_project', function () {
 	$new = ! $id;
 	$id  = sap_project_save( $data, $id );
 	sap_project_set_option( $id, 'no_writeback', sap_post( 'writeback' ) ? 0 : 1 );
+	if ( null !== sap_post( 'click_value', null ) ) {
+		sap_project_set_option( $id, 'click_value', max( 0, (float) sap_post( 'click_value' ) ) );
+		sap_project_set_option( $id, 'hourly_cost', max( 0, (float) sap_post( 'hourly_cost' ) ) );
+	}
 	sap_back( sap_project_url( $id, $new ? 'overview' : 'settings' ), $new ? 'پروژه ساخته شد. قدم بعدی را در کارت «قدم بعدی» دنبال کنید.' : 'تنظیمات پروژه ذخیره شد.' );
 } );
 

@@ -203,11 +203,20 @@ $auth  = sap_google_auth_url();
 
 	<section class="sap-panel" id="serp">
 		<h2><?php echo sap_icon( 'research' ); // phpcs:ignore ?>داده نتایج گوگل (تحلیل ۱۰ نتیجه اول و رادار رقبا)</h2>
-		<p class="sap-muted sap-small">برای تحلیل نتایج گوگل قبل از هر بریف و رادار رقبا، ۱۰ نتیجه اول هر کلمه از یک سرویس SERP گرفته می‌شود (Serper.dev ارزان و سریع؛ SerpApi کامل‌تر). بدون کلید، تحلیل نتایج با داده سئو سیگنال (رقبای هر کلمه) انجام می‌شود.</p>
+		<p class="sap-muted sap-small">برای تحلیل نتایج گوگل قبل از هر بریف و رادار رقبا، ۱۰ نتیجه اول هر کلمه از یک سرویس SERP گرفته می‌شود (Serper.dev ارزان و سریع؛ SerpApi کامل‌تر). بدون کلید، تحلیل ۱۰ نتیجه اول غیرفعال است و رادار رقبا فقط با رتبه روزانه سئو سیگنال و نقشه سایت رقبا کار می‌کند.</p>
 		<div class="sap-grid-3">
 			<label>سرویس<select name="serp_provider"><option value="serper" <?php selected( 'serper', $s['serp_provider'] ); ?>>Serper.dev</option><option value="serpapi" <?php selected( 'serpapi', $s['serp_provider'] ); ?>>SerpApi</option></select></label>
 			<label>کلید API<input type="text" name="serp_key" dir="ltr" value="<?php echo esc_attr( sap_mask( $s['serp_key'] ) ); ?>" autocomplete="off"></label>
 			<label>کشور / زبان<span class="sap-inline"><input type="text" name="serp_gl" dir="ltr" value="<?php echo esc_attr( $s['serp_gl'] ); ?>" style="width:70px"><input type="text" name="serp_hl" dir="ltr" value="<?php echo esc_attr( $s['serp_hl'] ); ?>" style="width:70px"></span></label>
+		</div>
+	</section>
+
+	<section class="sap-panel" id="geo">
+		<h2><?php echo sap_icon( 'globe' ); // phpcs:ignore ?>دیده شدن در هوش مصنوعی (GEO) و هزینه‌ها</h2>
+		<p class="sap-muted sap-small">برای پیگیری حضور برند در پاسخ‌های هوش مصنوعی، سوال‌های مشتری‌ها هر هفته از این مدل پرسیده می‌شود. مدلی که به وب دسترسی دارد (مثلاً مدل‌های search در GapGPT) تصویر واقعی‌تری از ChatGPT/Perplexity می‌دهد؛ خالی = مدل اصلی تحلیل.</p>
+		<div class="sap-grid-2">
+			<label>مدل سنجش GEO<input type="text" name="geo_model" dir="ltr" value="<?php echo esc_attr( $s['geo_model'] ); ?>" placeholder="gpt-4o-search-preview"></label>
+			<label>هزینه پیش‌فرض هر ساعت کار (تومان)<input type="number" name="hourly_cost" min="0" step="1000" value="<?php echo esc_attr( (int) $s['hourly_cost'] ?: '' ); ?>"><small>برای ROI کارها؛ در تنظیمات هر پروژه قابل تغییر است.</small></label>
 		</div>
 	</section>
 

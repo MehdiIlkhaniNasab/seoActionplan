@@ -55,6 +55,7 @@ function sap_sync_steps() {
  * @return array{ok: bool, skipped: bool, msg: string}
  */
 function sap_sync_step( $project, $step, $force = false ) {
+	$GLOBALS['sap_ai_project'] = $project; // Memory and playbook in the AI prompts.
 	$fn = 'sap_step_' . $step;
 	// On-demand AI stages of the pillars (content audit per type, off-page plan).
 	if ( preg_match( '/^audit_(products|product_tax|posts|post_cat|pages)$/', $step ) || 'ai_offpage' === $step ) {

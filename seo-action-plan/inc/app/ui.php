@@ -71,6 +71,10 @@ function sap_project_tabs_all() {
 		'competitors' => array( 'رادار رقبا', 'radar' ),
 		'ranks'       => array( 'ردیابی رتبه', 'chart' ),
 		'automate'    => array( 'اتوماسیون سایت', 'bolt' ),
+		'memory'      => array( 'حافظه پروژه', 'brain' ),
+		'chat'        => array( 'گفتگو با داده‌ها', 'chat' ),
+		'geo'         => array( 'دیده‌شدن در هوش مصنوعی', 'globe' ),
+		'experiments' => array( 'آزمایش‌های سئو', 'flask' ),
 		'settings' => array( 'تنظیمات پروژه', 'settings' ),
 	);
 }
@@ -83,12 +87,12 @@ function sap_project_tabs_all() {
  */
 function sap_project_groups() {
 	return array(
-		'home'      => array( 'نمای کلی', 'grid', array( 'overview', 'alerts', 'insights', 'focuses' ) ),
+		'home'      => array( 'نمای کلی', 'grid', array( 'overview', 'chat', 'alerts', 'insights', 'memory', 'focuses' ) ),
 		'technical' => array( 'سئو تکنیکال', 'settings', array( 'technical' ) ),
 		'content'   => array( 'سئو محتوا', 'log', array( 'audit', 'serp', 'keywords', 'calendar', 'ideas', 'content' ) ),
 		'offpage'   => array( 'آف‌پیج', 'link', array( 'offpage' ) ),
-		'keywords'  => array( 'رتبه و رقبا', 'chart', array( 'ranks', 'competitors', 'seosignal', 'graph' ) ),
-		'work'      => array( 'برنامه و اجرا', 'list', array( 'plan', 'automate', 'impact', 'findings', 'activity' ) ),
+		'keywords'  => array( 'رتبه و رقبا', 'chart', array( 'ranks', 'competitors', 'geo', 'seosignal', 'graph' ) ),
+		'work'      => array( 'برنامه و اجرا', 'list', array( 'plan', 'automate', 'experiments', 'impact', 'findings', 'activity' ) ),
 	);
 }
 
@@ -385,7 +389,7 @@ function sap_page_ref( $project, $url ) {
  * @param array $opt    width, height, invert, colors, min, max, labels (x labels).
  */
 function sap_svg_lines( $series, $opt = array() ) {
-	$o      = wp_parse_args( $opt, array( 'width' => 640, 'height' => 180, 'invert' => false, 'colors' => array( '#2563EB', '#F59E0B', '#16A34A', '#9333EA', '#DB2777', '#0891B2' ), 'min' => null, 'max' => null, 'pad' => 22, 'unit' => '' ) );
+	$o      = wp_parse_args( $opt, array( 'width' => 640, 'height' => 180, 'invert' => false, 'colors' => array( '#2563EB', '#F59E0B', '#16A34A', '#9333EA', '#DB2777', '#0891B2' ), 'min' => null, 'max' => null, 'pad' => 22, 'unit' => '', 'mark' => null, 'mark_label' => '' ) );
 	$all    = array();
 	$keys   = array();
 	foreach ( $series as $vals ) {
@@ -422,6 +426,24 @@ function sap_svg_lines( $series, $opt = array() ) {
 		$gy   = $p + ( $h - 2 * $p ) * $g;
 		$gv   = $o['invert'] ? $min + ( $max - $min ) * $g : $max - ( $max - $min ) * $g;
 		$svg .= '<line x1="' . $p . '" x2="' . ( $w - $p ) . '" y1="' . round( $gy, 1 ) . '" y2="' . round( $gy, 1 ) . '" class="sap-chart-grid"/><text x="' . ( $w - 2 ) . '" y="' . round( $gy + 4, 1 ) . '" class="sap-chart-axis" text-anchor="end">' . esc_html( sap_num( $gv, $gv < 10 ? 1 : 0 ) . $o['unit'] ) . '</text>';
+	}
+	// A vertical marker at one x key (e.g. the day a change was made).
+	if ( null !== $o['mark'] ) {
+		$mi = array_search( $o['mark'], $keys, true );
+		if ( false === $mi ) {
+			foreach ( $keys as $i => $k ) {
+				if ( false === $mi && strcmp( (string) $k, (string) $o['mark'] ) >= 0 ) {
+					$mi = $i;
+				}
+			}
+		}
+		if ( false !== $mi ) {
+			$mx   = round( $x( $mi ), 1 );
+			$svg .= '<line x1="' . $mx . '" x2="' . $mx . '" y1="' . $p . '" y2="' . ( $h - $p ) . '" stroke="#F59E0B" stroke-width="1.5" stroke-dasharray="4 3" vector-effect="non-scaling-stroke"/>';
+			if ( '' !== $o['mark_label'] ) {
+				$svg .= '<text x="' . $mx . '" y="' . ( $p - 6 ) . '" class="sap-chart-axis" text-anchor="middle" style="fill:#B45309">' . esc_html( $o['mark_label'] ) . '</text>';
+			}
+		}
 	}
 	$ci = 0;
 	foreach ( $series as $label => $vals ) {

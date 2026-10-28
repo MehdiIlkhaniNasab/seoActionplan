@@ -95,6 +95,9 @@ function sap_ai_estimate_run( $analysis, $light ) {
 function sap_ai_model_for( $purpose ) {
 	if ( 'assist' === $purpose ) {
 		$model = sap_setting( 'ai_model_assist', 'claude-haiku-5-5' );
+	} elseif ( 'geo' === $purpose ) {
+		// AI-visibility tracking: a chosen public model (e.g. a ChatGPT / web-search model of the gateway).
+		$model = sap_setting( 'geo_model', '' ) ?: sap_setting( 'ai_model', 'gpt-5-mini' );
 	} elseif ( 'light' === $purpose ) {
 		$model = sap_setting( 'ai_model_light', '' ) ?: sap_setting( 'ai_model', 'gpt-5-mini' );
 	} else {

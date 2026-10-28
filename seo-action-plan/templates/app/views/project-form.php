@@ -64,6 +64,14 @@ $new = ! $p['id'];
 			<label>ظرفیت کاری ماه (ساعت)<input type="number" name="capacity_hours" min="1" step="1" value="<?php echo esc_attr( (int) $p['capacity_hours'] ); ?>"></label>
 		</div>
 		<div class="sap-grid-2">
+			<label>ارزش هر کلیک ارگانیک (تومان)<input type="number" name="click_value" min="0" step="100" value="<?php echo esc_attr( (int) ( $p['options']['click_value'] ?? 0 ) ?: '' ); ?>" placeholder="مثلاً ۵۰۰۰">
+				<small>برای پیش‌بینی بازگشت سرمایه هر کار. ساده: (نرخ تبدیل × میانگین سود هر سفارش). خالی = فقط تعداد کلیک.</small>
+			</label>
+			<label>هزینه هر ساعت کار (تومان)<input type="number" name="hourly_cost" min="0" step="1000" value="<?php echo esc_attr( (int) ( $p['options']['hourly_cost'] ?? 0 ) ?: '' ); ?>" placeholder="مثلاً ۴۰۰۰۰۰">
+				<small>هزینه ساعت تیم برای محاسبه ROI؛ خالی = بدون محاسبه ROI.</small>
+			</label>
+		</div>
+		<div class="sap-grid-2">
 			<label>رقبا (حداکثر ۳ دامنه)<textarea name="competitors" rows="2" dir="ltr" data-sap-tags placeholder="competitor.com"><?php echo esc_textarea( implode( "\n", $p['competitors'] ) ); ?></textarea>
 				<small>هر رقیب ماهی ۲ واحد سهمیه سئو سیگنال مصرف می‌کند.</small>
 			</label>

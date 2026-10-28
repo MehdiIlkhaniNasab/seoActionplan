@@ -72,9 +72,9 @@ function sap_auto_obj( $project, $url ) {
  *
  * @return string token
  */
-function sap_auto_preview_put( $project_id, $preview ) {
+function sap_auto_preview_put( $project_id, $preview, $ttl = DAY_IN_SECONDS ) {
 	$token = strtolower( wp_generate_password( 12, false ) );
-	set_transient( 'sap_auto_prev_' . $project_id . '_' . $token, $preview, DAY_IN_SECONDS );
+	set_transient( 'sap_auto_prev_' . $project_id . '_' . $token, $preview, ! empty( $GLOBALS['sap_autopilot_run'] ) ? 8 * DAY_IN_SECONDS : $ttl );
 	return $token;
 }
 
@@ -106,7 +106,7 @@ function sap_auto_log_save( $project_id, $log ) {
  * @param array $edits Changes edited in the preview (replace the previewed ones of the same field).
  * @return array|WP_Error {msg, entry}
  */
-function sap_auto_apply( $project, $token, $edits = array() ) {
+function sap_auto_apply( $project, $token, $edits = array(), $source = 'user' ) {
 	$pv = sap_auto_preview_get( $project['id'], $token );
 	if ( ! $pv ) {
 		return new WP_Error( 'sap_prev', 'این پیش‌نمایش منقضی شده؛ دوباره پیش‌نمایش بگیرید.', array( 'status' => 410 ) );
@@ -144,7 +144,8 @@ function sap_auto_apply( $project, $token, $edits = array() ) {
 		'detail' => $pv['detail'],
 		'key'    => $pv['key'] ?? '',
 		'at'     => sap_now(),
-		'user'   => $user->exists() ? $user->display_name : '',
+		'user'   => 'autopilot' === $source ? 'دستیار خودکار' : ( $user->exists() ? $user->display_name : '' ),
+		'source' => $source,
 		'status' => 'live',
 	);
 	$task_id = sap_task_save( array(
@@ -160,7 +161,7 @@ function sap_auto_apply( $project, $token, $edits = array() ) {
 		'keyword'    => (string) ( $pv['keyword'] ?? '' ),
 		'source'     => 'ai',
 	) );
-	sap_task_save( array( 'status' => 'done', 'result' => "اعمال خودکار روی سایت با سکان (بعد از تایید).\n" . $pv['detail'] ), $task_id );
+	sap_task_save( array( 'status' => 'done', 'result' => ( 'autopilot' === $source ? "اعمال خودکار توسط دستیار خودکار سکان (طبق سیاست پروژه).\n" : "اعمال خودکار روی سایت با سکان (بعد از تایید).\n" ) . $pv['detail'] ), $task_id );
 	$entry['task_id'] = $task_id;
 	$log              = sap_auto_log( $project['id'], '', 600 );
 	array_unshift( $log, $entry );
@@ -309,7 +310,7 @@ function sap_link_sentence( $text, $offset, $length ) {
  *
  * @return array|WP_Error preview
  */
-function sap_link_insert_plan( $project, $source, $target, $anchor, $finding_id = 0 ) {
+function sap_link_insert_plan( $project, $source, $target, $anchor, $finding_id = 0, $allow_ai = true ) {
 	$ok = sap_auto_ready( $project );
 	if ( is_wp_error( $ok ) ) {
 		return $ok;
@@ -363,6 +364,9 @@ function sap_link_insert_plan( $project, $source, $target, $anchor, $finding_id 
 	}
 	$why = '';
 	if ( '' === $method ) {
+		if ( ! $allow_ai ) {
+			return new WP_Error( 'sap_link_nf', 'عبارت انکر عیناً در متن نیست (دستیار خودکار فقط درج دقیق انجام می‌دهد).' );
+		}
 		if ( ! sap_ai_connected() ) {
 			return new WP_Error( 'sap_link_nf', 'عبارت انکر عیناً در متن صفحه مبدأ نیست و برای پیدا کردن جمله مناسب، کلید هوش مصنوعی لازم است.' );
 		}

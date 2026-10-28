@@ -146,6 +146,8 @@ function sap_resolve_route( $route ) {
 			return array_merge( $out, array( 'view' => 'my-tasks', 'title' => 'کارهای من', 'nav' => 'my', 'vars' => array() ) );
 		case 'team':
 			return array_merge( $out, array( 'view' => 'team', 'title' => 'تیم و اعضا', 'nav' => 'team', 'vars' => array() ) );
+		case 'learning':
+			return array_merge( $out, array( 'view' => 'learning', 'title' => 'یادگیری بین پروژه‌ها', 'nav' => 'learning', 'vars' => array() ) );
 		case 'settings':
 			return array_merge( $out, array( 'view' => 'settings', 'title' => 'تنظیمات و اتصال‌ها', 'vars' => array() ) );
 		case 'guide':

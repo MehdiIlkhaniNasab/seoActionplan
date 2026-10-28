@@ -881,7 +881,7 @@
 	}
 
 	/* ---- Comments (your own notes) ---- */
-	function esc(t) { var d = document.createElement('div'); d.textContent = t; return d.innerHTML; }
+	function esc(t) { var d = document.createElement('div'); d.textContent = t; return d.innerHTML.replace(/"/g, '&quot;').replace(/'/g, '&#39;'); } // Safe in text and attributes.
 	document.addEventListener('click', function (ev) {
 		var add = ev.target.closest('[data-sap-comment-add]');
 		var del = ev.target.closest('[data-sap-comment-del]');
@@ -1621,6 +1621,15 @@
 			}
 		});
 		document.addEventListener('keydown', function (ev) { if ('Escape' === ev.key && !modal.hidden) { close(); } });
+		/* Autopilot queue: review a prepared change in the same preview modal */
+		document.addEventListener('click', function (ev) {
+			var rv = ev.target.closest('[data-sap-ap-review]');
+			if (!rv) { return; }
+			var view = JSON.parse(rv.getAttribute('data-view') || '{}');
+			current = { pid: rv.getAttribute('data-project'), kind: rv.getAttribute('data-sap-ap-review'), res: view };
+			open(render[current.kind](view));
+			body.querySelectorAll('.sap-alt-item input').forEach(function (i) { var f = function () { i.nextElementSibling.textContent = i.value.length + ' / ۱۲۵'; }; i.addEventListener('input', f); f(); });
+		});
 
 		/* Attribute set editor */
 		var setBox = document.querySelector('[data-sap-attr-set]');
@@ -1712,6 +1721,251 @@
 				run(0);
 			});
 		}
+	})();
+
+	/* ---- Project memory ---- */
+	(function () {
+		var form = document.querySelector('[data-sap-mem-form]');
+		if (form) {
+			form.addEventListener('submit', function (ev) {
+				ev.preventDefault();
+				var d = {}; new FormData(form).forEach(function (v, k) { d[k] = v; });
+				var b = form.querySelector('[type=submit]'); b.disabled = true;
+				post(form.getAttribute('data-project') + '/memory', d).then(function (res) { toast(res.msg); setTimeout(function () { location.reload(); }, 700); }).catch(function (e) { toast(e.message, true); b.disabled = false; });
+			});
+		}
+		document.addEventListener('click', function (ev) {
+			var m = ev.target.closest('[data-sap-mem]');
+			if (!m) { return; }
+			var act = m.getAttribute('data-sap-mem');
+			if ('delete' === act && !window.confirm('این مورد از حافظه پروژه حذف شود؟')) { return; }
+			post(m.getAttribute('data-project') + '/memory/' + m.getAttribute('data-id') + '/' + act, {}).then(function (res) { toast(res.msg); setTimeout(function () { location.reload(); }, 500); }).catch(function (e) { toast(e.message, true); });
+		});
+	})();
+
+	/* ---- Chat with data ---- */
+	(function () {
+		var box = document.querySelector('[data-sap-chat]');
+		if (!box) { return; }
+		var pid = box.getAttribute('data-project');
+		var labels = JSON.parse(box.getAttribute('data-labels') || '{}');
+		var log = box.querySelector('[data-sap-chat-log]');
+		var form = box.querySelector('[data-sap-chat-form]');
+		var ta = form.querySelector('textarea');
+		var welcome = box.querySelector('[data-sap-chat-welcome]');
+		var busy = false;
+		var acts = []; // Suggested tasks of the answers, by index.
+		var fmt = function (t) {
+			var lines = esc(t || '').split(/\n/);
+			var out = '', list = false;
+			lines.forEach(function (l) {
+				l = l.replace(/\*\*(.+?)\*\*/g, '<b>$1</b>');
+				if (/^\s*[-•]\s+/.test(l)) { if (!list) { out += '<ul>'; list = true; } out += '<li>' + l.replace(/^\s*[-•]\s+/, '') + '</li>'; return; }
+				if (list) { out += '</ul>'; list = false; }
+				if (l.trim()) { out += '<p>' + l + '</p>'; }
+			});
+			return out + (list ? '</ul>' : '');
+		};
+		var chart = function (c) {
+			var W = 560, H = 190, P = 28, n = c.labels.length, all = [];
+			c.series.forEach(function (s) { s.values.forEach(function (v) { if (v !== null && !isNaN(v)) { all.push(+v); } }); });
+			if (!all.length) { return ''; }
+			var mn = Math.min.apply(null, all), mx = Math.max.apply(null, all);
+			if (c.type === 'bar') { mn = Math.min(0, mn); }
+			if (mx === mn) { mx = mn + 1; }
+			var colors = ['#2563EB', '#F59E0B', '#16A34A'];
+			var y = function (v) { var r = (v - mn) / (mx - mn); return c.reverse ? P + r * (H - 2 * P) : H - P - r * (H - 2 * P); };
+			var x = function (i) { return P + (n === 1 ? (W - 2 * P) / 2 : i * (W - 2 * P) / (n - 1)); };
+			var svg = '<svg class="sap-chart" viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="none">';
+			[0, 0.5, 1].forEach(function (r) { var yy = P + r * (H - 2 * P); svg += '<line class="sap-chart-grid" x1="' + P + '" x2="' + (W - P) + '" y1="' + yy + '" y2="' + yy + '"/>'; });
+			if (c.type === 'bar') {
+				var groups = c.series.length, bw = Math.max(4, (W - 2 * P) / n / (groups + 1));
+				c.series.forEach(function (s, si) {
+					s.values.forEach(function (v, i) {
+						var cx = P + (i + 0.5) * (W - 2 * P) / n - groups * bw / 2 + si * bw, top = y(Math.max(+v, 0)), base = y(Math.max(mn, 0));
+						svg += '<rect x="' + cx + '" y="' + Math.min(top, base) + '" width="' + (bw - 2) + '" height="' + Math.max(1, Math.abs(base - top)) + '" rx="3" fill="' + colors[si % 3] + '"><title>' + esc(c.labels[i] + ': ' + v) + '</title></rect>';
+					});
+				});
+			} else {
+				c.series.forEach(function (s, si) {
+					var d = '';
+					s.values.forEach(function (v, i) { if (v === null || isNaN(v)) { return; } d += (d ? 'L' : 'M') + x(i).toFixed(1) + ' ' + y(+v).toFixed(1); });
+					svg += '<path d="' + d + '" fill="none" stroke="' + colors[si % 3] + '" stroke-width="2.2" vector-effect="non-scaling-stroke" stroke-linejoin="round"/>';
+				});
+			}
+			[0, Math.floor((n - 1) / 2), n - 1].filter(function (v, i, a) { return a.indexOf(v) === i; }).forEach(function (i) { svg += '<text class="sap-chart-axis" x="' + x(i) + '" y="' + (H - 6) + '" text-anchor="middle">' + esc(String(c.labels[i] || '')) + '</text>'; });
+			svg += '<text class="sap-chart-axis" x="2" y="' + (c.reverse ? H - P : P) + '">' + esc(String(Math.round(mx * 10) / 10)) + '</text><text class="sap-chart-axis" x="2" y="' + (c.reverse ? P : H - P) + '">' + esc(String(Math.round(mn * 10) / 10)) + '</text></svg>';
+			var legend = '<p class="sap-chart-legend">' + c.series.map(function (s, si) { return '<span><i style="background:' + colors[si % 3] + '"></i>' + esc(s.name) + '</span>'; }).join('') + '</p>';
+			return '<div class="sap-chat-chart">' + (c.title ? '<b>' + esc(c.title) + '</b>' : '') + svg + legend + '</div>';
+		};
+		var bubble = function (m) {
+			if (m.role === 'user') { return '<div class="sap-msg is-user"><p>' + esc(m.text) + '</p></div>'; }
+			var h = '<div class="sap-msg is-bot"><span class="sap-chat-bot"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="8" width="16" height="12" rx="3"/><path d="M12 8V4M9 13h.01M15 13h.01"/></svg></span><div class="sap-msg-body">' + fmt(m.text);
+			if (m.table && m.table.columns && m.table.columns.length) {
+				h += '<div class="sap-table-wrap"><table class="sap-table sap-chat-table">' + (m.table.title ? '<caption>' + esc(m.table.title) + '</caption>' : '') + '<thead><tr>' + m.table.columns.map(function (c) { return '<th>' + esc(c) + '</th>'; }).join('') + '</tr></thead><tbody>' + (m.table.rows || []).map(function (r) { return '<tr>' + r.map(function (c) { return '<td dir="auto">' + esc(String(c)) + '</td>'; }).join('') + '</tr>'; }).join('') + '</tbody></table></div>';
+			}
+			if (m.chart && m.chart.labels && m.chart.labels.length) { h += chart(m.chart); }
+			if (m.actions && m.actions.length) {
+				h += '<div class="sap-chat-actions"><b>کارهای پیشنهادی</b>' + m.actions.map(function (a) {
+					return '<div class="sap-chat-act"><div><p><b>' + esc(a.title) + '</b></p>' + (a.why ? '<p class="sap-small sap-muted">' + esc(a.why) + '</p>' : '') + '</div><button type="button" class="sap-btn is-soft is-small" data-sap-chat-task="' + (acts.push(a) - 1) + '">+ اکشن پلن</button></div>';
+				}).join('') + '</div>';
+			}
+			h += '<p class="sap-chat-foot">' + (m.tools && m.tools.length ? '<span>داده: ' + m.tools.map(function (t) { return esc(labels[t] || t); }).join('، ') + '</span>' : '') + '<button type="button" class="sap-btn is-ghost is-small" data-sap-chat-remember>ذخیره در حافظه پروژه</button></p>';
+			if (m.followups && m.followups.length) { h += '<div class="sap-chat-starts">' + m.followups.map(function (f) { return '<button type="button" class="sap-chip" data-sap-chat-ask="' + esc(f) + '">' + esc(f) + '</button>'; }).join('') + '</div>'; }
+			return h + '</div></div>';
+		};
+		var scroll = function () { log.scrollTop = log.scrollHeight; };
+		JSON.parse(box.getAttribute('data-history') || '[]').forEach(function (m) { log.insertAdjacentHTML('beforeend', bubble(m)); });
+		log.style.scrollBehavior = 'auto'; scroll(); setTimeout(function () { scroll(); log.style.scrollBehavior = ''; }, 60);
+		var ask = function (q) {
+			q = (q || '').trim();
+			if (!q || busy) { return; }
+			busy = true;
+			if (welcome) { welcome.hidden = true; }
+			box.querySelector('[data-sap-chat-clear]').hidden = false;
+			log.insertAdjacentHTML('beforeend', bubble({ role: 'user', text: q }) + '<div class="sap-msg is-bot is-typing" data-sap-typing><span class="sap-chat-bot">…</span><div class="sap-msg-body"><p class="sap-typing"><i></i><i></i><i></i> در حال خواندن داده‌ها و تحلیل…</p></div></div>');
+			scroll(); ta.value = '';
+			post(pid + '/chat', { message: q }).then(function (res) {
+				log.querySelector('[data-sap-typing]').remove();
+				log.insertAdjacentHTML('beforeend', bubble(res.reply)); scroll();
+			}).catch(function (e) {
+				var t = log.querySelector('[data-sap-typing]'); if (t) { t.remove(); }
+				log.insertAdjacentHTML('beforeend', '<div class="sap-msg is-bot is-err"><div class="sap-msg-body"><p>' + esc(e.message) + '</p></div></div>');
+			}).then(function () { busy = false; ta.focus(); });
+		};
+		form.addEventListener('submit', function (ev) { ev.preventDefault(); ask(ta.value); });
+		ta.addEventListener('keydown', function (ev) { if (ev.key === 'Enter' && !ev.shiftKey) { ev.preventDefault(); ask(ta.value); } });
+		ta.addEventListener('input', function () { ta.style.height = 'auto'; ta.style.height = Math.min(160, ta.scrollHeight) + 'px'; });
+		box.addEventListener('click', function (ev) {
+			var a = ev.target.closest('[data-sap-chat-ask]');
+			var t = ev.target.closest('[data-sap-chat-task]');
+			var r = ev.target.closest('[data-sap-chat-remember]');
+			if (a) { ask(a.getAttribute('data-sap-chat-ask')); return; }
+			if (t) {
+				t.disabled = true;
+				post(pid + '/chat/task', acts[+t.getAttribute('data-sap-chat-task')]).then(function (res) { toast(res.msg); t.textContent = '✓ اضافه شد'; }).catch(function (e) { toast(e.message, true); t.disabled = false; });
+				return;
+			}
+			if (r) {
+				var msg = r.closest('.sap-msg-body'); var prev = msg.closest('.sap-msg').previousElementSibling;
+				var q = prev && prev.classList.contains('is-user') ? prev.textContent : 'از گفتگو با داده‌ها';
+				r.disabled = true;
+				post(pid + '/memory', { kind: 'note', title: q.slice(0, 200), body: msg.querySelector('p') ? Array.prototype.map.call(msg.querySelectorAll(':scope > p, :scope > ul li'), function (p) { return p.textContent; }).join('\n').slice(0, 2000) : '', source: 'chat' }).then(function (res) { toast(res.msg); r.textContent = '✓ در حافظه'; }).catch(function (e) { toast(e.message, true); r.disabled = false; });
+				return;
+			}
+			if (ev.target.closest('[data-sap-chat-clear]')) {
+				post(pid + '/chat/clear', {}).then(function () { location.reload(); });
+			}
+		});
+	})();
+
+	/* ---- GEO: questions, run, audit, llms.txt ---- */
+	(function () {
+		var form = document.querySelector('[data-sap-geo-prompts]');
+		var parse = function (txt) { return txt.split(/\n+/).map(function (l) { var p = l.split('|'); return { q: (p[0] || '').trim(), kw: (p[1] || '').trim() }; }).filter(function (x) { return x.q; }); };
+		if (form) {
+			var pid = form.getAttribute('data-project');
+			var ta = form.querySelector('textarea');
+			var save = function () { return post(pid + '/geo/prompts', { prompts: parse(ta.value) }); };
+			form.addEventListener('submit', function (ev) { ev.preventDefault(); save().then(function (res) { toast(res.msg); setTimeout(function () { location.reload(); }, 600); }).catch(function (e) { toast(e.message, true); }); });
+			form.querySelector('[data-sap-geo-suggest]').addEventListener('click', function (ev) {
+				var b = ev.currentTarget; b.disabled = true; b.classList.add('is-loading');
+				post(pid + '/geo/suggest', {}).then(function (res) {
+					var cur = parse(ta.value).map(function (x) { return x.q; });
+					var add = res.prompts.filter(function (p) { return cur.indexOf(p.q) < 0; }).map(function (p) { return p.q + (p.kw ? ' | ' + p.kw : ''); });
+					ta.value = (ta.value.trim() ? ta.value.trim() + '\n' : '') + add.join('\n');
+					toast(add.length + ' سوال پیشنهاد شد؛ ویرایش و ذخیره کنید.');
+				}).catch(function (e) { toast(e.message, true); }).then(function () { b.disabled = false; b.classList.remove('is-loading'); });
+			});
+			var prog = form.querySelector('[data-sap-geo-progress]');
+			form.querySelector('[data-sap-geo-run]').addEventListener('click', function (ev) {
+				var b = ev.currentTarget; b.disabled = true;
+				prog.hidden = false; prog.querySelector('span').textContent = 'ذخیره سوال‌ها…';
+				var step = function (first) {
+					post(pid + '/geo/run', { restart: first ? 1 : 0 }).then(function (res) {
+						prog.querySelector('span').textContent = res.msg; prog.querySelector('i').style.width = (res.pct || 5) + '%';
+						if (res.more) { return step(false); }
+						toast(res.msg); setTimeout(function () { location.reload(); }, 900);
+					}).catch(function (e) { toast(e.message, true); prog.querySelector('span').textContent = e.message; b.disabled = false; });
+				};
+				save().then(function () { step(true); }).catch(function (e) { toast(e.message, true); b.disabled = false; });
+			});
+		}
+		document.addEventListener('click', function (ev) {
+			var au = ev.target.closest('[data-sap-geo-audit]');
+			var ll = ev.target.closest('[data-sap-llms] [data-sap-llms]');
+			if (au) {
+				au.disabled = true; au.classList.add('is-loading');
+				post(au.getAttribute('data-project') + '/geo/audit', {}).then(function (res) { toast(res.msg); setTimeout(function () { location.reload(); }, 600); }).catch(function (e) { toast(e.message, true); au.disabled = false; au.classList.remove('is-loading'); });
+				return;
+			}
+			if (ll) {
+				var wrap = ll.closest('section[data-sap-llms]');
+				var pid2 = wrap.getAttribute('data-project');
+				var text = wrap.querySelector('[data-sap-llms-text]');
+				var act = ll.getAttribute('data-sap-llms');
+				if (act === 'publish' && !text.value.trim()) { toast('اول پیش‌نویس را بسازید یا متن را بنویسید.', true); return; }
+				if (act !== 'build' && !window.confirm(act === 'publish' ? 'llms.txt روی سایت منتشر شود؟' : 'llms.txt به نسخه قبل برگردد؟')) { return; }
+				ll.disabled = true; ll.classList.add('is-loading');
+				post(pid2 + '/geo/llms', { 'do': act, content: text.value }).then(function (res) {
+					if (act === 'build') { text.value = res.content; toast('پیش‌نویس ساخته شد؛ بررسی و ویرایش کنید، بعد منتشر کنید.'); } else { toast(res.msg); }
+				}).catch(function (e) { toast(e.message, true); }).then(function () { ll.disabled = false; ll.classList.remove('is-loading'); });
+			}
+		});
+	})();
+
+	/* ---- Experiments ---- */
+	(function () {
+		var form = document.querySelector('[data-sap-exp-form]');
+		if (form) {
+			var pid = form.getAttribute('data-project');
+			form.addEventListener('submit', function (ev) {
+				ev.preventDefault();
+				var d = {}; new FormData(form).forEach(function (v, k) { d[k] = v; });
+				var b = form.querySelector('[type=submit]'); b.disabled = true; b.classList.add('is-loading');
+				post(pid + '/exp', d).then(function (res) { toast(res.msg); setTimeout(function () { location.reload(); }, 700); }).catch(function (e) { toast(e.message, true); b.disabled = false; b.classList.remove('is-loading'); });
+			});
+			form.querySelector('[data-sap-exp-control]').addEventListener('click', function (ev) {
+				var b = ev.currentTarget; b.disabled = true;
+				post(pid + '/exp/control', { test: form.test.value }).then(function (res) {
+					if (!res.control.length) { toast('صفحه مشابهی پیدا نشد؛ دستی وارد کنید.', true); return; }
+					form.control.value = res.control.join('\n'); toast(res.control.length + ' صفحه کنترل مشابه پیشنهاد شد.');
+				}).catch(function (e) { toast(e.message, true); }).then(function () { b.disabled = false; });
+			});
+		}
+		document.addEventListener('click', function (ev) {
+			var x = ev.target.closest('[data-sap-exp]');
+			if (!x) { return; }
+			var act = x.getAttribute('data-sap-exp');
+			if (act !== 'measure' && !window.confirm(act === 'delete' ? 'این آزمایش حذف شود؟' : 'آزمایش پایان یابد؟')) { return; }
+			x.disabled = true; x.classList.add('is-loading');
+			post(x.getAttribute('data-project') + '/exp/' + x.getAttribute('data-id') + '/' + act, {}).then(function (res) { toast(res.msg); setTimeout(function () { location.reload(); }, 600); }).catch(function (e) { toast(e.message, true); x.disabled = false; x.classList.remove('is-loading'); });
+		});
+	})();
+
+	/* ---- Autopilot policy, run, dismiss ---- */
+	(function () {
+		var form = document.querySelector('[data-sap-ap-form]');
+		if (form) {
+			form.addEventListener('submit', function (ev) {
+				ev.preventDefault();
+				var d = { mode: (form.querySelector('[name=mode]:checked') || {}).value || 'off', limit: form.limit.value };
+				['schema', 'alts', 'links', 'alerts'].forEach(function (k) { d[k] = form[k].checked ? 1 : 0; });
+				post(form.getAttribute('data-project') + '/autopilot', d).then(function (res) { toast(res.msg); setTimeout(function () { location.reload(); }, 600); }).catch(function (e) { toast(e.message, true); });
+			});
+		}
+		document.addEventListener('click', function (ev) {
+			var run = ev.target.closest('[data-sap-ap-run]');
+			var dis = ev.target.closest('[data-sap-ap-dismiss]');
+			if (run) {
+				run.disabled = true; run.classList.add('is-loading');
+				post(run.getAttribute('data-project') + '/autopilot/run', {}).then(function (res) { toast(res.msg); setTimeout(function () { location.reload(); }, 1500); }).catch(function (e) { toast(e.message, true); run.disabled = false; run.classList.remove('is-loading'); });
+			}
+			if (dis) {
+				dis.disabled = true;
+				post(dis.getAttribute('data-project') + '/autopilot/dismiss', { token: dis.getAttribute('data-sap-ap-dismiss') }).then(function (res) { toast(res.msg); dis.closest('li').remove(); }).catch(function (e) { toast(e.message, true); dis.disabled = false; });
+			}
+		});
 	})();
 
 })();

@@ -18,6 +18,7 @@ $secs  = array(
 	'schema'     => array( 'اسکیما', 'code' ),
 	'alts'       => array( 'آلت تصاویر', 'image' ),
 	'attributes' => array( 'ویژگی محصولات', 'tag' ),
+	'autopilot'  => array( 'دستیار خودکار', 'bot' ),
 	'log'        => array( 'تغییرات اعمال‌شده', 'clock' ),
 );
 $sec   = isset( $secs[ $sec ] ) ? $sec : 'links';
@@ -289,6 +290,57 @@ $pg    = max( 1, (int) ( $_GET['pg'] ?? 1 ) ); // phpcs:ignore WordPress.Securit
 			<?php echo sap_pager_html( $npg, $cur, add_query_arg( 'cat', $cid, $here ) ); // phpcs:ignore ?>
 		</section>
 	<?php endif; ?>
+
+<?php elseif ( 'autopilot' === $sec ) : ?>
+	<?php
+	$pol   = sap_autopilot( $project );
+	$queue = sap_autopilot_queue( $pid );
+	$kinds = array( 'schema' => 'schema', 'alts' => 'alt', 'link' => 'link' );
+	?>
+	<section class="sap-panel">
+		<div class="sap-panel-head"><h2><?php echo sap_icon( 'bot' ); // phpcs:ignore ?>دستیار خودکار<small>هر روز ساعت ۳ بامداد کارهای تکراری و کم‌ریسک را آماده می‌کند: اسکیمای صفحات پربازدید، alt تصاویر، لینک‌های داخلی که انکرشان عیناً در متن هست، و تبدیل هشدارهای بحرانی به کار. بسته به سیاست شما، اعمال می‌کند یا در صف تایید می‌گذارد و به مدیر گزارش می‌دهد.</small></h2></div>
+		<form class="sap-ap-form" data-sap-ap-form data-project="<?php echo esc_attr( $pid ); ?>">
+			<div class="sap-ap-modes">
+				<?php foreach ( sap_autopilot_modes() as $k => $m ) : ?>
+					<label class="sap-ap-mode"><input type="radio" name="mode" value="<?php echo esc_attr( $k ); ?>" <?php checked( $pol['mode'], $k ); ?>><span><b><?php echo esc_html( $m[0] ); ?></b><small><?php echo esc_html( $m[1] ); ?></small></span></label>
+				<?php endforeach; ?>
+			</div>
+			<div class="sap-ap-opts">
+				<label class="sap-check"><input type="checkbox" name="schema" value="1" <?php checked( $pol['schema'] ); ?>> اسکیمای صفحات</label>
+				<label class="sap-check"><input type="checkbox" name="alts" value="1" <?php checked( $pol['alts'] ); ?>> alt تصاویر</label>
+				<label class="sap-check"><input type="checkbox" name="links" value="1" <?php checked( $pol['links'] ); ?>> لینک داخلی (فقط درج دقیق)</label>
+				<label class="sap-check"><input type="checkbox" name="alerts" value="1" <?php checked( $pol['alerts'] ); ?>> کار برای هشدار بحرانی</label>
+				<label>سقف اعمال خودکار در روز<input type="number" name="limit" min="1" max="30" value="<?php echo esc_attr( (int) $pol['limit'] ); ?>"></label>
+			</div>
+			<div class="sap-actions">
+				<button type="submit" class="sap-btn is-primary">ذخیره سیاست</button>
+				<button type="button" class="sap-btn is-soft" data-sap-ap-run data-project="<?php echo esc_attr( $pid ); ?>" <?php disabled( 'off' === $pol['mode'] ); ?>>اجرای همین حالا</button>
+			</div>
+			<?php if ( $pol['last'] ) : ?><p class="sap-small sap-muted">آخرین اجرا: <?php echo esc_html( sap_jdate( $pol['last'], 'long' ) . ' — ' . $pol['last_msg'] ); ?></p><?php endif; ?>
+			<p class="sap-small sap-muted">ایمنی: در حالت خودکار فقط تغییرات بدون خطا (اسکیمای معتبر، alt نوشته‌شده با هوش مصنوعی، لینک در عبارت موجود) و حداکثر تا سقف روزانه اعمال می‌شوند؛ محتوای متن هیچ‌وقت بازنویسی نمی‌شود و هر تغییر از «تغییرات اعمال‌شده» قابل برگشت است.</p>
+		</form>
+	</section>
+	<section class="sap-panel">
+		<div class="sap-panel-head"><h2>صف تایید (<?php echo esc_html( sap_num( count( $queue ) ) ); ?>)</h2></div>
+		<?php if ( ! $queue ) : ?>
+			<p class="sap-muted">چیزی منتظر تایید نیست.</p>
+		<?php else : ?>
+			<ul class="sap-auto-log">
+				<?php foreach ( array_reverse( $queue ) as $q ) : ?>
+					<?php $t = $types[ $q['type'] ] ?? array( $q['type'], 'bolt' ); ?>
+					<li>
+						<span class="sap-auto-ico"><?php echo sap_icon( $t[1], 16 ); // phpcs:ignore ?></span>
+						<div><b><?php echo esc_html( $q['label'] ); ?></b><p class="sap-muted sap-small"><?php echo esc_html( $t[0] . ' · آماده‌شده ' . sap_jdate( $q['at'], 'long' ) ); ?></p></div>
+						<?php echo sap_url_tag( $q['url'], 34 ); // phpcs:ignore ?>
+						<span class="sap-ap-acts">
+							<button type="button" class="sap-btn is-soft is-small" data-sap-ap-review="<?php echo esc_attr( $kinds[ $q['type'] ] ?? 'schema' ); ?>" data-project="<?php echo esc_attr( $pid ); ?>" data-view="<?php echo esc_attr( wp_json_encode( array_merge( (array) $q['view'], array( 'token' => $q['token'] ) ), JSON_UNESCAPED_UNICODE ) ); ?>">بررسی و تایید</button>
+							<button type="button" class="sap-btn is-ghost is-small" data-sap-ap-dismiss="<?php echo esc_attr( $q['token'] ); ?>" data-project="<?php echo esc_attr( $pid ); ?>">رد</button>
+						</span>
+					</li>
+				<?php endforeach; ?>
+			</ul>
+		<?php endif; ?>
+	</section>
 
 <?php else : ?>
 	<?php

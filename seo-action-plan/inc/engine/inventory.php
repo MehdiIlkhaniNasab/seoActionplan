@@ -201,7 +201,7 @@ function sap_step_site_inventory( $project, $force = false ) {
 			if ( false !== strpos( $res->get_error_message(), 'قدیمی' ) || 'sap_site_404' === $res->get_error_code() ) {
 				sap_inventory_chunks_clear( $pid, $prog );
 				delete_option( $opt );
-				return new WP_Error( 'sap_inv_old', 'افزونه رابط روی سایت کارفرما قدیمی است؛ برای فهرست کامل محتوا نسخه ۱٫۳ لازم است (فایل seoreport-connector-1.3.0.zip).' );
+				return new WP_Error( 'sap_inv_old', 'افزونه رابط روی سایت کارفرما قدیمی است؛ برای فهرست کامل محتوا نسخه ۱٫۳ به بالا لازم است (آخرین نسخه: seoreport-connector-1.5.0.zip).' );
 			}
 			// Slow site (timeout / 5xx): smaller pages and try again; the progress is kept.
 			if ( $per > 25 && $errs < 2 ) {

@@ -36,6 +36,13 @@ $post    = esc_url( admin_url( 'admin-post.php' ) );
 				<span class="sap-chip is-rec">دوره‌ای</span>
 			<?php endif; ?>
 			<span class="sap-muted"><?php echo esc_html( sap_num( $t['effort'], 1 ) ); ?>h</span>
+			<?php
+			$roi = 'done' !== $t['status'] && function_exists( 'sap_roi_estimate' ) ? sap_roi_estimate( sap_project( $t['project_id'] ), $t ) : null;
+			$rb  = $roi ? sap_roi_badge( $roi ) : '';
+			?>
+			<?php if ( '' !== $rb ) : ?>
+				<span class="sap-chip is-roi is-<?php echo esc_attr( $roi['confidence'] ); ?>" title="<?php echo esc_attr( 'پیش‌بینی اگر کار موفق شود · اطمینان: ' . array( 'low' => 'کم', 'medium' => 'متوسط', 'high' => 'زیاد' )[ $roi['confidence'] ] . "\n" . implode( "\n", $roi['basis'] ) ); ?>"><?php echo sap_icon( 'chart', 11 ); // phpcs:ignore ?><?php echo esc_html( $rb ); ?></span>
+			<?php endif; ?>
 			<?php if ( $t['assignee'] ) : ?>
 				<span class="sap-muted"><?php echo sap_icon( 'user', 12 ); // phpcs:ignore ?><?php echo esc_html( sap_user_name( $t['assignee'] ) ); ?></span>
 			<?php endif; ?>
@@ -56,6 +63,9 @@ $post    = esc_url( admin_url( 'admin-post.php' ) );
 				<?php endif; ?>
 			<?php endforeach; ?>
 		</form>
+		<?php if ( '' !== $rb ) : ?>
+			<div class="sap-roi-box"><b><?php echo sap_icon( 'chart', 14 ); // phpcs:ignore ?>پیش‌بینی بازگشت: <?php echo esc_html( $rb ); ?></b><span class="sap-muted sap-small">اطمینان <?php echo esc_html( array( 'low' => 'کم', 'medium' => 'متوسط', 'high' => 'زیاد' )[ $roi['confidence'] ] ); ?></span><ul><?php foreach ( $roi['basis'] as $line ) : ?><li><?php echo esc_html( $line ); ?></li><?php endforeach; ?></ul></div>
+		<?php endif; ?>
 		<?php if ( '' !== $t['outcome'] ) : ?>
 			<p class="sap-task-outcome"><b>خروجی مطلوب:</b> <?php echo esc_html( $t['outcome'] ); ?></p>
 		<?php endif; ?>

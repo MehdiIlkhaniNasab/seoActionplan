@@ -66,6 +66,8 @@ function sap_settings_defaults() {
 		'serp_key'               => '',
 		'serp_gl'                => 'ir',
 		'serp_hl'                => 'fa',
+		'geo_model'              => '',
+		'hourly_cost'            => 0,
 		'recurring'              => implode( "\n", array(
 			'management | تهیه گزارش ماهانه سئو | 3',
 		) ),

@@ -378,6 +378,7 @@ add_action( 'rest_api_init', function () {
 			if ( ! $project ) {
 				return new WP_Error( 'sap_project', 'پروژه یافت نشد.', array( 'status' => 404 ) );
 			}
+			$GLOBALS['sap_ai_project'] = $project; // Memory and playbook in the AI prompts.
 			return $cb( $project, $req );
 		};
 	};
@@ -509,6 +510,141 @@ add_action( 'rest_api_init', function () {
 	} );
 	$auto( 'attr-suggest', function ( $project, $req ) {
 		return sap_attr_set_suggest( $project, absint( $req->get_param( 'cat' ) ) );
+	} );
+
+	// Phase D: memory, chat, GEO, experiments, autopilot.
+	$route = function ( $path, $cb ) use ( $ns, $project_route ) {
+		register_rest_route( $ns, '/(?P<project>\d+)/' . $path, array(
+			'methods'             => 'POST',
+			'permission_callback' => 'sap_can',
+			'callback'            => $project_route( function ( $project, $req ) use ( $cb ) {
+				$res = $cb( $project, $req );
+				if ( is_wp_error( $res ) ) {
+					$data = $res->get_error_data();
+					if ( ! is_array( $data ) || empty( $data['status'] ) ) {
+						$res->add_data( array( 'status' => 422 ) );
+					}
+					return $res;
+				}
+				return array_merge( array( 'ok' => true ), (array) $res );
+			} ),
+		) );
+	};
+	$route( 'memory', function ( $project, $req ) {
+		$id = sap_memory_add( $project['id'], array( 'kind' => sanitize_key( (string) $req->get_param( 'kind' ) ), 'title' => (string) $req->get_param( 'title' ), 'body' => (string) $req->get_param( 'body' ), 'url' => (string) $req->get_param( 'url' ), 'keyword' => (string) $req->get_param( 'keyword' ), 'pinned' => rest_sanitize_boolean( $req->get_param( 'pinned' ) ), 'source' => 'chat' === $req->get_param( 'source' ) ? 'chat' : 'manual' ) );
+		return $id ? array( 'id' => $id, 'msg' => 'در حافظه پروژه ذخیره شد؛ از این به بعد هوش مصنوعی آن را در نظر می‌گیرد.' ) : new WP_Error( 'sap_mem', 'عنوان یا متن را بنویسید.' );
+	} );
+	$route( 'memory/(?P<id>\d+)/(?P<do>delete|pin|unpin)', function ( $project, $req ) {
+		if ( 'delete' === $req['do'] ) {
+			sap_memory_delete( $project['id'], (int) $req['id'] );
+			return array( 'msg' => 'حذف شد.' );
+		}
+		sap_memory_pin( $project['id'], (int) $req['id'], 'pin' === $req['do'] );
+		return array( 'msg' => 'pin' === $req['do'] ? 'سنجاق شد؛ همیشه به هوش مصنوعی داده می‌شود.' : 'از سنجاق برداشته شد.' );
+	} );
+	$route( 'chat', function ( $project, $req ) {
+		$msg = sap_chat_ask( $project, (string) $req->get_param( 'message' ) );
+		return is_wp_error( $msg ) ? $msg : array( 'reply' => $msg );
+	} );
+	$route( 'chat/clear', function ( $project ) {
+		sap_chat_save( $project['id'], array() );
+		return array( 'msg' => 'گفتگو پاک شد.' );
+	} );
+	$route( 'chat/task', function ( $project, $req ) {
+		$title = trim( sanitize_text_field( (string) $req->get_param( 'title' ) ) );
+		if ( '' === $title ) {
+			return new WP_Error( 'sap_task', 'عنوان کار خالی است.' );
+		}
+		$ctx = sanitize_key( (string) $req->get_param( 'context' ) );
+		$id  = sap_task_save( array( 'project_id' => $project['id'], 'title' => $title, 'notes' => sanitize_textarea_field( (string) $req->get_param( 'why' ) ) . "\n\n(از گفتگو با داده‌ها)", 'context' => array_key_exists( $ctx, sap_contexts() ) ? $ctx : 'content_update', 'status' => 'next', 'period' => sap_period_current(), 'effort' => max( 0.25, (float) $req->get_param( 'effort' ) ?: 1 ), 'url' => esc_url_raw( sap_full_url( $project, (string) $req->get_param( 'url' ) ) ), 'keyword' => sanitize_text_field( (string) $req->get_param( 'keyword' ) ), 'source' => 'ai' ) );
+		return array( 'id' => $id, 'msg' => 'به اکشن پلن ' . sap_period_label( sap_period_current() ) . ' اضافه شد.' );
+	} );
+	$route( 'geo/prompts', function ( $project, $req ) {
+		$list = array();
+		foreach ( (array) $req->get_param( 'prompts' ) as $p ) {
+			$q = trim( sanitize_text_field( (string) ( $p['q'] ?? '' ) ) );
+			if ( '' !== $q ) {
+				$list[] = array( 'q' => mb_substr( $q, 0, 300 ), 'kw' => sanitize_text_field( (string) ( $p['kw'] ?? '' ) ) );
+			}
+		}
+		sap_project_set_option( $project['id'], 'geo_prompts', array_slice( $list, 0, 25 ) );
+		return array( 'msg' => sap_num( count( $list ) ) . ' سوال برای پیگیری ذخیره شد.' );
+	} );
+	$route( 'geo/suggest', function ( $project ) {
+		$r = sap_geo_suggest( $project );
+		return is_wp_error( $r ) ? $r : array( 'prompts' => $r );
+	} );
+	$route( 'geo/run', function ( $project, $req ) {
+		$r = sap_geo_run_step( $project, rest_sanitize_boolean( $req->get_param( 'restart' ) ) );
+		return $r;
+	} );
+	$route( 'geo/audit', function ( $project ) {
+		sap_geo_audit( $project, true );
+		return array( 'msg' => 'بررسی GEO به‌روز شد.' );
+	} );
+	$route( 'geo/llms', function ( $project, $req ) {
+		$do = sanitize_key( (string) $req->get_param( 'do' ) );
+		if ( 'build' === $do ) {
+			return array( 'content' => sap_geo_llms_build( $project ) );
+		}
+		$ok = sap_auto_ready( $project, 'llms' );
+		if ( is_wp_error( $ok ) ) {
+			return $ok;
+		}
+		$res = sap_site_request( $project, 'POST', 'llms', 'rollback' === $do ? array( 'mode' => 'rollback' ) : array( 'content' => (string) $req->get_param( 'content' ) ) );
+		if ( is_wp_error( $res ) ) {
+			return $res;
+		}
+		delete_transient( 'sap_geo_audit_' . $project['id'] );
+		sap_activity_add( $project['id'], array( 'category' => 'technical', 'action' => 'llms_txt', 'title' => 'rollback' === $do ? 'برگرداندن llms.txt به نسخه قبل' : 'انتشار فایل llms.txt برای موتورهای هوش مصنوعی', 'url' => (string) $res['url'], 'source' => 'tool', 'ref' => 'llms:' . time() ) );
+		return array( 'msg' => ( 'rollback' === $do ? 'llms.txt به نسخه قبل برگشت.' : 'llms.txt منتشر شد: ' . $res['url'] ) . ( ! empty( $res['physical'] ) ? ' (توجه: یک فایل llms.txt واقعی در ریشه سایت هست و آن نمایش داده می‌شود.)' : '' ), 'url' => $res['url'] );
+	} );
+	$route( 'exp', function ( $project, $req ) {
+		$e = sap_exp_create( $project, array( 'name' => $req->get_param( 'name' ), 'hypothesis' => $req->get_param( 'hypothesis' ), 'change' => $req->get_param( 'change' ), 'metric' => $req->get_param( 'metric' ), 'start' => $req->get_param( 'start' ), 'days' => $req->get_param( 'days' ), 'test' => preg_split( '/\s+/', (string) $req->get_param( 'test' ) ), 'control' => preg_split( '/\s+/', (string) $req->get_param( 'control' ) ) ) );
+		return is_wp_error( $e ) ? $e : array( 'msg' => 'آزمایش ساخته شد؛ هر روز خودکار سنجیده می‌شود.', 'id' => $e['id'] );
+	} );
+	$route( 'exp/control', function ( $project, $req ) {
+		return array( 'control' => sap_exp_suggest_control( $project, array_filter( preg_split( '/\s+/', (string) $req->get_param( 'test' ) ) ) ) );
+	} );
+	$route( 'exp/(?P<id>[a-z0-9]+)/(?P<do>measure|delete|stop)', function ( $project, $req ) {
+		$id = sanitize_key( $req['id'] );
+		if ( 'delete' === $req['do'] ) {
+			$items = sap_experiments( $project['id'] );
+			unset( $items[ $id ] );
+			sap_experiments_save( $project['id'], $items );
+			return array( 'msg' => 'آزمایش حذف شد.' );
+		}
+		if ( 'stop' === $req['do'] ) {
+			$items = sap_experiments( $project['id'] );
+			if ( isset( $items[ $id ] ) ) {
+				$items[ $id ]['status'] = 'done';
+				sap_experiments_save( $project['id'], $items );
+			}
+			return array( 'msg' => 'آزمایش متوقف شد.' );
+		}
+		$r = sap_exp_measure( $project, $id );
+		return is_wp_error( $r ) ? $r : array( 'msg' => 'سنجش به‌روز شد.' );
+	} );
+	$route( 'autopilot', function ( $project, $req ) {
+		$pol = sap_autopilot( $project );
+		$m   = sanitize_key( (string) $req->get_param( 'mode' ) );
+		$pol['mode'] = array_key_exists( $m, sap_autopilot_modes() ) ? $m : 'off';
+		foreach ( array( 'schema', 'alts', 'links', 'alerts' ) as $k ) {
+			$pol[ $k ] = rest_sanitize_boolean( $req->get_param( $k ) ) ? 1 : 0;
+		}
+		$pol['limit'] = max( 1, min( 30, (int) $req->get_param( 'limit' ) ) );
+		sap_project_set_option( $project['id'], 'autopilot', $pol );
+		return array( 'msg' => 'سیاست دستیار خودکار ذخیره شد: ' . sap_autopilot_modes()[ $pol['mode'] ][0] . '.' );
+	} );
+	$route( 'autopilot/run', function ( $project ) {
+		$r = sap_autopilot_run( sap_project( $project['id'] ) );
+		return array( 'msg' => $r['msg'] );
+	} );
+	$route( 'autopilot/dismiss', function ( $project, $req ) {
+		$t = sanitize_key( (string) $req->get_param( 'token' ) );
+		delete_transient( 'sap_auto_prev_' . $project['id'] . '_' . $t );
+		sap_autopilot_queue_save( $project['id'], sap_autopilot_queue( $project['id'] ) );
+		return array( 'msg' => 'از صف حذف شد.' );
 	} );
 
 	register_rest_route( $ns, '/serp/(?P<project>\d+)', array(

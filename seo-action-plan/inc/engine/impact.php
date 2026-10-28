@@ -213,6 +213,7 @@ function sap_step_impact( $project, $force = false ) {
 	if ( ! $actions ) {
 		return sap_skip( 'هنوز اقدام انجام‌شده‌ای با آدرس صفحه نیست که اثرش سنجیده شود.' );
 	}
+	sap_memory_from_impact( $pid );
 	$s = sap_impact_summary( $pid );
 	return array( 'msg' => sprintf( 'اثر %s اقدام: %s رشد، %s افت، %s بدون تغییر، %s در انتظار داده.', sap_num( $s['total'] ), sap_num( $s['growth'] ), sap_num( $s['decline'] ), sap_num( $s['neutral'] ), sap_num( $s['wait'] ) ) );
 }
