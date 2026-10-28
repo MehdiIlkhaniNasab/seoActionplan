@@ -71,6 +71,7 @@ foreach ( array(
 	'engine/team',
 	'engine/ranks',
 	'engine/serp',
+	'engine/automate',
 	'engine/custom',
 	'engine/impact',
 	'engine/report-export',

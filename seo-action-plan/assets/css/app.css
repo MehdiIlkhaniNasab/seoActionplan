@@ -1663,3 +1663,97 @@ a.sap-url-a:hover .sap-url { color: var(--accent); text-decoration: underline; }
 .sap-radar-top time { margin-inline-start: auto; font-size: 11.5px; color: var(--muted); }
 .sap-radar-acts { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 4px !important; min-width: 0; }
 .sap-radar-bar.is-empty { background: #E2E8F0; }
+
+/* ---- Site automation ---- */
+.sap-auto-head { display: flex; flex-wrap: wrap; gap: 18px; justify-content: space-between; align-items: center; }
+.sap-auto-intro { flex: 1 1 420px; }
+.sap-auto-intro h2 { margin: 0 0 6px; }
+.sap-auto-kpis { display: grid; grid-template-columns: repeat(4, minmax(84px, 1fr)); gap: 8px; }
+.sap-auto-kpis div { display: grid; justify-items: center; gap: 2px; padding: 10px 12px; border-radius: 12px; background: var(--soft); border: 1px solid var(--line); color: var(--accent); }
+.sap-auto-kpis b { font-size: 20px; color: var(--ink); } .sap-auto-kpis span { font-size: 11.5px; color: var(--muted); }
+.sap-auto-nav { margin: 14px 0; }
+.sap-auto-nav a { display: inline-flex; align-items: center; gap: 6px; }
+.sap-auto-form { display: grid; grid-template-columns: 1fr 1fr 1fr auto; gap: 10px; align-items: end; margin: 6px 0 14px; padding: 12px; border-radius: 14px; background: var(--soft); border: 1px solid var(--line); }
+.sap-auto-form.is-one { grid-template-columns: 1fr auto auto; }
+.sap-auto-form label { display: grid; gap: 4px; font-size: 12.5px; font-weight: 600; color: var(--ink-2); }
+.sap-auto-form label.sap-check { display: flex; }
+.sap-link-q { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.sap-link-q li { display: flex; gap: 12px; align-items: center; justify-content: space-between; padding: 12px 14px; border: 1px solid var(--line); border-radius: 14px; background: var(--card); }
+.sap-link-q li.is-done { background: #F6FDF8; border-color: #CDEFD8; }
+.sap-link-q-path { display: grid; gap: 3px; min-width: 0; }
+.sap-link-q-path p { margin: 0; font-size: 13px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; min-width: 0; }
+.sap-link-q-anchor mark { background: #FEF3C7; padding: 1px 6px; border-radius: 5px; }
+.sap-auto-filter { display: flex; flex-wrap: wrap; gap: 10px; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+.sap-auto-search input { min-width: 220px; }
+.sap-auto-pages { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.sap-auto-pages li { display: grid; grid-template-columns: 40px minmax(0, 1fr) auto auto; gap: 10px; align-items: center; padding: 8px 10px; border-radius: 12px; border: 1px solid var(--line); background: var(--card); }
+.sap-auto-pages li > div { display: grid; gap: 2px; min-width: 0; }
+.sap-auto-pages li > div b { font-size: 13.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sap-auto-pages img, .sap-auto-ph { width: 40px; height: 40px; border-radius: 9px; object-fit: cover; background: var(--soft); display: grid; place-items: center; color: var(--muted); }
+.sap-auto-pages li.has-form { grid-template-columns: 40px minmax(0, 1fr) auto auto; }
+.sap-attr-desc { grid-column: 1 / -1; display: grid; gap: 8px; padding-top: 6px; }
+.sap-attr-desc[hidden] { display: none; }
+.sap-attr-desc .sap-btn { justify-self: start; }
+.sap-attr-layout { display: grid; grid-template-columns: 230px minmax(0, 1fr); gap: 16px; align-items: start; }
+.sap-attr-cats { display: grid; gap: 4px; max-height: 520px; overflow: auto; padding-inline-end: 4px; }
+.sap-attr-cats a { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 10px; color: var(--ink-2) !important; text-decoration: none; font-size: 13px; }
+.sap-attr-cats a span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sap-attr-cats a small { color: var(--muted); }
+.sap-attr-cats a i { width: 8px; height: 8px; border-radius: 50%; } .sap-attr-cats a i.is-ok { background: #22C55E; } .sap-attr-cats a i.is-draft { background: #F59E0B; }
+.sap-attr-cats a:hover { background: var(--soft); } .sap-attr-cats a.is-active { background: var(--accent-soft); color: var(--accent-ink) !important; font-weight: 700; }
+.sap-attr-set-head { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 10px; }
+.sap-attr-set-head h3 { margin: 0; font-size: 15px; } .sap-attr-set-head .sap-btn { margin-inline-start: auto; }
+.sap-attr-rows { display: grid; gap: 8px; }
+.sap-attr-row { display: grid; grid-template-columns: 1fr 120px 2fr auto auto; gap: 8px; align-items: center; padding: 8px; border-radius: 12px; background: var(--soft); border: 1px solid var(--line); }
+.sap-attr-row textarea { min-height: 40px; resize: vertical; }
+/* Modal */
+.sap-modal { position: fixed; inset: 0; z-index: 9999; background: rgba(15, 27, 51, .45); display: grid; place-items: center; padding: 16px; backdrop-filter: blur(2px); }
+.sap-modal[hidden] { display: none; }
+.sap-modal-box { position: relative; width: min(760px, 100%); max-height: calc(100vh - 32px); overflow: auto; background: var(--card); border-radius: 18px; padding: 22px 22px 18px; box-shadow: 0 24px 60px rgba(15, 27, 51, .25); }
+.sap-modal-x { position: absolute; inset-inline-end: 12px; top: 10px; border: 0; background: transparent; font-size: 24px; line-height: 1; color: var(--muted); cursor: pointer; }
+.sap-modal-t { margin: 0 0 10px; font-size: 17px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding-inline-end: 28px; }
+body.sap-modal-open { overflow: hidden; }
+.sap-auto-note { margin: 0 0 12px; padding: 9px 12px; border-radius: 10px; background: var(--accent-soft); color: var(--accent-ink); font-size: 12.5px; line-height: 1.8; }
+.sap-auto-route { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-size: 13px; margin: 0 0 10px; }
+.sap-auto-route i { font-style: normal; color: var(--muted); }
+.sap-auto-diff { display: grid; gap: 8px; }
+.sap-auto-diff > div { padding: 12px 14px; border-radius: 12px; border: 1px solid var(--line); }
+.sap-auto-diff small { display: block; font-size: 11.5px; color: var(--muted); margin-bottom: 4px; }
+.sap-auto-diff p { margin: 0; line-height: 2; font-size: 14px; }
+.sap-auto-diff .is-before { background: #FFF7F7; border-color: #F7D9D9; }
+.sap-auto-diff .is-after { background: #F4FCF6; border-color: #CDEFD8; }
+.sap-auto-diff mark { background: #BFDBFE; color: #1E3A8A; padding: 1px 4px; border-radius: 4px; text-decoration: underline; }
+.sap-auto-foot { display: flex; gap: 8px; margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--line); }
+.sap-schema-list { display: grid; gap: 8px; }
+.sap-schema-b { padding: 10px 12px; border-radius: 12px; border: 1px solid var(--line); background: var(--soft); }
+.sap-schema-b.is-off { opacity: .7; }
+.sap-schema-top { display: flex !important; flex-direction: row !important; justify-content: flex-start; gap: 8px; align-items: center; cursor: pointer; text-align: start; }
+.sap-schema-b p { margin: 6px 0 0; }
+.sap-schema-msg { font-size: 12.5px; margin: 4px 0 0 !important; } .sap-schema-msg.is-bad { color: #B91C1C; } .sap-schema-msg.is-warn { color: #B45309; }
+.sap-schema-b pre, .sap-auto-log pre { max-height: 260px; overflow: auto; background: #0F172A; color: #E2E8F0; padding: 10px; border-radius: 10px; font-size: 11.5px; line-height: 1.6; white-space: pre-wrap; word-break: break-word; }
+.sap-schema-b details summary, .sap-auto-log details summary { cursor: pointer; font-size: 12px; color: var(--accent); margin-top: 6px; }
+.sap-alt-list { display: grid; gap: 8px; }
+.sap-alt-item { display: grid; grid-template-columns: 76px minmax(0, 1fr); gap: 12px; align-items: start; padding: 10px; border-radius: 12px; border: 1px solid var(--line); }
+.sap-alt-item.is-keep { opacity: .65; }
+.sap-alt-item img { width: 76px; height: 76px; object-fit: cover; border-radius: 10px; background: var(--soft); }
+.sap-alt-item p { margin: 0 0 4px; }
+.sap-alt-item input { width: 100%; }
+.sap-alt-len { font-size: 11px; color: var(--muted); } .sap-alt-len.is-bad { color: #B91C1C; }
+.sap-attr-pick { display: grid; gap: 10px; }
+.sap-attr-p { padding: 10px 12px; border-radius: 12px; border: 1px solid var(--line); }
+.sap-attr-p-head { display: flex; flex-wrap: wrap; gap: 8px; align-items: baseline; justify-content: space-between; }
+.sap-attr-p p { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 4px; }
+.sap-pick { border: 1px solid var(--line-2); background: var(--card); border-radius: 999px; padding: 4px 12px; font: inherit; font-size: 12.5px; cursor: pointer; color: var(--ink-2); }
+.sap-pick.is-on { background: var(--accent); border-color: var(--accent); color: #fff; }
+.sap-attr-new { font-size: 12.5px !important; color: #B45309; }
+.sap-bulk-list { display: grid; gap: 6px; margin: 10px 0; }
+.sap-bulk-item { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--line); background: var(--card); cursor: pointer; }
+.sap-bulk-item p { margin: 4px 0 0; display: flex; flex-wrap: wrap; gap: 4px; }
+.sap-bulk-item.is-empty { opacity: .75; } .sap-bulk-item.is-done { background: #F4FCF6; border-color: #CDEFD8; } .sap-bulk-item.is-err { background: #FFF7F7; border-color: #F7D9D9; }
+.sap-auto-log { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.sap-auto-log li { display: grid; grid-template-columns: 34px minmax(0, 1fr) auto auto; gap: 10px; align-items: start; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--line); background: var(--card); }
+.sap-auto-log li.is-rb { opacity: .6; }
+.sap-auto-log li p { margin: 2px 0 0; }
+.sap-auto-ico { width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; background: var(--accent-soft); color: var(--accent); }
+@media (max-width: 900px) { .sap-auto-form, .sap-auto-form.is-one { grid-template-columns: 1fr; } .sap-attr-layout { grid-template-columns: 1fr; } .sap-attr-cats { max-height: 220px; } .sap-attr-row { grid-template-columns: 1fr 1fr; } .sap-attr-row textarea { grid-column: 1 / -1; } }
+@media (max-width: 640px) { .sap-auto-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); width: 100%; } .sap-link-q li { flex-direction: column; align-items: stretch; } .sap-auto-pages li, .sap-auto-pages li.has-form { grid-template-columns: 40px minmax(0, 1fr); } .sap-auto-pages li > .sap-chip, .sap-auto-pages li > .sap-btn { grid-column: 2; justify-self: start; } .sap-auto-log li { grid-template-columns: 34px minmax(0, 1fr); } .sap-auto-log li > .sap-url-a, .sap-auto-log li > .sap-btn { grid-column: 2; justify-self: start; } .sap-modal { padding: 8px; } .sap-modal-box { padding: 18px 14px 14px; } }

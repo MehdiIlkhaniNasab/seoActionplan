@@ -1494,4 +1494,224 @@
 		if (all) { all.addEventListener('change', function () { box.querySelectorAll('[data-i]').forEach(function (c) { c.checked = all.checked; }); }); }
 	}
 
+	/* ---- Site automation: preview → approve → apply (links, schema, alts, attributes) ---- */
+	(function () {
+		var modal = document.querySelector('[data-sap-auto-modal]');
+		if (!modal) { return; }
+		var body = modal.querySelector('[data-sap-auto-body]');
+		var current = null; // {pid, kind, res}
+		var open = function (html) { body.innerHTML = html; modal.hidden = false; document.body.classList.add('sap-modal-open'); };
+		var close = function () { modal.hidden = true; document.body.classList.remove('sap-modal-open'); current = null; };
+		var mark = function (s) { return esc(s).replace(/\[\[/g, '<mark>').replace(/\]\]/g, '</mark>'); };
+		var where = { featured: 'تصویر شاخص', gallery: 'گالری', content: 'داخل متن' };
+		var statusTxt = { 'new': ['جدید', 'is-good'], update: ['به‌روزرسانی', 'is-info'], exists: ['از قبل هست (افزونه دیگر)', 'is-soft'], invalid: ['ناقص', 'is-bad'] };
+		var foot = function (label) {
+			return '<div class="sap-auto-foot"><button type="button" class="sap-btn is-primary" data-sap-auto-apply>' + label + '</button><button type="button" class="sap-btn is-ghost" data-sap-auto-close>انصراف</button></div>';
+		};
+		var render = {
+			link: function (r) {
+				return '<h3 class="sap-modal-t">پیش‌نمایش درج لینک</h3>' +
+					'<p class="sap-auto-route"><span>از <b>' + esc(r.source.title) + '</b></span><i>←</i><span>به <b>' + esc(r.target.title) + '</b></span></p>' +
+					'<p class="sap-auto-note">' + esc(r.note) + '</p>' +
+					'<div class="sap-auto-diff"><div class="is-before"><small>قبل</small><p>' + esc(r.before) + '</p></div><div class="is-after"><small>بعد (لینک: «' + esc(r.anchor) + '»)</small><p>' + mark(r.after) + '</p></div></div>' +
+					(r.why ? '<p class="sap-small sap-muted">چرا این جمله: ' + esc(r.why) + '</p>' : '') + foot('تایید و درج روی سایت');
+			},
+			schema: function (r) {
+				var h = '<h3 class="sap-modal-t">اسکیمای «' + esc(r.title) + '» <span class="sap-chip">' + esc(r.nature) + '</span></h3>';
+				if (r.other && r.other.length) { h += '<p class="sap-auto-note">روی صفحه از قبل (افزونه‌های دیگر): ' + esc(r.other.join('، ')) + ' — این نوع‌ها تکراری اضافه نمی‌شوند.</p>'; }
+				h += '<div class="sap-schema-list">';
+				r.blocks.forEach(function (b) {
+					var st = statusTxt[b.status] || [b.status, ''];
+					var can = b.status === 'new' || b.status === 'update';
+					h += '<div class="sap-schema-b ' + (can ? '' : 'is-off') + '"><label class="sap-schema-top">' + (can ? '<input type="checkbox" checked data-type="' + esc(b.type) + '">' : '') + '<b dir="ltr">' + esc(b.type) + '</b><span class="sap-chip ' + st[1] + '">' + st[0] + '</span></label>';
+					if (b.why) { h += '<p class="sap-small">' + esc(b.why) + '</p>'; }
+					b.errors.forEach(function (e) { h += '<p class="sap-schema-msg is-bad">✗ ' + esc(e) + '</p>'; });
+					b.warnings.forEach(function (e) { h += '<p class="sap-schema-msg is-warn">! ' + esc(e) + '</p>'; });
+					h += '<details><summary>JSON-LD</summary><pre dir="ltr">' + esc(JSON.stringify(b.json, null, 2)) + '</pre></details></div>';
+				});
+				h += '</div>';
+				if (r.editor === 'elementor') { h += '<p class="sap-small sap-muted">صفحه المنتوری است؛ اسکیما در head چاپ می‌شود و به محتوای المنتور دست نمی‌زند.</p>'; }
+				h += '<p class="sap-small"><a href="' + esc(r.test) + '" target="_blank" rel="noopener">بررسی صفحه در ابزار Rich Results گوگل ↗</a></p>';
+				return h + (r.token ? foot('تایید و انتشار اسکیما') : '<p class="sap-muted">اسکیمای جدیدی برای افزودن نیست.</p>');
+			},
+			alt: function (r) {
+				var h = '<h3 class="sap-modal-t">متن جایگزین تصاویر «' + esc(r.title) + '»</h3>';
+				h += '<p class="sap-auto-note">' + (r.source === 'ai' ? 'نوشته‌شده با هوش مصنوعی از روی محتوای صفحه' : 'بر اساس قواعد (هوش مصنوعی در دسترس نبود)') + (r.keyword ? ' · کلمه کلیدی: «' + esc(r.keyword) + '»' : '') + ' — قبل از تایید می‌توانید هر متن را ویرایش کنید.</p><div class="sap-alt-list">';
+				r.images.forEach(function (im) {
+					h += '<div class="sap-alt-item ' + (im.change ? '' : 'is-keep') + '"><img src="' + esc(im.src) + '" alt="" loading="lazy"><div><p class="sap-small"><span class="sap-chip is-soft">' + (where[im.where] || im.where) + '</span> <bdi dir="ltr">' + esc(im.file) + '</bdi></p>' +
+						'<p class="sap-small sap-muted">فعلی: ' + (im.old ? esc(im.old) : '<em>خالی</em>') + '</p>' +
+						(im.change ? '<input type="text" maxlength="160" data-src="' + esc(im.src) + '" value="' + esc(im.new || '') + '"><small class="sap-alt-len"></small>' : '<p class="sap-small">alt فعلی مناسب است و تغییر نمی‌کند.</p>') + '</div></div>';
+				});
+				return h + '</div>' + (r.elementor ? '<p class="sap-small sap-muted">صفحه المنتوری است: alt در کتابخانه رسانه ثبت می‌شود (تصاویر المنتور از همان استفاده می‌کنند).</p>' : '') + foot('تایید و ثبت روی سایت');
+			},
+			attr: function (r) {
+				var h = '<h3 class="sap-modal-t">ویژگی‌های «' + esc(r.title) + '»</h3><p class="sap-auto-note">' + (r.source === 'ai' ? 'استخراج‌شده از توضیحات با هوش مصنوعی' : 'مقادیری که عیناً در متن بود') + ' — مقادیر را با کلیک انتخاب یا حذف کنید. مقدار تازه فقط با تیک شما به ویژگی سراسری اضافه می‌شود.</p><div class="sap-attr-pick">';
+				r.rows.forEach(function (row) {
+					h += '<div class="sap-attr-p" data-name="' + esc(row.name) + '"><div class="sap-attr-p-head"><b>' + esc(row.name) + '</b>' + (row.current.length ? '<span class="sap-muted sap-small">فعلی: ' + esc(row.current.join('، ')) + '</span>' : '') + '</div><p>';
+					row.allowed.forEach(function (v) { h += '<button type="button" class="sap-pick ' + (row.pick.indexOf(v) >= 0 ? 'is-on' : '') + '" data-v="' + esc(v) + '">' + esc(v) + '</button>'; });
+					h += '</p>';
+					row['new'].forEach(function (v) { h += '<label class="sap-check sap-attr-new"><input type="checkbox" data-new="' + esc(v) + '"> افزودن مقدار تازه «' + esc(v) + '»</label>'; });
+					if (row.evidence) { h += '<small class="sap-muted">' + esc(row.evidence) + '</small>'; }
+					h += '</div>';
+				});
+				return h + '</div>' + foot('تایید و ثبت روی محصول');
+			}
+		};
+		var preview = function (pid, kind, data, btn) {
+			if (btn) { btn.disabled = true; btn.classList.add('is-loading'); }
+			return post('auto/' + pid + '/' + kind + '-preview', data).then(function (res) {
+				current = { pid: pid, kind: kind, res: res };
+				open(render[kind](res));
+				body.querySelectorAll('.sap-alt-item input').forEach(function (i) { var f = function () { i.nextElementSibling.textContent = i.value.length + ' / ۱۲۵'; i.nextElementSibling.classList.toggle('is-bad', i.value.length > 125); }; i.addEventListener('input', f); f(); });
+			}).catch(function (e) { toast(e.message, true); }).then(function () { if (btn) { btn.disabled = false; btn.classList.remove('is-loading'); } });
+		};
+		var applyData = function () {
+			var d = { token: current.res.token };
+			if (current.kind === 'alt') {
+				d.alts = [];
+				body.querySelectorAll('.sap-alt-item input[data-src]').forEach(function (i) { d.alts.push({ src: i.getAttribute('data-src'), alt: i.value.trim() }); });
+			} else if (current.kind === 'schema') {
+				d.types = [];
+				body.querySelectorAll('.sap-schema-b input[data-type]:checked').forEach(function (i) { d.types.push(i.getAttribute('data-type')); });
+			} else if (current.kind === 'attr') {
+				d.picks = {};
+				body.querySelectorAll('.sap-attr-p').forEach(function (p) {
+					var vals = [];
+					p.querySelectorAll('.sap-pick.is-on').forEach(function (b) { vals.push(b.getAttribute('data-v')); });
+					p.querySelectorAll('input[data-new]:checked').forEach(function (c) { vals.push(c.getAttribute('data-new')); });
+					d.picks[p.getAttribute('data-name')] = vals;
+				});
+			}
+			return d;
+		};
+		document.addEventListener('submit', function (ev) {
+			var f = ev.target.closest('[data-sap-auto-form]');
+			if (!f) { return; }
+			ev.preventDefault();
+			var data = {};
+			new FormData(f).forEach(function (v, k) { data[k] = v; });
+			preview(f.getAttribute('data-project'), f.getAttribute('data-sap-auto-form'), data, f.querySelector('[type=submit]'));
+		});
+		document.addEventListener('click', function (ev) {
+			var pv = ev.target.closest('[data-sap-auto-preview]');
+			var ap = ev.target.closest('[data-sap-auto-apply]');
+			var rb = ev.target.closest('[data-sap-auto-rollback]');
+			var pk = ev.target.closest('.sap-pick');
+			var op = ev.target.closest('[data-sap-attr-open]');
+			if (ev.target.closest('[data-sap-auto-close]') || ev.target === modal) { close(); return; }
+			if (pk && !pk.closest('[data-sap-attr-bulk-out]')) { pk.classList.toggle('is-on'); return; }
+			if (op) { var form = op.parentNode.querySelector('.sap-attr-desc'); form.hidden = !form.hidden; if (!form.hidden) { form.querySelector('textarea').focus(); } return; }
+			if (pv) {
+				var d = {};
+				['source', 'target', 'anchor', 'finding_id', 'url'].forEach(function (k) { if (pv.hasAttribute('data-' + k)) { d[k] = pv.getAttribute('data-' + k); } });
+				preview(pv.getAttribute('data-project'), pv.getAttribute('data-sap-auto-preview'), d, pv);
+				return;
+			}
+			if (ap && current) {
+				ap.disabled = true; ap.classList.add('is-loading');
+				post('auto/' + current.pid + '/apply', applyData()).then(function (res) {
+					toast(res.msg); close(); setTimeout(function () { location.reload(); }, 900);
+				}).catch(function (e) { toast(e.message, true); ap.disabled = false; ap.classList.remove('is-loading'); });
+				return;
+			}
+			if (rb) {
+				if (!window.confirm('این تغییر روی سایت به حالت قبل برگردد؟')) { return; }
+				rb.disabled = true;
+				post('auto/' + rb.getAttribute('data-project') + '/rollback', { ref: rb.getAttribute('data-sap-auto-rollback') }).then(function (res) { toast(res.msg); setTimeout(function () { location.reload(); }, 800); }).catch(function (e) { toast(e.message, true); rb.disabled = false; });
+			}
+		});
+		document.addEventListener('keydown', function (ev) { if ('Escape' === ev.key && !modal.hidden) { close(); } });
+
+		/* Attribute set editor */
+		var setBox = document.querySelector('[data-sap-attr-set]');
+		if (setBox) {
+			var rows = setBox.querySelector('[data-sap-attr-rows]');
+			var rowHtml = function (a) {
+				return '<div class="sap-attr-row"><input type="text" data-f="name" value="' + esc(a.name || '') + '" placeholder="نام ویژگی (مثلاً رنگ)"><input type="text" data-f="slug" value="' + esc(a.slug || '') + '" dir="ltr" placeholder="slug (color)"><textarea data-f="values" rows="2" placeholder="مقادیر مجاز، با ویرگول یا خط جدا">' + esc((a.values || []).join('، ')) + '</textarea><label class="sap-check"><input type="checkbox" data-f="filter"' + (a.filter === false ? '' : ' checked') + '> فیلتر</label><button type="button" class="sap-icon-btn" data-sap-attr-del title="حذف">×</button></div>';
+			};
+			var collect = function () {
+				var out = [];
+				rows.querySelectorAll('.sap-attr-row').forEach(function (r) {
+					var name = r.querySelector('[data-f=name]').value.trim();
+					if (!name) { return; }
+					out.push({ name: name, slug: r.querySelector('[data-f=slug]').value.trim(), values: r.querySelector('[data-f=values]').value, filter: r.querySelector('[data-f=filter]').checked });
+				});
+				return out;
+			};
+			var pid = setBox.getAttribute('data-project');
+			setBox.addEventListener('click', function (ev) {
+				var del = ev.target.closest('[data-sap-attr-del]');
+				var sv = ev.target.closest('[data-sap-attr-save]');
+				var sg = ev.target.closest('[data-sap-attr-suggest]');
+				if (del) { del.closest('.sap-attr-row').remove(); return; }
+				if (ev.target.closest('[data-sap-attr-add]')) { rows.insertAdjacentHTML('beforeend', rowHtml({})); rows.lastElementChild.querySelector('input').focus(); return; }
+				if (sg) {
+					sg.disabled = true; sg.classList.add('is-loading');
+					post('auto/' + pid + '/attr-suggest', { cat: setBox.getAttribute('data-cat') }).then(function (res) {
+						rows.innerHTML = res.attrs.map(rowHtml).join('');
+						toast('پیشنهاد آماده شد؛ بررسی و ویرایش کنید، بعد ذخیره کنید.');
+					}).catch(function (e) { toast(e.message, true); }).then(function () { sg.disabled = false; sg.classList.remove('is-loading'); });
+					return;
+				}
+				if (sv) {
+					var attrs = collect();
+					var sync = sv.getAttribute('data-sap-attr-save') === '1';
+					if (sync && !window.confirm('ویژگی‌ها به‌صورت ویژگی سراسری در ووکامرس سایت ساخته شوند؟')) { return; }
+					sv.disabled = true; sv.classList.add('is-loading');
+					post('auto/' + pid + '/attr-set', { cat: setBox.getAttribute('data-cat'), cat_name: setBox.getAttribute('data-cat_name'), attrs: attrs, sync: sync }).then(function (res) {
+						toast(res.msg); setTimeout(function () { location.reload(); }, 900);
+					}).catch(function (e) { toast(e.message, true); sv.disabled = false; sv.classList.remove('is-loading'); });
+				}
+			});
+		}
+
+		/* Bulk: extract the attributes of several products, review, approve all */
+		var bulk = document.querySelector('[data-sap-attr-bulk]');
+		if (bulk) {
+			bulk.addEventListener('click', function () {
+				var urls = JSON.parse(bulk.getAttribute('data-urls') || '[]');
+				var pid = bulk.getAttribute('data-project');
+				var out = document.querySelector('[data-sap-attr-bulk-out]');
+				var items = [];
+				bulk.disabled = true;
+				out.innerHTML = '<div class="sap-serp-progress"><i style="width:3%"></i><span>استخراج ویژگی‌ها…</span></div><div class="sap-bulk-list"></div>';
+				var list = out.querySelector('.sap-bulk-list');
+				var bar = out.querySelector('.sap-serp-progress');
+				var next = function (i) {
+					if (i >= urls.length) {
+						bar.querySelector('span').textContent = items.length + ' محصول آماده تایید است. مقادیر را بررسی کنید.';
+						if (items.length) { list.insertAdjacentHTML('afterend', '<div class="sap-actions"><button type="button" class="sap-btn is-primary" data-sap-bulk-apply>تایید و ثبت همه موارد تیک‌خورده</button></div>'); }
+						return;
+					}
+					bar.querySelector('span').textContent = 'استخراج ویژگی‌ها (' + (i + 1) + ' از ' + urls.length + ')…';
+					bar.querySelector('i').style.width = Math.round(100 * i / urls.length) + '%';
+					post('auto/' + pid + '/attr-preview', { url: urls[i], cat: bulk.getAttribute('data-cat') }).then(function (res) {
+						var picked = res.rows.filter(function (r) { return r.pick.length; });
+						items.push(res);
+						list.insertAdjacentHTML('beforeend', '<label class="sap-bulk-item' + (picked.length ? '' : ' is-empty') + '"><input type="checkbox" data-token="' + esc(res.token) + '"' + (picked.length ? ' checked' : '') + '><div><b>' + esc(res.title) + '</b><p>' + (picked.length ? picked.map(function (r) { return '<span class="sap-chip is-soft">' + esc(r.name) + ': ' + esc(r.pick.join('، ')) + '</span>'; }).join(' ') : '<span class="sap-muted sap-small">از متن محصول مقداری پیدا نشد؛ توضیحات را دستی بدهید.</span>') + '</p></div></label>');
+						list.lastElementChild._picks = res.rows.reduce(function (o, r) { o[r.name] = r.pick; return o; }, {});
+					}).catch(function (e) {
+						list.insertAdjacentHTML('beforeend', '<p class="sap-schema-msg is-bad">' + esc(urls[i]) + ': ' + esc(e.message) + '</p>');
+					}).then(function () { next(i + 1); });
+				};
+				next(0);
+			});
+			document.addEventListener('click', function (ev) {
+				var ba = ev.target.closest('[data-sap-bulk-apply]');
+				if (!ba) { return; }
+				var boxes = Array.prototype.slice.call(document.querySelectorAll('.sap-bulk-item input[data-token]:checked'));
+				var pid = bulk.getAttribute('data-project');
+				var ok = 0;
+				ba.disabled = true;
+				var run = function (i) {
+					if (i >= boxes.length) { toast(ok + ' محصول روی سایت به‌روز شد.'); setTimeout(function () { location.reload(); }, 1200); return; }
+					ba.textContent = 'ثبت ' + (i + 1) + ' از ' + boxes.length + '…';
+					var item = boxes[i].closest('.sap-bulk-item');
+					post('auto/' + pid + '/apply', { token: boxes[i].getAttribute('data-token'), picks: item._picks }).then(function () { ok++; item.classList.add('is-done'); }).catch(function (e) { item.classList.add('is-err'); toast(e.message, true); }).then(function () { run(i + 1); });
+				};
+				run(0);
+			});
+		}
+	})();
+
 })();

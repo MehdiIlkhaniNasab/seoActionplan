@@ -70,6 +70,7 @@ function sap_project_tabs_all() {
 		'offpage'     => array( 'برنامه آف‌پیج', 'link' ),
 		'competitors' => array( 'رادار رقبا', 'radar' ),
 		'ranks'       => array( 'ردیابی رتبه', 'chart' ),
+		'automate'    => array( 'اتوماسیون سایت', 'bolt' ),
 		'settings' => array( 'تنظیمات پروژه', 'settings' ),
 	);
 }
@@ -87,7 +88,7 @@ function sap_project_groups() {
 		'content'   => array( 'سئو محتوا', 'log', array( 'audit', 'serp', 'keywords', 'calendar', 'ideas', 'content' ) ),
 		'offpage'   => array( 'آف‌پیج', 'link', array( 'offpage' ) ),
 		'keywords'  => array( 'رتبه و رقبا', 'chart', array( 'ranks', 'competitors', 'seosignal', 'graph' ) ),
-		'work'      => array( 'برنامه و اجرا', 'list', array( 'plan', 'impact', 'findings', 'activity' ) ),
+		'work'      => array( 'برنامه و اجرا', 'list', array( 'plan', 'automate', 'impact', 'findings', 'activity' ) ),
 	);
 }
 
@@ -496,4 +497,28 @@ function sap_rank_delta( $now, $then ) {
 		return '<span class="sap-rd">•</span>';
 	}
 	return '<span class="sap-rd ' . ( $d > 0 ? 'is-up' : 'is-down' ) . '">' . ( $d > 0 ? '▲' : '▼' ) . esc_html( sap_num( abs( $d ), abs( $d ) < 10 ? 1 : 0 ) ) . '</span>';
+}
+
+/**
+ * Pager links with a window around the current page (1 … 4 5 [6] 7 8 … 40),
+ * so lists of thousands of products stay usable.
+ */
+function sap_pager_html( $pages, $cur, $base, $key = 'pg', $anchor = '' ) {
+	if ( $pages < 2 ) {
+		return '';
+	}
+	$show = array_unique( array_filter( array( 1, $pages, $cur - 2, $cur - 1, $cur, $cur + 1, $cur + 2 ), function ( $i ) use ( $pages ) {
+		return $i >= 1 && $i <= $pages;
+	} ) );
+	sort( $show );
+	$out  = '<nav class="sap-pager">';
+	$prev = 0;
+	foreach ( $show as $i ) {
+		if ( $prev && $i - $prev > 1 ) {
+			$out .= '<span>…</span>';
+		}
+		$out .= sprintf( '<a class="%s" href="%s">%s</a>', $i === $cur ? 'is-active' : '', esc_url( add_query_arg( $key, $i, $base ) . $anchor ), esc_html( sap_num( $i ) ) );
+		$prev = $i;
+	}
+	return $out . '</nav>';
 }

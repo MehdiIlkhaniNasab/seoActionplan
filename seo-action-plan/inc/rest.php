@@ -438,6 +438,79 @@ add_action( 'rest_api_init', function () {
 	) );
 	// A calendar article from a keyword you give.
 	// SERP analysis (resumable: call again while more = true).
+	// Site automation with approval: preview → apply → rollback.
+	$auto = function ( $name, $cb ) use ( $ns, $project_route ) {
+		register_rest_route( $ns, '/auto/(?P<project>\d+)/' . $name, array(
+			'methods'             => 'POST',
+			'permission_callback' => 'sap_can',
+			'callback'            => $project_route( function ( $project, $req ) use ( $cb ) {
+				$res = $cb( $project, $req );
+				if ( is_wp_error( $res ) ) {
+					$data = $res->get_error_data();
+					if ( ! is_array( $data ) || empty( $data['status'] ) ) {
+						$res->add_data( array( 'status' => 422 ) ); // A message for the user, not a server failure.
+					}
+					return $res;
+				}
+				return array_merge( array( 'ok' => true ), $res );
+			} ),
+		) );
+	};
+	$auto( 'link-preview', function ( $project, $req ) {
+		return sap_link_insert_plan( $project, esc_url_raw( (string) $req->get_param( 'source' ) ), esc_url_raw( (string) $req->get_param( 'target' ) ), sanitize_text_field( (string) $req->get_param( 'anchor' ) ), absint( $req->get_param( 'finding_id' ) ) );
+	} );
+	$auto( 'schema-preview', function ( $project, $req ) {
+		return sap_schema_plan( $project, esc_url_raw( (string) $req->get_param( 'url' ) ) );
+	} );
+	$auto( 'alt-preview', function ( $project, $req ) {
+		return sap_alt_plan( $project, esc_url_raw( (string) $req->get_param( 'url' ) ), rest_sanitize_boolean( $req->get_param( 'all' ) ) );
+	} );
+	$auto( 'attr-preview', function ( $project, $req ) {
+		return sap_attr_extract( $project, esc_url_raw( (string) $req->get_param( 'url' ) ), absint( $req->get_param( 'cat' ) ), sanitize_textarea_field( (string) $req->get_param( 'description' ) ) );
+	} );
+	$auto( 'apply', function ( $project, $req ) {
+		$token = sanitize_key( (string) $req->get_param( 'token' ) );
+		$edits = array();
+		$pv    = sap_auto_preview_get( $project['id'], $token );
+		if ( $pv && 'alts' === $pv['type'] && is_array( $req->get_param( 'alts' ) ) ) {
+			$edits['alts'] = array();
+			foreach ( $req->get_param( 'alts' ) as $a ) {
+				$alt = trim( sanitize_text_field( (string) ( $a['alt'] ?? '' ) ) );
+				if ( '' !== $alt && ! empty( $a['src'] ) ) {
+					$edits['alts'][] = array( 'src' => esc_url_raw( (string) $a['src'] ), 'alt' => mb_substr( $alt, 0, 160 ) );
+				}
+			}
+			if ( ! $edits['alts'] ) {
+				return new WP_Error( 'sap_alt', 'هیچ متن جایگزینی برای ثبت نیست.', array( 'status' => 400 ) );
+			}
+		}
+		if ( $pv && 'schema' === $pv['type'] && is_array( $req->get_param( 'types' ) ) ) {
+			$types           = array_map( 'sanitize_text_field', $req->get_param( 'types' ) );
+			$edits['schema'] = array_values( array_filter( $pv['changes']['schema'], function ( $b ) use ( $types ) {
+				return in_array( $b['@type'], $types, true );
+			} ) );
+			if ( ! $edits['schema'] ) {
+				return new WP_Error( 'sap_schema', 'هیچ اسکیمایی انتخاب نشده.', array( 'status' => 400 ) );
+			}
+		}
+		if ( $pv && 'attributes' === $pv['type'] && is_array( $req->get_param( 'picks' ) ) ) {
+			$edits = sap_attr_edits( $project, $token, $req->get_param( 'picks' ) );
+			if ( empty( $edits['attributes'] ) ) {
+				return new WP_Error( 'sap_attr', 'هیچ مقداری برای ثبت انتخاب نشده.', array( 'status' => 400 ) );
+			}
+		}
+		return sap_auto_apply( $project, $token, $edits );
+	} );
+	$auto( 'rollback', function ( $project, $req ) {
+		return sap_auto_rollback( $project, sanitize_key( (string) $req->get_param( 'ref' ) ) );
+	} );
+	$auto( 'attr-set', function ( $project, $req ) {
+		return sap_attr_set_save( $project, absint( $req->get_param( 'cat' ) ), sanitize_text_field( (string) $req->get_param( 'cat_name' ) ), (array) $req->get_param( 'attrs' ), rest_sanitize_boolean( $req->get_param( 'sync' ) ) );
+	} );
+	$auto( 'attr-suggest', function ( $project, $req ) {
+		return sap_attr_set_suggest( $project, absint( $req->get_param( 'cat' ) ) );
+	} );
+
 	register_rest_route( $ns, '/serp/(?P<project>\d+)', array(
 		'methods'             => 'POST',
 		'permission_callback' => 'sap_can',
