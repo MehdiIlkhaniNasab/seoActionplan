@@ -239,3 +239,246 @@ function sap_report_pillars( $project, $period, $m ) {
 	}
 	return $out;
 }
+
+/* ---------------------------------------------------------------------------
+ * Full action plan of the month (every task, whatever its state)
+ * ------------------------------------------------------------------------- */
+
+/**
+ * Every task of the month with its state, plus a review: completion by pillar,
+ * open high-priority work, overdue tasks and the measured impact of done ones.
+ * After a reset the archived month (planned / done) stands in for the tasks.
+ */
+function sap_report_action_plan( $project, $period, $m = null ) {
+	$pid      = $project['id'];
+	list( $from, $to ) = sap_period_range( $period );
+	$pillars  = sap_pillars();
+	$statuses = sap_task_statuses();
+	$fnames   = wp_list_pluck( sap_focuses( $pid ), 'name', 'id' );
+	$impact   = array();
+	foreach ( sap_impact_items( $pid ) as $i ) {
+		$impact[ $i['ref'] ?? '' ] = $i;
+	}
+	$verdicts = sap_impact_verdicts();
+	$sources  = array( 'ai' => 'تحلیل هوشمند', 'finding' => 'پیشنهاد تأییدشده', 'auto' => 'قانون خودکار', 'custom' => 'کار سفارشی (هوش مصنوعی)', 'recurring' => 'کار تکراری', 'manual' => 'دستی' );
+	$group    = array( 'done' => 'done', 'doing' => 'doing', 'waiting' => 'doing', 'inbox' => 'todo', 'next' => 'todo', 'someday' => 'deferred', 'dropped' => 'dropped' );
+	$today    = current_time( 'Y-m-d' );
+	$items    = array();
+	foreach ( sap_tasks( array( 'project_id' => $pid, 'period' => $period ) ) as $t ) {
+		$pk  = sap_pillar_of_context( $t['context'] );
+		$imp = $impact[ 'task:' . $t['id'] ] ?? null;
+		$v   = $imp ? ( $imp['verdict'] ?? 'wait' ) : '';
+		$due = (string) ( $t['due_date'] ?? '' );
+		$items[] = array(
+			'title'          => $t['title'],
+			'pillar'         => $pk,
+			'pillar_label'   => $pillars[ $pk ][0],
+			'category'       => $t['context'],
+			'category_label' => sap_context_label( $t['context'] ),
+			'focus'          => $fnames[ $t['focus_id'] ] ?? '',
+			'url'            => (string) $t['url'],
+			'keyword'        => (string) $t['keyword'],
+			'status'         => $t['status'],
+			'state'          => $group[ $t['status'] ] ?? 'todo',
+			'status_label'   => $statuses[ $t['status'] ] ?? $t['status'],
+			'priority'       => $t['score'] >= 60 ? 'high' : ( $t['score'] >= 35 ? 'medium' : 'low' ),
+			'effort'         => (float) $t['effort'],
+			'due'            => '0000-00-00' === $due ? '' : $due,
+			'overdue'        => '' !== $due && '0000-00-00' !== $due && $due < min( $today, $to ) && 'done' !== $t['status'] && 'dropped' !== $t['status'],
+			'done_at'        => substr( (string) $t['done_at'], 0, 10 ),
+			'created'        => substr( (string) $t['created_at'], 0, 10 ),
+			'result'         => (string) $t['result'],
+			'waiting_for'    => 'waiting' === $t['status'] ? (string) $t['waiting_for'] : '',
+			'source'         => $sources[ $t['source'] ] ?? ( '' !== (string) $t['recurring'] ? $sources['recurring'] : $sources['manual'] ),
+			'impact'         => $imp ? array( 'verdict' => $v, 'label' => $verdicts[ $v ][0] ?? '', 'tone' => $verdicts[ $v ][1] ?? '', 'net' => $imp['net_change'] ?? null, 'clicks' => $imp['clicks_change'] ?? null ) : null,
+		);
+	}
+	$archived = false;
+	if ( ! $items && $m ) {
+		// The plan was reset: the archived month keeps what was planned and done.
+		$archived = true;
+		foreach ( (array) ( $m['planned'] ?? array() ) as $k => $p ) {
+			$is_done = isset( $m['done'][ $k ] );
+			$pk      = sap_pillar_of_context( $p['category'] ?? '' );
+			$items[] = array(
+				'title' => $p['title'], 'pillar' => $pk, 'pillar_label' => $pillars[ $pk ][0], 'category' => $p['category'] ?? '', 'category_label' => $p['category_label'] ?? '',
+				'focus' => $p['focus'] ?? '', 'url' => $p['url'] ?? '', 'keyword' => '', 'status' => $is_done ? 'done' : 'next', 'state' => $is_done ? 'done' : 'todo',
+				'status_label' => $is_done ? $statuses['done'] : 'انجام نشده', 'priority' => 'medium', 'effort' => (float) ( $p['effort'] ?? 0 ), 'due' => '', 'overdue' => false,
+				'done_at' => substr( (string) ( $p['done_at'] ?? '' ), 0, 10 ), 'created' => '', 'result' => (string) ( $p['result'] ?? '' ), 'waiting_for' => '', 'source' => '', 'impact' => null,
+			);
+		}
+	}
+	$order = array( 'done' => 0, 'doing' => 1, 'todo' => 2, 'deferred' => 3, 'dropped' => 4 );
+	$prio  = array( 'high' => 0, 'medium' => 1, 'low' => 2 );
+	usort( $items, function ( $a, $b ) use ( $order, $prio ) {
+		return array( $order[ $a['state'] ], $prio[ $a['priority'] ], $b['done_at'] ) <=> array( $order[ $b['state'] ], $prio[ $b['priority'] ], $a['done_at'] );
+	} );
+
+	$count = array_fill_keys( array_keys( $order ), 0 );
+	$hours = array_fill_keys( array_keys( $order ), 0.0 );
+	$by    = array();
+	foreach ( $pillars as $pk => $pl ) {
+		$by[ $pk ] = array( 'label' => $pl[0], 'planned' => 0, 'done' => 0, 'open' => 0, 'hours' => 0.0, 'hours_done' => 0.0 );
+	}
+	foreach ( $items as $i ) {
+		++$count[ $i['state'] ];
+		$hours[ $i['state'] ] += $i['effort'];
+		if ( in_array( $i['state'], array( 'deferred', 'dropped' ), true ) ) {
+			continue;
+		}
+		++$by[ $i['pillar'] ]['planned'];
+		$by[ $i['pillar'] ]['hours'] += $i['effort'];
+		if ( 'done' === $i['state'] ) {
+			++$by[ $i['pillar'] ]['done'];
+			$by[ $i['pillar'] ]['hours_done'] += $i['effort'];
+		} else {
+			++$by[ $i['pillar'] ]['open'];
+		}
+	}
+	$active  = $count['done'] + $count['doing'] + $count['todo'];
+	$high    = array_values( array_filter( $items, function ( $i ) {
+		return 'high' === $i['priority'] && in_array( $i['state'], array( 'doing', 'todo' ), true );
+	} ) );
+	$overdue = array_values( array_filter( $items, function ( $i ) {
+		return $i['overdue'];
+	} ) );
+	$measured = array_filter( $items, function ( $i ) {
+		return $i['impact'] && in_array( $i['impact']['verdict'], array( 'growth', 'decline', 'neutral' ), true );
+	} );
+	$review = array();
+	if ( $active ) {
+		$review[] = sprintf( 'از %s کار برنامه این ماه %s کار انجام شد (%s٪)%s.', sap_num( $active ), sap_num( $count['done'] ), sap_num( round( $count['done'] / $active * 100 ) ), $count['doing'] ? '، ' . sap_num( $count['doing'] ) . ' کار در حال انجام یا در انتظار است' : '' );
+	}
+	foreach ( $by as $b ) {
+		if ( $b['planned'] ) {
+			$review[] = sprintf( '%s: %s از %s کار (%s ساعت از %s ساعت).', $b['label'], sap_num( $b['done'] ), sap_num( $b['planned'] ), sap_num( $b['hours_done'], 1 ), sap_num( $b['hours'], 1 ) );
+		}
+	}
+	if ( $high ) {
+		$review[] = sprintf( '%s کار با اولویت بالا هنوز باز است و در اولویت ماه بعد قرار می‌گیرد: %s.', sap_num( count( $high ) ), implode( '، ', array_slice( array_column( $high, 'title' ), 0, 3 ) ) );
+	}
+	if ( $overdue ) {
+		$review[] = sprintf( '%s کار از موعد خود گذشته است.', sap_num( count( $overdue ) ) );
+	}
+	if ( $measured ) {
+		$g = count( array_filter( $measured, function ( $i ) {
+			return 'growth' === $i['impact']['verdict'];
+		} ) );
+		$review[] = sprintf( 'اثر %s کار انجام‌شده در سرچ کنسول سنجیده شد: %s مورد رشد.', sap_num( count( $measured ) ), sap_num( $g ) );
+	}
+	if ( $count['deferred'] || $count['dropped'] ) {
+		$review[] = sprintf( '%s کار به «شاید بعداً» منتقل و %s کار حذف شد.', sap_num( $count['deferred'] ), sap_num( $count['dropped'] ) );
+	}
+	return array(
+		'items'      => $items,
+		'count'      => $count,
+		'hours'      => $hours,
+		'active'     => $active,
+		'completion' => $active ? round( $count['done'] / $active * 100 ) : null,
+		'by_pillar'  => $by,
+		'high_open'  => count( $high ),
+		'overdue'    => count( $overdue ),
+		'review'     => $review,
+		'archived'   => $archived,
+	);
+}
+
+/* ---------------------------------------------------------------------------
+ * Technical data as gathered by Sokan (so the report does not fetch it again)
+ * ------------------------------------------------------------------------- */
+
+/**
+ * Screaming Frog crawl rows (compact columns), URL Inspection, Search Console
+ * sitemaps, Core Web Vitals, robots.txt and the sitemap check — in the shapes
+ * SeoReport uses for its own data.
+ */
+function sap_report_tech_data( $project ) {
+	$pid = $project['id'];
+	$out = array();
+	$crawl = sap_dataset( $pid, 'crawl' );
+	if ( $crawl && ! empty( $crawl['payload']['rows'] ) ) {
+		$cols = array( 'url', 'type', 'code', 'idx', 'idx_why', 'title', 'title_len', 'title_px', 'meta', 'meta_len', 'h1', 'h1_2', 'robots', 'canon', 'size', 'words', 'depth', 'inlinks', 'outlinks', 'rt', 'redirect', 'dupes', 'hash' );
+		$rows = array();
+		$skip = 0;
+		foreach ( (array) $crawl['payload']['rows'] as $r ) {
+			// Same judgement as Sokan's own analysis: filter / paginated / cart / canonicalised
+			// pages are not counted as problems in the client report (errors always are).
+			if ( 200 === (int) ( $r['code'] ?? 0 ) && '' !== sap_url_skip_reason( $pid, (string) ( $r['url'] ?? '' ), (string) ( $r['title'] ?? '' ) ) ) {
+				++$skip;
+				continue;
+			}
+			$t = array();
+			foreach ( $cols as $c ) {
+				$t[] = $r[ $c ] ?? '';
+			}
+			$rows[] = $t;
+		}
+		$out['crawl'] = array(
+			'date'  => $crawl['fetched_at'],
+			'urls'  => (int) ( $crawl['meta']['urls'] ?? count( $rows ) ),
+			'codes' => (array) ( $crawl['meta']['codes'] ?? array() ),
+			'cols'  => $cols,
+			'rows'  => $rows,
+			'skipped' => $skip,
+		);
+	}
+	$insp = sap_dataset( $pid, 'gsc_inspect' );
+	if ( $insp && ! empty( $insp['payload']['rows'] ) ) {
+		$out['inspection'] = array_map( function ( $r ) {
+			return array(
+				'url'            => $r['url'] ?? '',
+				'verdict'        => ( $r['verdict'] ?? '' ) ?: 'VERDICT_UNSPECIFIED',
+				'coverage'       => $r['coverage'] ?? '',
+				'indexing_state' => $r['indexing'] ?? '',
+				'robots'         => $r['robots'] ?? '',
+				'fetch'          => $r['fetch'] ?? '',
+				'last_crawl'     => $r['last_crawl'] ?? '',
+				'google_canon'   => $r['g_canon'] ?? '',
+				'user_canon'     => $r['u_canon'] ?? '',
+				'rich_verdict'   => $r['rich'] ?? '',
+				'rich_types'     => (array) ( $r['rich_types'] ?? array() ),
+			);
+		}, array_values( (array) $insp['payload']['rows'] ) );
+		$out['inspection_date'] = $insp['fetched_at'];
+	}
+	$maps = sap_dataset_payload( $pid, 'gsc_sitemaps' );
+	if ( ! empty( $maps['sitemaps'] ) ) {
+		$out['sitemaps'] = array_values( (array) $maps['sitemaps'] );
+	}
+	$cwv = sap_dataset( $pid, 'cwv' );
+	if ( $cwv && ! empty( $cwv['payload']['pages'] ) ) {
+		$out['cwv']      = array_values( (array) $cwv['payload']['pages'] );
+		$out['cwv_date'] = $cwv['fetched_at'];
+	}
+	$robots = sap_dataset( $pid, 'robots' );
+	if ( $robots ) {
+		$r = $robots['payload'];
+		$out['robots'] = array(
+			'date'     => $robots['fetched_at'],
+			'code'     => (int) ( $r['code'] ?? 0 ),
+			'sitemaps' => array_values( (array) ( $r['sitemaps'] ?? array() ) ),
+			'rules'    => count( (array) ( $r['rules'] ?? array() ) ),
+			'blocked'  => array_values( array_map( function ( $t ) {
+				return array( 'path' => $t['path'] ?? '', 'label' => $t['label'] ?? '' );
+			}, array_filter( (array) ( $r['tests'] ?? array() ), function ( $t ) {
+				return is_array( $t ) && empty( $t['allowed'] );
+			} ) ) ),
+		);
+	}
+	$sc = sap_dataset( $pid, 'sitemap_check' );
+	if ( $sc && ! empty( $sc['payload']['root'] ) ) {
+		$s = $sc['payload'];
+		$out['sitemap_check'] = array(
+			'date'       => $sc['fetched_at'],
+			'root'       => $s['root'],
+			'files'      => count( (array) ( $s['maps'] ?? array() ) ),
+			'total'      => (int) ( $s['total'] ?? 0 ),
+			'in_robots'  => ! empty( $s['in_robots'] ),
+			'missing'    => array_slice( (array) ( $s['missing'] ?? array() ), 0, 15 ),
+			'bad'        => array_slice( (array) ( $s['bad'] ?? array() ), 0, 15 ),
+			'other_host' => array_slice( (array) ( $s['other_host'] ?? array() ), 0, 10 ),
+			'skipped'    => (int) ( $s['skipped'] ?? 0 ),
+		);
+	}
+	return $out;
+}

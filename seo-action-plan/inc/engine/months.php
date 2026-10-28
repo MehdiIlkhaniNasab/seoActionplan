@@ -257,6 +257,8 @@ function sap_month_report( $project, $period = '', $from = '', $to = '' ) {
 		'focuses'        => $m['focuses'],
 		'pillars'        => sap_report_pillars( $project, $period, $m ),
 		'impact'         => sap_report_impact( $project ),
+		'action_plan'    => sap_report_action_plan( $project, $period, $m ),
+		'technical_data' => sap_report_tech_data( $project ),
 		'next_by_pillar' => array_reduce( (array) $m['next_plan'], function ( $acc, $i ) {
 			$acc[ sap_pillars()[ sap_pillar_of_context( $i['category'] ?? '' ) ][0] ][] = $i;
 			return $acc;
