@@ -313,6 +313,8 @@ function sap_icon( $name, $size = 18 ) {
 		'code'     => '<path d="m8 8-5 4 5 4M16 8l5 4-5 4M14 4l-4 16"/>',
 		'tag'      => '<path d="M3 12V4a1 1 0 0 1 1-1h8l9 9-9 9z"/><circle cx="8" cy="8" r="1.5"/>',
 		'research' => '<circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/>',
+		'up'       => '<path d="M7 17 17 7M9 7h8v8"/>',
+		'down'     => '<path d="M7 7l10 10M17 9v8H9"/>',
 		'bolt'     => '<path d="M13 2 4 14h7l-1 8 9-12h-7z"/>',
 	);
 	$p = $paths[ $name ] ?? $paths['grid'];

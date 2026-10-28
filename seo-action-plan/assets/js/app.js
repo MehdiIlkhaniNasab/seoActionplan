@@ -253,6 +253,47 @@
 		}).catch(function (e) { toast(e.message, true); btn.disabled = false; });
 	});
 
+	/* ---- SERP analysis: run (resumable), pick, turn into a brief ---- */
+	(function () {
+		var form = document.querySelector('[data-sap-serp-form]');
+		var prog = document.querySelector('[data-sap-serp-progress]');
+		var run = function (pid, kw, url, restart) {
+			if (prog) { prog.hidden = false; prog.querySelector('span').textContent = 'گرفتن ۱۰ نتیجه اول گوگل…'; prog.querySelector('i').style.width = '4%'; }
+			var step = function (first) {
+				post('serp/' + pid, { keyword: kw, url: url, restart: first && restart ? 1 : 0 }).then(function (res) {
+					if (prog) { prog.querySelector('span').textContent = res.msg; prog.querySelector('i').style.width = (res.pct || 50) + '%'; }
+					if (res.more) { return step(false); }
+					toast(res.msg);
+					location.href = res.url;
+				}).catch(function (e) { toast(e.message, true); if (prog) { prog.querySelector('span').textContent = e.message; } });
+			};
+			step(true);
+		};
+		if (form) {
+			form.addEventListener('submit', function (ev) {
+				ev.preventDefault();
+				run(form.getAttribute('data-sap-serp-form'), form.keyword.value.trim(), form.url.value.trim(), true);
+			});
+		}
+		document.addEventListener('click', function (ev) {
+			var pick = ev.target.closest('[data-sap-serp-pick]');
+			var re = ev.target.closest('[data-sap-serp-rerun]');
+			var idea = ev.target.closest('[data-sap-serp-idea]');
+			var upd = ev.target.closest('[data-sap-serp-update]');
+			if (pick && form) { form.keyword.value = pick.getAttribute('data-sap-serp-pick'); form.keyword.focus(); return; }
+			if (re) { run(re.getAttribute('data-sap-serp-rerun'), re.getAttribute('data-keyword'), re.getAttribute('data-url') || '', true); return; }
+			if (idea) {
+				idea.disabled = true; idea.classList.add('is-loading');
+				post('ideas/' + idea.getAttribute('data-sap-serp-idea') + '/keyword', { keyword: idea.getAttribute('data-keyword') }).then(function (res) { toast(res.msg); idea.classList.remove('is-loading'); }).catch(function (e) { toast(e.message, true); idea.disabled = false; idea.classList.remove('is-loading'); });
+				return;
+			}
+			if (upd) {
+				upd.disabled = true;
+				post('updates/' + upd.getAttribute('data-sap-serp-update'), { url: upd.getAttribute('data-url'), reason: upd.getAttribute('data-reason') || '', source: 'serp' }).then(function (res) { toast(res.msg); }).catch(function (e) { toast(e.message, true); upd.disabled = false; });
+			}
+		});
+	})();
+
 	/* ---- My tasks: filter, status, finish with a work report ---- */
 	(function () {
 		var groups = document.querySelectorAll('[data-sap-my-group]');

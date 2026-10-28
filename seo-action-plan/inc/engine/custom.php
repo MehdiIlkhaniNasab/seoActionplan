@@ -221,7 +221,7 @@ function sap_idea_from_keyword( $project, $keyword, $secondary, $notes, $period 
 	$core = sap_kw_core( $keyword );
 	foreach ( sap_ideas( $pid ) as $i ) {
 		if ( sap_kw_core( $i['keyword'] ) === $core && in_array( $i['status'], array( 'scheduled', 'published', 'approved', 'new' ), true ) ) {
-			return new WP_Error( 'sap_dup', sprintf( 'این کلمه قبلاً در ایده‌ها/تقویم هست: «%s».', $i['title'] ?: $i['keyword'] ) );
+			return new WP_Error( 'sap_dup', sprintf( 'این کلمه قبلاً در ایده‌ها/تقویم هست: «%s».', $i['title'] ?: $i['keyword'] ), array( 'status' => 409 ) );
 		}
 	}
 	$owner = '';
@@ -266,6 +266,11 @@ function sap_idea_from_keyword( $project, $keyword, $secondary, $notes, $period 
 		'money_pages'       => $base['money_pages'],
 		'existing_articles' => array_slice( $base['existing_articles'], 0, 80 ),
 	);
+	$serp = sap_serp_brief_facts( $pid, $keyword );
+	if ( $serp ) {
+		$input['serp_gap'] = $serp;
+		$task             .= "\n- serp_gap تحلیل ۱۰ نتیجه اول گوگل است؛ سرفصل (outline)، FAQ و طول مقاله را طوری بچین که همه must_cover و gaps پوشش داده شود و زاویه (angle) مقاله را متمایز کند.";
+	}
 	$res = sap_ai_request( sap_ai_system_prompt(), $task . "\n\n" . wp_json_encode( $input, JSON_UNESCAPED_UNICODE ), $schema, array( 'purpose' => 'light', 'max_tokens' => 3000, 'effort' => 'low' ) );
 	if ( is_wp_error( $res ) ) {
 		return $res;

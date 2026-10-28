@@ -1011,6 +1011,12 @@ function sap_update_brief( $project, $update ) {
 		'money_pages' => array_slice( $money, 0, 30 ),
 		'posts'       => array_slice( $posts, 0, 30 ),
 	);
+	// What Google's top 10 cover for this keyword (SERP analysis), when it exists.
+	$serp = '' !== (string) $update['keyword'] ? sap_serp_brief_facts( $project['id'], $update['keyword'] ) : null;
+	if ( $serp ) {
+		$input['serp_gap'] = $serp;
+		$task             .= "\nserp_gap تحلیل ۱۰ نتیجه اول گوگل است: موضوعات must_cover، شکاف‌ها (gaps)، زاویه متمایز و سرفصل برندگان؛ بریف باید این شکاف‌ها را ببندد و صفحه را از برندگان کامل‌تر کند.";
+	}
 	$res = sap_ai_request( sap_ai_system_prompt(), $task . "\n\n" . wp_json_encode( $input, JSON_UNESCAPED_UNICODE ), $schema, array( 'purpose' => 'light', 'max_tokens' => 4500, 'effort' => 'low' ) );
 	if ( is_wp_error( $res ) ) {
 		return $res;

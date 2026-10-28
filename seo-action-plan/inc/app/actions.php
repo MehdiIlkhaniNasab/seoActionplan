@@ -601,3 +601,10 @@ add_action( 'admin_post_sap_member_save', function () {
 	}
 	sap_back( sap_url( 'team' ), 'پروفایل ذخیره شد.' );
 } );
+
+add_action( 'admin_post_sap_rank_keywords', function () {
+	sap_guard( 'sap_rank_keywords' );
+	$pid = absint( sap_post( 'project_id' ) );
+	sap_project_set_option( $pid, 'rank_keywords', implode( "\n", array_slice( sap_list( sanitize_textarea_field( (string) sap_post( 'rank_keywords' ) ) ), 0, 300 ) ) );
+	sap_back( sap_project_url( $pid, 'ranks' ), 'کلمات ردیابی ذخیره شد؛ از بروزرسانی بعدی ردیابی می‌شوند.' );
+} );

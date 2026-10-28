@@ -437,6 +437,25 @@ add_action( 'rest_api_init', function () {
 		} ),
 	) );
 	// A calendar article from a keyword you give.
+	// SERP analysis (resumable: call again while more = true).
+	register_rest_route( $ns, '/serp/(?P<project>\d+)', array(
+		'methods'             => 'POST',
+		'permission_callback' => 'sap_can',
+		'callback'            => $project_route( function ( $project, $req ) {
+			$kw = trim( sanitize_text_field( (string) $req->get_param( 'keyword' ) ) );
+			if ( '' === $kw ) {
+				return new WP_Error( 'sap_kw', 'کلمه کلیدی را وارد کنید.', array( 'status' => 400 ) );
+			}
+			$res = sap_serp_analyze_step( $project, $kw, esc_url_raw( (string) $req->get_param( 'url' ) ), rest_sanitize_boolean( $req->get_param( 'restart' ) ) );
+			if ( is_wp_error( $res ) ) {
+				return $res;
+			}
+			$res['ok']  = true;
+			$res['url'] = sap_project_url( $project['id'], 'serp', array( 'kw' => $kw ) );
+			return $res;
+		} ),
+	) );
+
 	register_rest_route( $ns, '/ideas/(?P<project>\d+)/keyword', array(
 		'methods'             => 'POST',
 		'permission_callback' => 'sap_can',

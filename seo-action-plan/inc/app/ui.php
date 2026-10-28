@@ -66,8 +66,10 @@ function sap_project_tabs_all() {
 		'seosignal' => array( 'سئو سیگنال', 'research' ),
 		'technical'   => array( 'چک‌لیست تکنیکال', 'settings' ),
 		'audit'       => array( 'تحلیل محتوا', 'log' ),
+		'serp'        => array( 'تحلیل نتایج گوگل', 'research' ),
 		'offpage'     => array( 'برنامه آف‌پیج', 'link' ),
-		'competitors' => array( 'رقبا', 'target' ),
+		'competitors' => array( 'رادار رقبا', 'radar' ),
+		'ranks'       => array( 'ردیابی رتبه', 'chart' ),
 		'settings' => array( 'تنظیمات پروژه', 'settings' ),
 	);
 }
@@ -82,9 +84,9 @@ function sap_project_groups() {
 	return array(
 		'home'      => array( 'نمای کلی', 'grid', array( 'overview', 'alerts', 'insights', 'focuses' ) ),
 		'technical' => array( 'سئو تکنیکال', 'settings', array( 'technical' ) ),
-		'content'   => array( 'سئو محتوا', 'log', array( 'audit', 'keywords', 'calendar', 'ideas', 'content' ) ),
+		'content'   => array( 'سئو محتوا', 'log', array( 'audit', 'serp', 'keywords', 'calendar', 'ideas', 'content' ) ),
 		'offpage'   => array( 'آف‌پیج', 'link', array( 'offpage' ) ),
-		'keywords'  => array( 'رقبا و داده‌ها', 'research', array( 'competitors', 'seosignal', 'graph' ) ),
+		'keywords'  => array( 'رتبه و رقبا', 'chart', array( 'ranks', 'competitors', 'seosignal', 'graph' ) ),
 		'work'      => array( 'برنامه و اجرا', 'list', array( 'plan', 'impact', 'findings', 'activity' ) ),
 	);
 }
@@ -372,4 +374,126 @@ function sap_full_url( $project, $url ) {
 function sap_page_ref( $project, $url ) {
 	$full = sap_full_url( $project, $url );
 	return preg_match( '#^https?://#i', $full ) ? sap_page_link( $full, sap_page_title( $project['id'], $full ) ) : esc_html( $url );
+}
+
+/**
+ * Inline SVG line chart. Series: label => [x => value]; lower is better for
+ * positions ($invert). Values may be null (gaps).
+ *
+ * @param array $series label => array of values (same x keys across series).
+ * @param array $opt    width, height, invert, colors, min, max, labels (x labels).
+ */
+function sap_svg_lines( $series, $opt = array() ) {
+	$o      = wp_parse_args( $opt, array( 'width' => 640, 'height' => 180, 'invert' => false, 'colors' => array( '#2563EB', '#F59E0B', '#16A34A', '#9333EA', '#DB2777', '#0891B2' ), 'min' => null, 'max' => null, 'pad' => 22, 'unit' => '' ) );
+	$all    = array();
+	$keys   = array();
+	foreach ( $series as $vals ) {
+		foreach ( $vals as $k => $v ) {
+			$keys[ $k ] = true;
+			if ( null !== $v ) {
+				$all[] = (float) $v;
+			}
+		}
+	}
+	if ( ! $all ) {
+		return '<p class="sap-muted sap-small">هنوز داده‌ای برای نمودار نیست.</p>';
+	}
+	$keys = array_keys( $keys );
+	sort( $keys );
+	$n    = count( $keys );
+	$min  = null === $o['min'] ? min( $all ) : $o['min'];
+	$max  = null === $o['max'] ? max( $all ) : $o['max'];
+	if ( $max - $min < 0.001 ) {
+		$max = $min + 1;
+	}
+	$w    = $o['width'];
+	$h    = $o['height'];
+	$p    = $o['pad'];
+	$x    = function ( $i ) use ( $n, $w, $p ) {
+		return $n > 1 ? $p + ( $w - 2 * $p ) * $i / ( $n - 1 ) : $w / 2;
+	};
+	$y    = function ( $v ) use ( $min, $max, $h, $p, $o ) {
+		$r = ( $v - $min ) / ( $max - $min );
+		return $o['invert'] ? $p + ( $h - 2 * $p ) * $r : $h - $p - ( $h - 2 * $p ) * $r;
+	};
+	$svg  = '<svg class="sap-chart" viewBox="0 0 ' . $w . ' ' . $h . '" preserveAspectRatio="none" role="img">';
+	foreach ( array( 0, 0.5, 1 ) as $g ) {
+		$gy   = $p + ( $h - 2 * $p ) * $g;
+		$gv   = $o['invert'] ? $min + ( $max - $min ) * $g : $max - ( $max - $min ) * $g;
+		$svg .= '<line x1="' . $p . '" x2="' . ( $w - $p ) . '" y1="' . round( $gy, 1 ) . '" y2="' . round( $gy, 1 ) . '" class="sap-chart-grid"/><text x="' . ( $w - 2 ) . '" y="' . round( $gy + 4, 1 ) . '" class="sap-chart-axis" text-anchor="end">' . esc_html( sap_num( $gv, $gv < 10 ? 1 : 0 ) . $o['unit'] ) . '</text>';
+	}
+	$ci = 0;
+	foreach ( $series as $label => $vals ) {
+		$col  = $o['colors'][ $ci++ % count( $o['colors'] ) ];
+		$pts  = array();
+		$segs = array();
+		foreach ( $keys as $i => $k ) {
+			$v = $vals[ $k ] ?? null;
+			if ( null === $v ) {
+				if ( $pts ) {
+					$segs[] = $pts;
+				}
+				$pts = array();
+				continue;
+			}
+			$pts[] = round( $x( $i ), 1 ) . ',' . round( $y( (float) $v ), 1 );
+		}
+		if ( $pts ) {
+			$segs[] = $pts;
+		}
+		foreach ( $segs as $s ) {
+			$svg .= count( $s ) > 1 ? '<polyline points="' . implode( ' ', $s ) . '" fill="none" stroke="' . $col . '" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"><title>' . esc_html( $label ) . '</title></polyline>' : '<circle cx="' . explode( ',', $s[0] )[0] . '" cy="' . explode( ',', $s[0] )[1] . '" r="2.5" fill="' . $col . '"/>';
+		}
+	}
+	$svg .= '</svg>';
+	if ( count( $series ) > 1 ) {
+		$svg .= '<p class="sap-chart-legend">';
+		$ci   = 0;
+		foreach ( array_keys( $series ) as $label ) {
+			$svg .= '<span><i style="background:' . $o['colors'][ $ci++ % count( $o['colors'] ) ] . '"></i>' . esc_html( $label ) . '</span>';
+		}
+		$svg .= '</p>';
+	}
+	return $svg;
+}
+
+/**
+ * Tiny position sparkline (lower = better = higher on the line).
+ */
+function sap_svg_spark( $vals, $invert = true ) {
+	$vals = array_values( $vals );
+	$nums = array_filter( $vals, function ( $v ) {
+		return null !== $v;
+	} );
+	if ( count( $nums ) < 2 ) {
+		return '';
+	}
+	$min = min( $nums );
+	$max = max( $nums );
+	$max = $max - $min < 0.5 ? $min + 1 : $max;
+	$n   = count( $vals );
+	$pts = array();
+	foreach ( $vals as $i => $v ) {
+		if ( null === $v ) {
+			continue;
+		}
+		$r     = ( $v - $min ) / ( $max - $min );
+		$pts[] = round( 2 + 76 * $i / max( 1, $n - 1 ), 1 ) . ',' . round( $invert ? 2 + 18 * $r : 20 - 18 * $r, 1 );
+	}
+	$up = $invert ? end( $nums ) <= reset( $nums ) : end( $nums ) >= reset( $nums );
+	return '<svg class="sap-spark" viewBox="0 0 80 22" aria-hidden="true"><polyline points="' . implode( ' ', $pts ) . '" fill="none" stroke="' . ( $up ? '#16A34A' : '#DC2626' ) . '" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/></svg>';
+}
+
+/**
+ * Position change badge (positive = improved when lower is better).
+ */
+function sap_rank_delta( $now, $then ) {
+	if ( null === $now || null === $then ) {
+		return null === $then && null !== $now ? '<span class="sap-rd is-new">جدید</span>' : '<span class="sap-muted">—</span>';
+	}
+	$d = round( $then - $now, 1 );
+	if ( abs( $d ) < 0.5 ) {
+		return '<span class="sap-rd">•</span>';
+	}
+	return '<span class="sap-rd ' . ( $d > 0 ? 'is-up' : 'is-down' ) . '">' . ( $d > 0 ? '▲' : '▼' ) . esc_html( sap_num( abs( $d ), abs( $d ) < 10 ? 1 : 0 ) ) . '</span>';
 }

@@ -69,6 +69,8 @@ foreach ( array(
 	'engine/page-plan',
 	'engine/alerts',
 	'engine/team',
+	'engine/ranks',
+	'engine/serp',
 	'engine/custom',
 	'engine/impact',
 	'engine/report-export',
