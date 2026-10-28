@@ -51,6 +51,7 @@ function sap_project_tabs( $mode = '' ) {
 function sap_project_tabs_all() {
 	return array(
 		'overview' => array( 'نمای کلی', 'grid' ),
+		'alerts'   => array( 'هشدارها', 'bell' ),
 		'insights' => array( 'تحلیل هوشمند', 'spark' ),
 		'findings' => array( 'ایرادها و فرصت‌ها', 'inbox' ),
 		'keywords' => array( 'نقشه کلمات', 'research' ),
@@ -79,7 +80,7 @@ function sap_project_tabs_all() {
  */
 function sap_project_groups() {
 	return array(
-		'home'      => array( 'نمای کلی', 'grid', array( 'overview', 'insights', 'focuses' ) ),
+		'home'      => array( 'نمای کلی', 'grid', array( 'overview', 'alerts', 'insights', 'focuses' ) ),
 		'technical' => array( 'سئو تکنیکال', 'settings', array( 'technical' ) ),
 		'content'   => array( 'سئو محتوا', 'log', array( 'audit', 'keywords', 'calendar', 'ideas', 'content' ) ),
 		'offpage'   => array( 'آف‌پیج', 'link', array( 'offpage' ) ),

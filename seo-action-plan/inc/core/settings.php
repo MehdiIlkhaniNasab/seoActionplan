@@ -7,7 +7,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-const SAP_SECRET_KEYS = array( 'google_client_secret', 'google_refresh_token', 'google_service_account', 'seosignal_key', 'anthropic_key', 'ai_gateway_key', 'psi_key' );
+const SAP_SECRET_KEYS = array( 'google_client_secret', 'google_refresh_token', 'google_service_account', 'seosignal_key', 'anthropic_key', 'ai_gateway_key', 'psi_key', 'sms_key', 'tg_token', 'bale_token', 'serp_key' );
 
 /**
  * Default settings.
@@ -43,6 +43,29 @@ function sap_settings_defaults() {
 		'decay_min_clicks'       => 30,  // Content decay: page must have had this many clicks.
 		'decay_drop'             => 30,  // Content decay: % drop.
 		'auto_sync'              => 'weekly', // off|weekly|daily.
+		// Notifications.
+		'notify_email'           => 1,
+		'notify_manager_email'   => '',  // Empty: the site admin email.
+		'notify_manager_phone'   => '',
+		'sms_provider'           => 'none', // none|kavenegar|smsir|ippanel|custom.
+		'sms_key'                => '',
+		'sms_sender'             => '',
+		'sms_custom_url'         => '', // GET/POST URL with {phone} and {text}.
+		'tg_token'               => '',
+		'tg_chat'                => '',
+		'bale_token'             => '',
+		'bale_chat'              => '',
+		'alert_critical'         => 'sms,tg,bale,email',
+		'alert_warning'          => 'tg,bale,email',
+		'alert_info'             => 'digest',
+		'reminder_hours'         => '8,14',
+		'reminder_sms'           => 1,
+		'reminder_email'         => 1,
+		// SERP data (top 10 of Google) for SERP analysis and the competitor radar.
+		'serp_provider'          => 'serper', // serper|serpapi.
+		'serp_key'               => '',
+		'serp_gl'                => 'ir',
+		'serp_hl'                => 'fa',
 		'recurring'              => implode( "\n", array(
 			'management | تهیه گزارش ماهانه سئو | 3',
 		) ),

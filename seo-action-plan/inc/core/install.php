@@ -125,6 +125,8 @@ function sap_install() {
 		source varchar(20) NOT NULL DEFAULT 'manual',
 		ai_ref varchar(64) NOT NULL DEFAULT '',
 		ai_output longtext NULL,
+		outcome text NULL,
+		spent decimal(6,2) NOT NULL DEFAULT 0,
 		created_at datetime NOT NULL DEFAULT '0000-00-00 00:00:00',
 		updated_at datetime NOT NULL DEFAULT '0000-00-00 00:00:00',
 		done_at datetime NULL,
@@ -272,6 +274,67 @@ function sap_install() {
 		UNIQUE KEY project_period (project_id,period)
 	) $c;" );
 
+	// Alerts: one row per condition (fingerprint), reopened / resolved as it comes and goes.
+	dbDelta( 'CREATE TABLE ' . sap_table( 'alerts' ) . " (
+		id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+		project_id bigint(20) unsigned NOT NULL DEFAULT 0,
+		rule varchar(40) NOT NULL DEFAULT '',
+		fingerprint varchar(64) NOT NULL DEFAULT '',
+		severity varchar(10) NOT NULL DEFAULT 'warning',
+		title varchar(255) NOT NULL DEFAULT '',
+		detail text NULL,
+		url text NULL,
+		data longtext NULL,
+		status varchar(10) NOT NULL DEFAULT 'open',
+		muted_until datetime NULL,
+		notified_at datetime NULL,
+		notify_count int(11) NOT NULL DEFAULT 0,
+		task_id bigint(20) unsigned NOT NULL DEFAULT 0,
+		first_seen datetime NOT NULL DEFAULT '0000-00-00 00:00:00',
+		last_seen datetime NOT NULL DEFAULT '0000-00-00 00:00:00',
+		resolved_at datetime NULL,
+		PRIMARY KEY  (id),
+		UNIQUE KEY project_fp (project_id,fingerprint),
+		KEY project_status (project_id,status)
+	) $c;" );
+
+	// Daily positions of tracked keywords (SEO Signal + Search Console), kept for good.
+	dbDelta( 'CREATE TABLE ' . sap_table( 'ranks' ) . " (
+		id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+		project_id bigint(20) unsigned NOT NULL DEFAULT 0,
+		keyword varchar(190) NOT NULL DEFAULT '',
+		day date NOT NULL,
+		source varchar(10) NOT NULL DEFAULT 'ss',
+		domain varchar(190) NOT NULL DEFAULT '',
+		position decimal(6,2) NULL,
+		url text NULL,
+		impressions int(11) NOT NULL DEFAULT 0,
+		clicks int(11) NOT NULL DEFAULT 0,
+		PRIMARY KEY  (id),
+		UNIQUE KEY kw_day (project_id,keyword,day,source,domain),
+		KEY project_day (project_id,day)
+	) $c;" );
+
+	// Project memory: decisions, learnings, client requests, context — read by people and the AI.
+	dbDelta( 'CREATE TABLE ' . sap_table( 'memory' ) . " (
+		id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+		project_id bigint(20) unsigned NOT NULL DEFAULT 0,
+		kind varchar(20) NOT NULL DEFAULT 'note',
+		title varchar(255) NOT NULL DEFAULT '',
+		body text NULL,
+		url text NULL,
+		keyword varchar(190) NOT NULL DEFAULT '',
+		tags varchar(255) NOT NULL DEFAULT '',
+		source varchar(20) NOT NULL DEFAULT 'manual',
+		ref varchar(64) NOT NULL DEFAULT '',
+		pinned tinyint(1) NOT NULL DEFAULT 0,
+		user_id bigint(20) unsigned NOT NULL DEFAULT 0,
+		created_at datetime NOT NULL DEFAULT '0000-00-00 00:00:00',
+		PRIMARY KEY  (id),
+		KEY project_kind (project_id,kind),
+		KEY ref (project_id,ref)
+	) $c;" );
+
 	foreach ( array( 'administrator' ) as $role_name ) {
 		$role = get_role( $role_name );
 		if ( $role ) {
@@ -284,6 +347,9 @@ function sap_install() {
 	if ( ! wp_next_scheduled( 'sap_daily' ) ) {
 		wp_schedule_event( time() + HOUR_IN_SECONDS, 'daily', 'sap_daily' );
 	}
+	if ( ! wp_next_scheduled( 'sap_hourly' ) ) {
+		wp_schedule_event( time() + 300, 'hourly', 'sap_hourly' );
+	}
 	update_option( 'sap_db_version', SAP_DB_VERSION, false );
 }
 
@@ -292,6 +358,7 @@ function sap_install() {
  */
 function sap_deactivate() {
 	wp_clear_scheduled_hook( 'sap_daily' );
+	wp_clear_scheduled_hook( 'sap_hourly' );
 	wp_clear_scheduled_hook( 'sap_sync_project' );
 	delete_option( 'sap_rewrite_version' );
 	flush_rewrite_rules( false );

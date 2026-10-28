@@ -145,6 +145,7 @@ function sap_site_pull_changes( $project ) {
 			if ( 'sokan' === ( $c['source'] ?? '' ) ) {
 				continue; // Applied from Sokan: already in the log with the approval.
 			}
+			do_action( 'sap_site_change', $project, $c ); // Alerts watch risky changes made outside Sokan.
 			$name  = '' !== (string) $c['title'] ? '«' . $c['title'] . '»' : '';
 			$label = sap_site_field_label( (string) $c['field'] );
 			if ( 'status' === $c['field'] && 'publish' === $c['new'] ) {

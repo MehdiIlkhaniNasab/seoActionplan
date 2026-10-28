@@ -51,6 +51,10 @@ $log = (array) ( $project['options']['sync_log'] ?? array() );
 	</div>
 </section>
 
+<?php $ac = sap_alert_counts( $project['id'] ); ?>
+<?php if ( $ac['critical'] && 'alerts' !== $tab ) : ?>
+	<a class="sap-alertbar" href="<?php echo esc_url( sap_project_url( $project['id'], 'alerts' ) ); ?>"><?php echo sap_icon( 'bell', 16 ); // phpcs:ignore ?><b><?php echo esc_html( sap_num( $ac['critical'] ) ); ?> هشدار بحرانی باز</b><span><?php echo esc_html( sap_alerts( $project['id'], array( 'status' => 'open', 'severity' => 'critical', 'limit' => 1 ) )[0]['title'] ?? '' ); ?></span><em>مشاهده ←</em></a>
+<?php endif; ?>
 <?php
 $cur_group = sap_tab_group( $tab );
 $all_tabs  = sap_project_tabs_all();
@@ -66,6 +70,12 @@ $all_tabs  = sap_project_tabs_all();
 		}
 		?>
 		<?php $pending = isset( sap_pillars()[ $g ] ) ? count( sap_proposals( $project['id'], $g, array( 'limit' => 500 ) ) ) : 0; ?>
+		<?php
+		if ( 'home' === $g ) {
+			$ac      = sap_alert_counts( $project['id'] );
+			$pending = $ac['critical'] + $ac['warning'];
+		}
+		?>
 		<a class="<?php echo $g === $cur_group ? 'is-active' : ''; ?>" href="<?php echo esc_url( sap_project_url( $project['id'], $g === $cur_group ? $tab : $subs[0] ) ); ?>"><?php echo sap_icon( $def[1], 16 ); // phpcs:ignore ?><?php echo esc_html( $def[0] ); ?><?php echo $pending ? '<em class="sap-tab-count" title="پیشنهاد در انتظار تأیید">' . esc_html( sap_num( $pending ) ) . '</em>' : ''; // phpcs:ignore ?></a>
 	<?php endforeach; ?>
 	<a class="sap-tab-gear <?php echo 'settings' === $tab ? 'is-active' : ''; ?>" href="<?php echo esc_url( sap_project_url( $project['id'], 'settings' ) ); ?>" title="تنظیمات پروژه"><?php echo sap_icon( 'settings', 16 ); // phpcs:ignore ?><span>تنظیمات</span></a>

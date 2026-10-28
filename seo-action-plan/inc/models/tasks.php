@@ -37,8 +37,9 @@ function sap_task_hydrate( $row ) {
 	$row['assignee']   = (int) $row['assignee'];
 	$row['effort']     = (float) $row['effort'];
 	$row['score']      = (float) $row['score'];
-	foreach ( array( 'notes', 'result', 'url', 'waiting_for', 'keyword', 'period', 'recurring', 'source', 'ai_ref', 'ai_output' ) as $k ) {
-		$row[ $k ] = (string) $row[ $k ];
+	$row['spent']      = (float) ( $row['spent'] ?? 0 );
+	foreach ( array( 'notes', 'result', 'url', 'waiting_for', 'keyword', 'period', 'recurring', 'source', 'ai_ref', 'ai_output', 'outcome' ) as $k ) {
+		$row[ $k ] = (string) ( $row[ $k ] ?? '' );
 	}
 	return $row;
 }
@@ -107,11 +108,15 @@ function sap_task_save( $data, $id = 0 ) {
 		'source'      => 'sanitize_key',
 		'ai_ref'      => 'sanitize_key',
 		'ai_output'   => 'sanitize_textarea_field',
+		'outcome'     => 'sanitize_textarea_field',
 	);
 	foreach ( $map as $k => $fn ) {
 		if ( array_key_exists( $k, $data ) ) {
 			$fields[ $k ] = call_user_func( $fn, $data[ $k ] );
 		}
+	}
+	if ( array_key_exists( 'spent', $data ) ) {
+		$fields['spent'] = max( 0, round( (float) sap_norm_text( (string) $data['spent'] ), 2 ) );
 	}
 	if ( array_key_exists( 'context', $data ) ) {
 		$fields['context'] = array_key_exists( $data['context'], sap_contexts() ) ? $data['context'] : 'management';
@@ -149,6 +154,7 @@ function sap_task_save( $data, $id = 0 ) {
 	}
 	$after = sap_task( $id );
 	sap_task_sync_activity( $before, $after );
+	do_action( 'sap_task_saved', $before, $after );
 	return (int) $id;
 }
 

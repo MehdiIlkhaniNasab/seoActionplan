@@ -253,6 +253,97 @@
 		}).catch(function (e) { toast(e.message, true); btn.disabled = false; });
 	});
 
+	/* ---- My tasks: filter, status, finish with a work report ---- */
+	(function () {
+		var groups = document.querySelectorAll('[data-sap-my-group]');
+		if (!groups.length && !document.querySelector('[data-sap-remind-now]')) { return; }
+		var proj = '';
+		var q = '';
+		var apply = function () {
+			document.querySelectorAll('[data-sap-mytask]').forEach(function (c) {
+				var ok = (!proj || c.getAttribute('data-project') === proj) && (!q || c.getAttribute('data-text').indexOf(q) !== -1);
+				c.hidden = !ok;
+			});
+			groups.forEach(function (g) { g.hidden = !g.querySelector('[data-sap-mytask]:not([hidden])'); });
+		};
+		document.querySelectorAll('[data-sap-my-project]').forEach(function (b) {
+			b.addEventListener('click', function () {
+				document.querySelectorAll('[data-sap-my-project]').forEach(function (x) { x.classList.remove('is-active'); });
+				b.classList.add('is-active');
+				proj = b.getAttribute('data-sap-my-project');
+				apply();
+			});
+		});
+		var s = document.querySelector('[data-sap-my-search]');
+		if (s) { s.addEventListener('input', function () { q = s.value.trim().toLowerCase(); apply(); }); }
+		document.addEventListener('click', function (ev) {
+			var st = ev.target.closest('[data-sap-my-status]');
+			var dn = ev.target.closest('[data-sap-my-done]');
+			var cn = ev.target.closest('[data-sap-my-cancel]');
+			var rm = ev.target.closest('[data-sap-remind-now]');
+			if (rm) {
+				rm.disabled = true;
+				post('team/remind', {}).then(function (res) { toast(res.msg); rm.disabled = false; }).catch(function (e) { toast(e.message, true); rm.disabled = false; });
+				return;
+			}
+			var card = ev.target.closest('[data-sap-mytask]');
+			if (!card) { return; }
+			if (st) {
+				st.disabled = true;
+				post('task/' + card.getAttribute('data-sap-mytask') + '/status', { status: st.getAttribute('data-sap-my-status') }).then(function (res) {
+					toast(res.msg);
+					setTimeout(function () { location.reload(); }, 500);
+				}).catch(function (e) { toast(e.message, true); st.disabled = false; });
+			} else if (dn) {
+				card.querySelector('[data-sap-my-report]').hidden = false;
+				card.querySelector('[data-sap-my-report] textarea').focus();
+			} else if (cn) {
+				card.querySelector('[data-sap-my-report]').hidden = true;
+			}
+		});
+		document.addEventListener('submit', function (ev) {
+			var f = ev.target.closest('[data-sap-my-report]');
+			if (!f) { return; }
+			ev.preventDefault();
+			var card = f.closest('[data-sap-mytask]');
+			var btn = f.querySelector('button[type="submit"]');
+			btn.disabled = true;
+			post('task/' + card.getAttribute('data-sap-mytask') + '/status', { status: 'done', result: f.result.value, spent: f.spent.value }).then(function (res) {
+				toast(res.msg);
+				fadeOut(card);
+				setTimeout(function () { card.remove(); apply(); }, 450);
+			}).catch(function (e) { toast(e.message, true); btn.disabled = false; });
+		});
+	})();
+
+	/* ---- Alerts: act in place, check now, test channels ---- */
+	document.addEventListener('click', function (ev) {
+		var act = ev.target.closest('[data-sap-alert-do]');
+		var chk = ev.target.closest('[data-sap-alerts-check]');
+		var tst = ev.target.closest('[data-sap-notify-test]');
+		if (!act && !chk && !tst) { return; }
+		ev.preventDefault();
+		var b = act || chk || tst;
+		b.disabled = true;
+		b.classList.add('is-loading');
+		var done = function () { b.disabled = false; b.classList.remove('is-loading'); };
+		if (act) {
+			var li = act.closest('[data-sap-alert]');
+			post('alert/' + li.getAttribute('data-sap-alert'), { do: act.getAttribute('data-sap-alert-do'), days: 7 }).then(function (res) {
+				toast(res.msg);
+				var what = act.getAttribute('data-sap-alert-do');
+				if (what === 'task' || what === 'ack') { setTimeout(function () { location.reload(); }, 500); } else { fadeOut(li); }
+			}).catch(function (e) { toast(e.message, true); done(); });
+		} else if (chk) {
+			post('alerts/' + chk.getAttribute('data-sap-alerts-check') + '/check', {}).then(function (res) {
+				toast(res.msg);
+				setTimeout(function () { location.reload(); }, 900);
+			}).catch(function (e) { toast(e.message, true); done(); });
+		} else {
+			post('notify/test', { channel: tst.getAttribute('data-sap-notify-test') }).then(function (res) { toast(res.msg); done(); }).catch(function (e) { toast(e.message, true); done(); });
+		}
+	});
+
 	/* ---- Title / meta straight to the client site ---- */
 	document.addEventListener('click', function (ev) {
 		var b = ev.target.closest('[data-sap-seo-apply]');

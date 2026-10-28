@@ -15,7 +15,7 @@
 defined( 'ABSPATH' ) || exit;
 
 const SAP_VERSION    = '0.15.0';
-const SAP_DB_VERSION = '7';
+const SAP_DB_VERSION = '8';
 const SAP_CAP        = 'sap_manage'; // Full access: projects, settings, plans.
 const SAP_CAP_WORK   = 'sap_work';   // Team members: their own tasks.
 
@@ -28,6 +28,7 @@ foreach ( array(
 	'core/jalali',
 	'core/settings',
 	'core/network',
+	'core/notify',
 	'core/install',
 	'models/projects',
 	'models/focuses',
@@ -66,6 +67,8 @@ foreach ( array(
 	'engine/keymap-rules',
 	'engine/smart',
 	'engine/page-plan',
+	'engine/alerts',
+	'engine/team',
 	'engine/custom',
 	'engine/impact',
 	'engine/report-export',

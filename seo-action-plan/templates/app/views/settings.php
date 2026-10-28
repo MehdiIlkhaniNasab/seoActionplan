@@ -149,6 +149,68 @@ $auth  = sap_google_auth_url();
 		<?php sap_switch( 'ss_auto', $s['ss_auto'], 'همگام‌سازی خودکار (زمان‌بندی‌شده) هم از سهمیه سئو سیگنال استفاده کند', 'خاموش باشد، مراحل پولی سئو سیگنال فقط با «تحلیل کامل» و تأیید شما اجرا می‌شوند؛ ردیاب رتبه (رایگان) همیشه اجرا می‌شود.' ); ?>
 	</section>
 
+	<section class="sap-panel" id="notify">
+		<h2><?php echo sap_icon( 'bell' ); // phpcs:ignore ?>اعلان‌ها (هشدارها، کارهای تیم، یادآوری‌ها)</h2>
+		<p class="sap-muted sap-small">هشدارهای بحرانی، سپردن کار به اعضای تیم و یادآوری روزانه از این کانال‌ها ارسال می‌شوند. بعد از ذخیره، دکمه «ارسال آزمایشی» هر کانال را امتحان کنید.</p>
+		<div class="sap-grid-3">
+			<label>ایمیل مدیر پروژه‌ها<input type="email" name="notify_manager_email" dir="ltr" value="<?php echo esc_attr( $s['notify_manager_email'] ); ?>" placeholder="<?php echo esc_attr( get_option( 'admin_email' ) ); ?>"><small>خالی = ایمیل مدیر وردپرس</small></label>
+			<label>موبایل مدیر (برای پیامک هشدار)<input type="text" name="notify_manager_phone" dir="ltr" value="<?php echo esc_attr( $s['notify_manager_phone'] ); ?>" placeholder="09121234567"></label>
+			<div class="sap-check-col"><?php sap_switch( 'notify_email', $s['notify_email'], 'ارسال ایمیل فعال باشد', 'ایمیل از وردپرس ارسال می‌شود؛ برای تحویل مطمئن یک افزونه SMTP فعال کنید.' ); ?></div>
+		</div>
+		<h3 class="sap-h3">پیامک</h3>
+		<div class="sap-grid-3">
+			<label>سرویس پیامک<select name="sms_provider"><?php foreach ( sap_sms_providers() as $k => $l ) : ?><option value="<?php echo esc_attr( $k ); ?>" <?php selected( $k, $s['sms_provider'] ); ?>><?php echo esc_html( $l ); ?></option><?php endforeach; ?></select></label>
+			<label>کلید API سرویس پیامک<input type="text" name="sms_key" dir="ltr" value="<?php echo esc_attr( sap_mask( $s['sms_key'] ) ); ?>" autocomplete="off"></label>
+			<label>شماره فرستنده (خط)<input type="text" name="sms_sender" dir="ltr" value="<?php echo esc_attr( $s['sms_sender'] ); ?>" placeholder="10008663"></label>
+		</div>
+		<label>آدرس درگاه سفارشی (فقط برای «درگاه سفارشی»)<input type="url" name="sms_custom_url" dir="ltr" value="<?php echo esc_attr( $s['sms_custom_url'] ); ?>" placeholder="https://panel.example/send?to={phone}&amp;text={text}&amp;from={sender}&amp;key={key}"></label>
+		<h3 class="sap-h3">ربات تلگرام و بله</h3>
+		<div class="sap-grid-2">
+			<label>توکن ربات تلگرام<input type="text" name="tg_token" dir="ltr" value="<?php echo esc_attr( sap_mask( $s['tg_token'] ) ); ?>" autocomplete="off" placeholder="123456:ABC…"><small>از ‎@BotFather بسازید؛ تلگرام از مسیر پروکسی ارسال می‌شود.</small></label>
+			<label>شناسه چت/کانال تلگرام<input type="text" name="tg_chat" dir="ltr" value="<?php echo esc_attr( $s['tg_chat'] ); ?>" placeholder="-1001234567890 یا ‎@channel"></label>
+			<label>توکن ربات بله<input type="text" name="bale_token" dir="ltr" value="<?php echo esc_attr( sap_mask( $s['bale_token'] ) ); ?>" autocomplete="off"><small>در بله از ‎@botfather ربات بسازید؛ مستقیم و بدون پروکسی ارسال می‌شود.</small></label>
+			<label>شناسه چت/کانال بله<input type="text" name="bale_chat" dir="ltr" value="<?php echo esc_attr( $s['bale_chat'] ); ?>"></label>
+		</div>
+		<h3 class="sap-h3">هشدارها از چه کانالی؟</h3>
+		<div class="sap-sev-grid">
+			<?php foreach ( array( 'critical' => 'بحرانی', 'warning' => 'هشدار', 'info' => 'اطلاع' ) as $sv => $sl ) : ?>
+				<?php $on = sap_list( (string) $s[ 'alert_' . $sv ] ); ?>
+				<div class="sap-sev is-<?php echo esc_attr( $sv ); ?>"><b><?php echo esc_html( $sl ); ?></b>
+					<?php foreach ( sap_notify_channels() as $ck => $cl ) : ?>
+						<label class="sap-check"><input type="checkbox" name="alert_<?php echo esc_attr( $sv ); ?>[]" value="<?php echo esc_attr( $ck ); ?>" <?php checked( in_array( $ck, $on, true ) ); ?>> <?php echo esc_html( $cl ); ?></label>
+					<?php endforeach; ?>
+				</div>
+			<?php endforeach; ?>
+		</div>
+		<h3 class="sap-h3">یادآوری کارهای تیم</h3>
+		<div class="sap-grid-3">
+			<label>ساعت‌های یادآوری (به وقت سایت)<input type="text" name="reminder_hours" dir="ltr" value="<?php echo esc_attr( $s['reminder_hours'] ); ?>" placeholder="8,14"><small>مثلاً 8,14 یعنی ۸ صبح و ۲ بعدازظهر</small></label>
+			<div class="sap-check-col"><?php sap_switch( 'reminder_sms', $s['reminder_sms'], 'یادآوری پیامکی به اعضا' ); ?></div>
+			<div class="sap-check-col"><?php sap_switch( 'reminder_email', $s['reminder_email'], 'خلاصه صبحگاهی کارها با ایمیل' ); ?></div>
+		</div>
+		<div class="sap-actions sap-notify-tests">
+			<?php foreach ( array( 'email' => 'ایمیل', 'sms' => 'پیامک', 'tg' => 'تلگرام', 'bale' => 'بله' ) as $ck => $cl ) : ?>
+				<button type="button" class="sap-btn is-small is-soft" data-sap-notify-test="<?php echo esc_attr( $ck ); ?>">ارسال آزمایشی <?php echo esc_html( $cl ); ?></button>
+			<?php endforeach; ?>
+		</div>
+		<?php $nlog = array_reverse( array_slice( (array) get_option( 'sap_notify_log', array() ), -8 ) ); ?>
+		<?php if ( $nlog ) : ?>
+			<details class="sap-small"><summary>آخرین ارسال‌ها</summary>
+				<ul class="sap-notify-log"><?php foreach ( $nlog as $l ) : ?><li class="<?php echo $l['ok'] ? 'is-ok' : 'is-err'; ?>"><b><?php echo esc_html( sap_notify_channels()[ $l['ch'] ] ?? $l['ch'] ); ?></b> <span dir="ltr"><?php echo esc_html( $l['to'] ); ?></span> — <?php echo esc_html( $l['text'] ); ?> <small><?php echo esc_html( sap_jdate( $l['at'], 'short' ) . ' ' . substr( $l['at'], 11, 5 ) ); ?><?php echo $l['ok'] ? '' : ' · ' . esc_html( $l['err'] ); ?></small></li><?php endforeach; ?></ul>
+			</details>
+		<?php endif; ?>
+	</section>
+
+	<section class="sap-panel" id="serp">
+		<h2><?php echo sap_icon( 'research' ); // phpcs:ignore ?>داده نتایج گوگل (تحلیل ۱۰ نتیجه اول و رادار رقبا)</h2>
+		<p class="sap-muted sap-small">برای تحلیل نتایج گوگل قبل از هر بریف و رادار رقبا، ۱۰ نتیجه اول هر کلمه از یک سرویس SERP گرفته می‌شود (Serper.dev ارزان و سریع؛ SerpApi کامل‌تر). بدون کلید، تحلیل نتایج با داده سئو سیگنال (رقبای هر کلمه) انجام می‌شود.</p>
+		<div class="sap-grid-3">
+			<label>سرویس<select name="serp_provider"><option value="serper" <?php selected( 'serper', $s['serp_provider'] ); ?>>Serper.dev</option><option value="serpapi" <?php selected( 'serpapi', $s['serp_provider'] ); ?>>SerpApi</option></select></label>
+			<label>کلید API<input type="text" name="serp_key" dir="ltr" value="<?php echo esc_attr( sap_mask( $s['serp_key'] ) ); ?>" autocomplete="off"></label>
+			<label>کشور / زبان<span class="sap-inline"><input type="text" name="serp_gl" dir="ltr" value="<?php echo esc_attr( $s['serp_gl'] ); ?>" style="width:70px"><input type="text" name="serp_hl" dir="ltr" value="<?php echo esc_attr( $s['serp_hl'] ); ?>" style="width:70px"></span></label>
+		</div>
+	</section>
+
 	<section class="sap-panel" id="network">
 		<h2>شبکه و پروکسی</h2>
 		<?php if ( sap_proxy_defined() ) : ?>

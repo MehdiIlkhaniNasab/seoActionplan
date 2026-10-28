@@ -56,6 +56,9 @@ $post    = esc_url( admin_url( 'admin-post.php' ) );
 				<?php endif; ?>
 			<?php endforeach; ?>
 		</form>
+		<?php if ( '' !== $t['outcome'] ) : ?>
+			<p class="sap-task-outcome"><b>خروجی مطلوب:</b> <?php echo esc_html( $t['outcome'] ); ?></p>
+		<?php endif; ?>
 		<?php if ( $t['notes'] ) : ?>
 			<div class="sap-notes"><?php echo nl2br( esc_html( $t['notes'] ) ); ?></div>
 		<?php endif; ?>
@@ -77,6 +80,7 @@ $post    = esc_url( admin_url( 'admin-post.php' ) );
 		<form method="post" action="<?php echo $post; // phpcs:ignore ?>" class="sap-form">
 			<?php sap_form_fields( 'sap_task_save', array( 'task_id' => $t['id'], '_return' => $here . '#task-' . $t['id'] ) ); ?>
 			<label>نتیجه / چه کاری انجام شد (در گزارش ماهانه می‌آید)<textarea name="result" rows="2" placeholder="مثلاً: تایتل از «…» به «…» تغییر کرد؛ ۴ سوال FAQ اضافه شد"><?php echo esc_textarea( $t['result'] ); ?></textarea></label>
+			<label>زمان صرف‌شده (ساعت)<input type="number" name="spent" min="0" step="0.25" value="<?php echo esc_attr( $t['spent'] ?: '' ); ?>" style="max-width:140px"></label>
 			<?php if ( $manager ) : ?>
 				<details class="sap-more">
 				<summary>ویرایش جزئیات <small>عنوان، مسئول، سررسید، ماه، Focus…</small></summary>
@@ -93,6 +97,7 @@ $post    = esc_url( admin_url( 'admin-post.php' ) );
 					<label class="is-wide">آدرس صفحه<input type="url" name="url" dir="ltr" value="<?php echo esc_attr( $t['url'] ); ?>"></label>
 				</div>
 				<label>توضیحات<textarea name="notes" rows="3"><?php echo esc_textarea( $t['notes'] ); ?></textarea></label>
+				<label>خروجی مطلوب (بهترین نتیجه این کار چیست؟)<textarea name="outcome" rows="2" placeholder="مثلاً: ۱۲ محصول با ویژگی کامل و توضیحات ۳۰۰ کلمه‌ای؛ امتیاز صفحه بالای ۸۰"><?php echo esc_textarea( $t['outcome'] ); ?></textarea></label>
 				</details>
 			<?php else : ?>
 				<label>آدرس صفحه (مثلاً لینک مقاله منتشرشده)<input type="url" name="url" dir="ltr" value="<?php echo esc_attr( $t['url'] ); ?>"></label>

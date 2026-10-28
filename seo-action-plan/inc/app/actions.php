@@ -82,6 +82,33 @@ add_action( 'admin_post_sap_save_settings', function () {
 		}
 		$changes['google_service_account'] = $sa;
 	}
+	// Notifications.
+	$changes['notify_email']         = sap_post( 'notify_email' ) ? 1 : 0;
+	$changes['notify_manager_email'] = sanitize_email( (string) sap_post( 'notify_manager_email' ) );
+	$changes['notify_manager_phone'] = sap_phone_norm( (string) sap_post( 'notify_manager_phone' ) );
+	$changes['sms_provider']         = array_key_exists( (string) sap_post( 'sms_provider' ), sap_sms_providers() ) ? (string) sap_post( 'sms_provider' ) : 'none';
+	$changes['sms_sender']           = sanitize_text_field( (string) sap_post( 'sms_sender' ) );
+	$changes['sms_custom_url']       = esc_url_raw( trim( (string) sap_post( 'sms_custom_url' ) ) );
+	$changes['tg_chat']              = sanitize_text_field( (string) sap_post( 'tg_chat' ) );
+	$changes['bale_chat']            = sanitize_text_field( (string) sap_post( 'bale_chat' ) );
+	foreach ( array( 'critical', 'warning', 'info' ) as $sv ) {
+		$changes[ 'alert_' . $sv ] = implode( ',', array_intersect( array_map( 'sanitize_key', (array) sap_post( 'alert_' . $sv, array() ) ), array_keys( sap_notify_channels() ) ) );
+	}
+	$hours = array_filter( array_map( 'absint', explode( ',', sap_norm_text( (string) sap_post( 'reminder_hours' ) ) ) ), function ( $h ) {
+		return $h >= 0 && $h <= 23;
+	} );
+	$changes['reminder_hours'] = implode( ',', array_unique( $hours ) );
+	$changes['reminder_sms']   = sap_post( 'reminder_sms' ) ? 1 : 0;
+	$changes['reminder_email'] = sap_post( 'reminder_email' ) ? 1 : 0;
+	$changes['serp_provider']  = 'serpapi' === sap_post( 'serp_provider' ) ? 'serpapi' : 'serper';
+	$changes['serp_gl']        = sanitize_key( (string) sap_post( 'serp_gl', 'ir' ) ) ?: 'ir';
+	$changes['serp_hl']        = sanitize_key( (string) sap_post( 'serp_hl', 'fa' ) ) ?: 'fa';
+	foreach ( array( 'sms_key', 'tg_token', 'bale_token', 'serp_key' ) as $k ) {
+		$v = trim( (string) sap_post( $k ) );
+		if ( '' !== $v && false === strpos( $v, '•' ) ) {
+			$changes[ $k ] = sanitize_text_field( $v );
+		}
+	}
 	sap_update_settings( $changes );
 	delete_transient( 'sap_google_access_token' );
 	delete_transient( 'sap_gsc_sites' );
@@ -377,8 +404,8 @@ add_action( 'admin_post_sap_task_save', function () {
 		wp_die( 'فقط کارهای خودتان را می‌توانید ویرایش کنید.', 403 );
 	}
 	$fields = sap_can()
-		? array( 'title', 'notes', 'result', 'context', 'status', 'period', 'assignee', 'waiting_for', 'due_date', 'effort', 'url', 'keyword', 'focus_id' )
-		: array( 'status', 'result', 'url' );
+		? array( 'title', 'notes', 'result', 'context', 'status', 'period', 'assignee', 'waiting_for', 'due_date', 'effort', 'url', 'keyword', 'focus_id', 'outcome', 'spent' )
+		: array( 'status', 'result', 'url', 'spent' );
 	$data   = array();
 	foreach ( $fields as $k ) {
 		if ( isset( $_POST[ $k ] ) ) { // phpcs:ignore WordPress.Security.NonceVerification
@@ -517,4 +544,60 @@ add_action( 'admin_post_sap_site_save', function () {
 		sap_back( sap_project_url( $pid, 'settings' ) . '#site-connector', 'ذخیره شد، اما اتصال برقرار نشد: ' . $ping->get_error_message(), false );
 	}
 	sap_back( sap_project_url( $pid, 'settings' ) . '#site-connector', $ping ? sprintf( 'اتصال به «%s» برقرار شد (افزونه رابط %s%s).', $ping['site'] ?? '', $ping['version'] ?? '', empty( $ping['write'] ) ? '، اعمال تغییرات غیرفعال' : '' ) : 'ذخیره شد.' );
+} );
+
+/* ---- Alert rules of a project ------------------------------------------ */
+
+add_action( 'admin_post_sap_alert_rules', function () {
+	sap_guard( 'sap_alert_rules' );
+	$pid   = absint( sap_post( 'project_id' ) );
+	$in    = (array) sap_post( 'rules', array() );
+	$rules = array();
+	foreach ( sap_alert_rules() as $rk => $def ) {
+		$rules[ $rk ] = array( 'on' => empty( $in[ $rk ]['on'] ) ? 0 : 1 );
+		foreach ( $def[3] as $ck => $cv ) {
+			if ( 'on' !== $ck && isset( $in[ $rk ][ $ck ] ) ) {
+				$rules[ $rk ][ $ck ] = max( 0, (float) sap_norm_text( (string) $in[ $rk ][ $ck ] ) );
+			}
+		}
+	}
+	sap_project_set_option( $pid, 'alert_rules', $rules );
+	sap_back( sap_project_url( $pid, 'alerts' ), 'قوانین هشدار ذخیره شد.' );
+} );
+
+/* ---- Team members ------------------------------------------------------ */
+
+add_action( 'admin_post_sap_member_save', function () {
+	sap_guard( 'sap_member_save' );
+	$uid  = absint( sap_post( 'user_id' ) );
+	$data = array(
+		'name'         => sap_post( 'name' ),
+		'email'        => sap_post( 'email' ),
+		'phone'        => sap_post( 'phone' ),
+		'title'        => sap_post( 'title' ),
+		'notify_sms'   => sap_post( 'notify_sms' ) ? 1 : 0,
+		'notify_email' => sap_post( 'notify_email' ) ? 1 : 0,
+	);
+	if ( ! $uid ) {
+		$uid = sap_member_create( $data );
+		if ( is_wp_error( $uid ) ) {
+			sap_back( sap_url( 'team' ), $uid->get_error_message(), false );
+		}
+		sap_back( sap_url( 'team' ), 'عضو اضافه شد و ایمیل دعوت برایش ارسال شد.' );
+	}
+	sap_member_update( $uid, $data );
+	foreach ( (array) sap_post( 'roles', array() ) as $pid => $role ) {
+		$p = sap_project( absint( $pid ) );
+		if ( ! $p ) {
+			continue;
+		}
+		$members = (array) ( $p['options']['members'] ?? array() );
+		if ( '' === $role || ! isset( sap_member_roles()[ $role ] ) ) {
+			unset( $members[ $uid ] );
+		} else {
+			$members[ $uid ] = $role;
+		}
+		sap_project_set_option( $p['id'], 'members', $members );
+	}
+	sap_back( sap_url( 'team' ), 'پروفایل ذخیره شد.' );
 } );

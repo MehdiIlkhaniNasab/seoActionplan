@@ -108,8 +108,26 @@ add_action( 'rest_api_init', function () {
 			if ( ! sap_can() && ( $task['assignee'] !== get_current_user_id() || ! in_array( $status, array( 'doing', 'waiting', 'done' ), true ) ) ) {
 				return new WP_Error( 'sap_forbidden', 'اجازه این تغییر را ندارید.', array( 'status' => 403 ) );
 			}
-			sap_task_save( array( 'status' => $status ), $task['id'] );
-			return array( 'ok' => true, 'status' => $status, 'label' => sap_task_statuses()[ $status ] );
+			$data = array( 'status' => $status );
+			// The report of the work: what was done (goes to the log and the monthly report) and hours spent.
+			if ( null !== $req->get_param( 'result' ) ) {
+				$data['result'] = (string) $req->get_param( 'result' );
+			}
+			if ( null !== $req->get_param( 'spent' ) ) {
+				$data['spent'] = (string) $req->get_param( 'spent' );
+			}
+			sap_task_save( $data, $task['id'] );
+			return array( 'ok' => true, 'status' => $status, 'label' => sap_task_statuses()[ $status ], 'msg' => 'done' === $status ? 'خسته نباشید! کار ثبت شد و در گزارش می‌آید.' : 'وضعیت به «' . sap_task_statuses()[ $status ] . '» تغییر کرد' );
+		},
+	) );
+
+	// Team reminders now (manager).
+	register_rest_route( $ns, '/team/remind', array(
+		'methods'             => 'POST',
+		'permission_callback' => 'sap_can',
+		'callback'            => function () {
+			$n = sap_team_remind( true );
+			return array( 'ok' => true, 'msg' => $n ? sprintf( 'یادآوری برای %s نفر ارسال شد.', sap_num( $n ) ) : 'هیچ عضوی کار باز ندارد.' );
 		},
 	) );
 
@@ -760,6 +778,71 @@ add_action( 'rest_api_init', function () {
 				}
 			}
 			return array( 'ok' => true, 'id' => $id, 'warn' => '' !== $warn, 'msg' => 'ذخیره و تأیید شد' . $warn );
+		},
+	) );
+
+	// Alerts: acknowledge, resolve, mute, reopen, turn into a task.
+	register_rest_route( $ns, '/alert/(?P<id>\d+)', array(
+		'methods'             => 'POST',
+		'permission_callback' => 'sap_can',
+		'callback'            => function ( WP_REST_Request $req ) {
+			$a = sap_alert( (int) $req['id'] );
+			if ( ! $a ) {
+				return new WP_Error( 'sap_alert', 'هشدار پیدا نشد.', array( 'status' => 404 ) );
+			}
+			switch ( sanitize_key( (string) $req->get_param( 'do' ) ) ) {
+				case 'ack':
+					sap_alert_set( $a['id'], 'ack' );
+					return array( 'ok' => true, 'msg' => 'دیده شد' );
+				case 'resolve':
+					sap_alert_set( $a['id'], 'resolved' );
+					return array( 'ok' => true, 'msg' => 'حل‌شده ثبت شد' );
+				case 'mute':
+					sap_alert_set( $a['id'], 'muted', max( 1, (int) $req->get_param( 'days' ) ?: 7 ) );
+					return array( 'ok' => true, 'msg' => 'تا ' . sap_num( max( 1, (int) $req->get_param( 'days' ) ?: 7 ) ) . ' روز بی‌صدا شد' );
+				case 'open':
+					sap_alert_set( $a['id'], 'open' );
+					return array( 'ok' => true, 'msg' => 'دوباره باز شد' );
+				case 'task':
+					if ( $a['task_id'] && sap_task( $a['task_id'] ) ) {
+						return array( 'ok' => true, 'msg' => 'قبلاً به اکشن پلن اضافه شده' );
+					}
+					$ctx = array( 'uptime' => 'technical', 'ssl' => 'technical', 'index' => 'technical', 'errors' => 'technical', 'robots' => 'technical', 'sitemap' => 'technical', 'cwv' => 'technical', 'changes' => 'technical', 'traffic' => 'research', 'ranks' => 'research', 'radar' => 'research', 'stale' => 'management' );
+					$tid = sap_task_save( array(
+						'project_id' => $a['project_id'],
+						'title'      => 'رسیدگی به هشدار: ' . $a['title'],
+						'notes'      => $a['detail'],
+						'context'    => $ctx[ $a['rule'] ] ?? 'technical',
+						'status'     => 'next',
+						'period'     => sap_period_current(),
+						'effort'     => 1,
+						'score'      => 'critical' === $a['severity'] ? 90 : 60,
+						'url'        => $a['url'],
+						'source'     => 'alert',
+					) );
+					global $wpdb;
+					$wpdb->update( sap_table( 'alerts' ), array( 'task_id' => $tid, 'status' => 'ack' ), array( 'id' => $a['id'] ) );
+					return array( 'ok' => true, 'msg' => 'به اکشن پلن این ماه اضافه شد' );
+			}
+			return new WP_Error( 'sap_do', 'عملیات نامعتبر.', array( 'status' => 400 ) );
+		},
+	) );
+	register_rest_route( $ns, '/alerts/(?P<project>\d+)/check', array(
+		'methods'             => 'POST',
+		'permission_callback' => 'sap_can',
+		'callback'            => $project_route( function ( $project ) {
+			sap_alerts_run( $project, 'hourly' );
+			$r = sap_step_alerts( $project );
+			return array( 'ok' => true, 'msg' => $r['msg'] );
+		} ),
+	) );
+	register_rest_route( $ns, '/notify/test', array(
+		'methods'             => 'POST',
+		'permission_callback' => 'sap_can',
+		'callback'            => function ( WP_REST_Request $req ) {
+			$ch  = sanitize_key( (string) $req->get_param( 'channel' ) );
+			$res = sap_notify_test( $ch );
+			return is_wp_error( $res ) ? $res : array( 'ok' => true, 'msg' => 'پیام آزمایشی ارسال شد.' );
 		},
 	) );
 

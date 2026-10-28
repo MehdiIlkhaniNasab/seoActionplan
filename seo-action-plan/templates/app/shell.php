@@ -62,6 +62,7 @@ $link     = function ( $key, $url, $icon, $label, $badge = 0 ) use ( $nav ) {
 				<?php endforeach; ?>
 				<a class="sap-nav-add <?php echo 'new' === $nav ? 'is-active' : ''; ?>" href="<?php echo esc_url( sap_url( 'new' ) ); ?>"><?php echo sap_icon( 'plus', 16 ); // phpcs:ignore ?><span>پروژه جدید</span></a>
 				<p class="sap-nav-h">ابزار</p>
+				<?php $link( 'team', sap_url( 'team' ), 'users', 'تیم و اعضا' ); ?>
 				<?php $link( 'settings', sap_url( 'settings' ), 'settings', 'تنظیمات و اتصال‌ها' ); ?>
 			<?php endif; ?>
 			<?php $link( 'guide', sap_url( 'guide' ), 'log', 'راهنما و ساختار شیت' ); ?>

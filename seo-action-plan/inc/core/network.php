@@ -21,7 +21,7 @@ defined( 'ABSPATH' ) || exit;
  * Hosts that need the proxy in smart mode.
  */
 function sap_proxy_hosts() {
-	return array( 'googleapis.com', 'google.com', 'googleusercontent.com', 'gstatic.com', 'api.anthropic.com', 'api.openai.com' );
+	return array( 'googleapis.com', 'google.com', 'googleusercontent.com', 'gstatic.com', 'api.anthropic.com', 'api.openai.com', 'api.telegram.org', 'google.serper.dev', 'serpapi.com' );
 }
 
 /**
