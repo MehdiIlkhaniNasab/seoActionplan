@@ -13,7 +13,7 @@ defined( 'ABSPATH' ) || exit;
  * Object types that take comments.
  */
 function sap_comment_types() {
-	return array( 'task', 'finding', 'idea', 'revision' );
+	return apply_filters( 'sap_comment_types', array( 'task', 'finding', 'idea', 'revision' ) );
 }
 
 /**

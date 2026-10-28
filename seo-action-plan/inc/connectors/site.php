@@ -317,6 +317,10 @@ function sap_content_final_raw( $rev ) {
  * Wrap plain HTML (one or more top-level elements) in Gutenberg block comments.
  */
 function sap_gutenberg_wrap( $html ) {
+	// Structured sections (FAQ accordion, key-points box…) stay one HTML block.
+	if ( preg_match( '#<(details|section|aside|figure)\b#i', $html ) ) {
+		return "<!-- wp:html -->\n" . trim( $html ) . "\n<!-- /wp:html -->";
+	}
 	$parts = preg_split( '#(?<=</p>|</h[1-6]>|</ul>|</ol>|</table>|</blockquote>)\s*#i', trim( $html ), -1, PREG_SPLIT_NO_EMPTY );
 	$out   = array();
 	foreach ( $parts as $p ) {
@@ -335,4 +339,41 @@ function sap_gutenberg_wrap( $html ) {
 		}
 	}
 	return implode( "\n\n", $out );
+}
+
+/**
+ * Readable, semantic article output: when the content has an FAQ accordion
+ * (<details class="sokan-faq">), add its FAQPage schema and the small style
+ * that makes the accordion, tables and key-points box clean on any theme
+ * (once per page).
+ */
+function sap_content_enhance( $html ) {
+	$html = (string) $html;
+	if ( false !== strpos( $html, 'sokan-enhanced' ) ) {
+		return $html;
+	}
+	$faq = array();
+	if ( preg_match_all( '#<details[^>]*class="[^"]*sokan-faq[^"]*"[^>]*>\s*<summary[^>]*>(.*?)</summary>(.*?)</details>#is', $html, $m, PREG_SET_ORDER ) ) {
+		foreach ( $m as $q ) {
+			$faq[] = array( '@type' => 'Question', 'name' => trim( wp_strip_all_tags( $q[1] ) ), 'acceptedAnswer' => array( '@type' => 'Answer', 'text' => trim( wp_strip_all_tags( $q[2] ) ) ) );
+		}
+	}
+	$has_ui = $faq || false !== strpos( $html, 'sokan-box' );
+	if ( ! $has_ui ) {
+		return $html;
+	}
+	$css = '.sokan-faq{border:1px solid #e5e7eb;border-radius:12px;margin:10px 0;background:#fff;overflow:hidden}'
+		. '.sokan-faq>summary{cursor:pointer;list-style:none;padding:14px 18px;font-weight:700;display:flex;justify-content:space-between;gap:12px;align-items:center}'
+		. '.sokan-faq>summary::-webkit-details-marker{display:none}'
+		. '.sokan-faq>summary::after{content:"+";font-size:20px;line-height:1;transition:transform .2s}'
+		. '.sokan-faq[open]>summary::after{transform:rotate(45deg)}'
+		. '.sokan-faq>*:not(summary){padding:0 18px 14px;margin:0;line-height:2}'
+		. '.sokan-box{border-inline-start:4px solid currentColor;background:rgba(0,0,0,.035);border-radius:10px;padding:14px 18px;margin:18px 0}'
+		. '.sokan-faq-list{margin:28px 0}';
+	// Blocks stay valid for the editor: a style block, the content, then the schema block.
+	$out = "<!-- wp:html -->\n<style class=\"sokan-enhanced\">" . $css . "</style>\n<!-- /wp:html -->\n\n" . $html;
+	if ( $faq ) {
+		$out .= "\n\n<!-- wp:html -->\n<script type=\"application/ld+json\">" . wp_json_encode( array( '@context' => 'https://schema.org', '@type' => 'FAQPage', 'mainEntity' => $faq ), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES ) . "</script>\n<!-- /wp:html -->";
+	}
+	return $out;
 }

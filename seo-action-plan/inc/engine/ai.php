@@ -639,7 +639,7 @@ function sap_ai_stages() {
 			'task'   => implode( "\n", array(
 				'targets صفحاتی هستند که باید تقویت شوند (صفحات Focus، صفحات نزدیک صفحه اول، صفحات با لینک داخلی کم). sources صفحاتی هستند که می‌توانند به آن‌ها لینک بدهند، با موضوع، بخشی از متن و لینک‌های داخلی فعلی‌شان.',
 				'تا ۲۰ لینک داخلی پیشنهاد بده که از نظر موضوعی واقعاً مرتبط باشد: مبدأ، مقصد، متن انکر طبیعی بر اساس کوئری اصلی صفحه مقصد، محل دقیق قرارگیری در متن مبدأ (با نقل جمله یا بخش)، و دلیل.',
-				'لینکی که الان در صفحه مبدأ به همان مقصد وجود دارد را پیشنهاد نکن. از یک انکر برای دو مقصد مختلف استفاده نکن.',
+				'قواعد سخت: مبدأ و مقصد هرگز یک صفحه نباشند. اگر در existing_links صفحه مبدأ لینکی به همان مقصد هست (حتی با انکر دیگر) پیشنهاد نده. انکر باید کلمه اصلی صفحه مقصد (keyword) یا شکل طبیعی آن باشد، هرگز own_keyword صفحه مبدأ یا کلمه‌ای که مال صفحه دیگری است. از یک انکر برای دو مقصد مختلف استفاده نکن. فقط لینک‌هایی که از نظر موضوعی برای کاربر واقعاً مفیدند؛ کمتر و دقیق بهتر از زیاد و کلی.',
 			) ),
 		),
 		'technical' => array(
@@ -838,13 +838,16 @@ function sap_ai_stage_input( $project, $stage, $ctx ) {
 			$t_out = array();
 			foreach ( $targets as $u ) {
 				$facts   = sap_ai_page_facts( $ctx, $u );
-				$t_out[] = array( 'url' => $facts['url'], 'title' => $facts['title'], 'main_queries' => array_slice( array_column( $facts['queries'], 0 ), 0, 3 ), 'inlinks' => $facts['inlinks'] );
+				$tm      = sap_keymap( $pid )[ sap_norm_url( $u ) ] ?? null;
+				$t_out[] = array( 'url' => $facts['url'], 'title' => $facts['title'], 'keyword' => $tm ? (string) $tm['primary_kw'] : '', 'main_queries' => array_slice( array_column( $facts['queries'], 0 ), 0, 3 ), 'inlinks' => $facts['inlinks'] );
 			}
 			$s_out = array();
 			foreach ( array_slice( $ctx['pages'], 0, 25, true ) as $k => $p ) {
+				$sm      = sap_keymap( $pid )[ $k ] ?? null;
 				$s_out[] = array(
 					'url'            => sap_short_url( $p['url'], 90 ),
 					'title'          => $p['title'],
+					'own_keyword'    => $sm ? (string) $sm['primary_kw'] : '',
 					'h2'             => array_slice( $p['h2'], 0, 6 ),
 					'text'           => mb_substr( $p['text'], 0, 500 ),
 					'existing_links' => array_values( array_unique( array_map( function ( $l ) {
@@ -1081,6 +1084,7 @@ function sap_ai_plan_run_parts( $project, $input, $hash, $key, $def ) {
 			'داده‌های پروژه سئو در JSON زیر است: خلاصه سرچ کنسول، Focusها، یافته‌های قوانین (findings با id) و نتیجه تحلیل تخصصی همین حوزه.',
 			'هر جا expert_note آمده، نظر خود متخصص سئو است؛ آن را رعایت کن. impact_feedback نتیجه سنجیده‌شده اقدامات قبلی همین سایت است: نوع کارهایی که رشد آورده‌اند اولویت بگیرند و کارهایی که نتیجه نداده‌اند با روش بهتر یا اصلاح‌شده پیشنهاد شوند.',
 			sprintf( 'فقط کارهای حوزه «%s» را برای اکشن پلن این ماه بنویس: حداکثر %s کار مشخص در سقف حدود %s ساعت، مرتب‌شده بر اساس اثر روی Focus و هدف، با هفته پیشنهادی ۱ تا ۴.', $part['label'], sap_num( $part['max'] ), sap_num( $hours ) ),
+			'فقط کارهای عملی، مشخص و پراثر: کاری که مبهم است، بیش از ۸ ساعت طول می‌کشد، به منابع بیرون از دسترس تیم سئو نیاز دارد یا اثرش کم است ننویس. هر کار باید به یک صفحه یا گروه مشخص و هدف (Focus) وصل باشد. چند اقدام روی یک صفحه یک کار است با چک‌لیست، نه چند کار.',
 			'هر کار: عنوان با نام صفحه/کلمه، دلیل با عدد، مراحل کوتاه، و خروجی آماده در deliverable (تایتل/متا، FAQ، لینک‌ها «مبدأ ← مقصد: انکر»، راه‌حل تکنیکال) — کوتاه و کاربردی. کارهای هم‌نوع کوچک را ادغام کن. idهای finding مرتبط را در finding_ids بگذار.',
 			( $this_month || $done ) ? 'این کارها از قبل در پلن هستند؛ تکرار نکن: ' . implode( ' | ', array_slice( array_merge( $this_month, $done ), 0, 30 ) ) : '',
 		) );

@@ -325,6 +325,18 @@ function sap_page_link( $url, $label ) {
 }
 
 /**
+ * An address shown as text: decoded, isolated left-to-right (a Persian slug no
+ * longer scrambles the line) and cut with an ellipsis; the full address on hover.
+ */
+function sap_url_tag( $url, $max = 70, $link = true ) {
+	$url  = (string) $url;
+	$full = rawurldecode( $url );
+	$text = sap_short_url( $url, $max );
+	$tag  = sprintf( '<bdi class="sap-url" dir="ltr" title="%s">%s</bdi>', esc_attr( $full ), esc_html( $text ) );
+	return $link && '' !== $url ? sprintf( '<a class="sap-url-a" href="%s" target="_blank" rel="noopener">%s</a>', esc_url( $url ), $tag ) : $tag;
+}
+
+/**
  * Absolute URL of a page the AI wrote as a path ("/product-category/x/").
  */
 function sap_full_url( $project, $url ) {

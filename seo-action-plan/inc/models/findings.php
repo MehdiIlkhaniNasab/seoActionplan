@@ -234,6 +234,10 @@ function sap_finding_to_task( $finding, $period, $status = 'next' ) {
  */
 function sap_finding_notes( $finding ) {
 	$lines = array( (string) $finding['detail'] );
+	// The ready deliverable (exact links with source / target / anchor, texts…) goes with the task.
+	if ( '' !== trim( (string) ( $finding['evidence']['deliverable'] ?? '' ) ) ) {
+		$lines[] = "\nاجرا:\n" . trim( (string) $finding['evidence']['deliverable'] );
+	}
 	$cols  = (array) ( $finding['evidence']['cols'] ?? array() );
 	foreach ( (array) ( $finding['evidence']['items'] ?? array() ) as $it ) {
 		if ( ! is_array( $it ) ) {

@@ -266,7 +266,8 @@ function sap_content_step( $rev ) {
 			'- insert_after: بخش جدید بعد از همان بلوک (یک یا چند تگ: تیتر h2/h3 و پاراگراف یا فهرست) برای missing_sections؛ اطلاعات عمومی و درست بنویس و عدد و ادعای ساختگی ننویس.',
 			'- delete: فقط برای تکرار یا مطلب کاملاً بی‌ربط.',
 			'- قواعد نگارش: نیم‌فاصله درست (می‌شود، کتاب‌ها)، علائم فارسی (، ؛ ؟)، جمله‌های کوتاه و فعال، بدون انباشت کلمه کلیدی؛ کلمه اصلی و فرعی را طبیعی و در جای مناسب (تیترها و جمله اول) به کار ببر.',
-			'- فقط از تگ‌های p, h2, h3, h4, ul, ol, li, strong, em, a, table, tr, td, th, blockquote استفاده کن.',
+			'- فقط از تگ‌های p, h2, h3, h4, ul, ol, li, strong, em, a, table, thead, tbody, tr, td, th, blockquote, section, details, summary استفاده کن. ساختار معنایی و خوانا: تیترهای سلسله‌مراتبی، پاراگراف‌های کوتاه، فهرست برای مراحل و ویژگی‌ها، جدول با thead برای مقایسه.',
+			'- سوالات متداول را آکاردئونی بنویس: <section class="sokan-faq-list"><h2>سوالات متداول</h2><details class="sokan-faq"><summary>سوال</summary><p>پاسخ کوتاه و دقیق</p></details>…</section> (اسکیمای FAQ خودکار اضافه می‌شود). نکات کلیدی را در <blockquote class="sokan-box"> بگذار.',
 			'- اگر این بخش مشکلی ندارد، edits را خالی برگردان.',
 			'',
 			wp_json_encode( array(
@@ -512,7 +513,7 @@ function sap_content_site_action( $rev, $do, $extra = array() ) {
 			if ( ! in_array( $rev['status'], array( 'approved', 'published' ), true ) ) {
 				return new WP_Error( 'sap_rev_state', 'اول تغییرات را تأیید کنید.' );
 			}
-			$changes = array( 'content' => sap_content_final_raw( $rev ) );
+			$changes = array( 'content' => sap_content_enhance( sap_content_final_raw( $rev ) ) );
 			if ( ! empty( $extra['seo'] ) ) {
 				if ( '' !== ( $rev['audit']['title'] ?? '' ) ) {
 					$changes['seo_title'] = $rev['audit']['title'];

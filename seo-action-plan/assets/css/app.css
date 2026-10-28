@@ -1387,3 +1387,46 @@ body.sap-sheet-open { overflow: hidden; }
 .sap-week-focus { list-style: none; margin: 12px 0 4px; padding: 0; display: grid; gap: 6px; }
 .sap-week-focus li { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 13px; padding: 6px 10px; border-radius: 10px; background: var(--soft); }
 .sap-km-health { margin: 4px 0 0; font-size: 13px; color: var(--ink-2); }
+
+/* ---- Page cards (one card per page, actions as a checklist) ---- */
+.sap-audit-views { margin: 4px 0 14px; }
+.sap-audit-views a { display: inline-flex; align-items: center; gap: 6px; }
+.sap-pagecards .sap-panel-head { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 10px; align-items: center; }
+.sap-pagecards .sap-panel-head select { width: auto; min-width: 140px; }
+.sap-pagecard-list { display: grid; gap: 12px; }
+.sap-pagecard { border: 1px solid var(--line); border-right: 4px solid #CBD5E1; border-radius: 16px; background: #fff; padding: 14px 16px; display: grid; gap: 10px; min-width: 0; }
+.sap-pagecard.is-high { border-right-color: #EF4444; } .sap-pagecard.is-medium { border-right-color: #F59E0B; }
+.sap-pagecard-head { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px 14px; align-items: flex-start; }
+.sap-pagecard-name { display: grid; gap: 2px; min-width: 0; max-width: 100%; }
+.sap-pagecard-name b { font-size: 15px; }
+.sap-pagecard-meta { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.sap-pagecard-diag { margin: 0; font-size: 13px; line-height: 1.9; color: var(--ink-2); background: #F8FAFF; border-radius: 10px; padding: 8px 12px; }
+.sap-pagecard-checks { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.sap-pagecard-checks li { display: grid; grid-template-columns: auto 1fr auto; gap: 8px; align-items: flex-start; padding: 8px 10px; border: 1px solid var(--line); border-radius: 12px; background: var(--soft); }
+.sap-pagecard-checks li p { margin: 0; font-size: 13.5px; line-height: 1.8; }
+.sap-pagecard-checks details summary { cursor: pointer; font-size: 12px; color: var(--accent-ink); }
+.sap-pagecard-brief, .sap-pagecard-notes { border-top: 1px dashed var(--line); padding-top: 8px; }
+.sap-pagecard-brief summary, .sap-pagecard-notes summary { cursor: pointer; font-weight: 700; font-size: 13px; color: var(--accent-ink); }
+.sap-pagecard-brief h4 { margin: 10px 0 4px; font-size: 13px; }
+.sap-brief-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 8px; margin-top: 8px; }
+.sap-brief-grid > div { display: grid; gap: 2px; background: var(--soft); border-radius: 10px; padding: 8px 10px; font-size: 13px; }
+.sap-brief-grid span { font-size: 11.5px; color: var(--muted); }
+.sap-brief-std { columns: 2 240px; }
+.sap-pagecard-foot { display: flex; flex-wrap: wrap; gap: 8px; }
+/* Addresses as text: isolated LTR, one line, cut with an ellipsis. */
+.sap-url { display: inline-block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; unicode-bidi: isolate; direction: ltr; font-size: 12px; color: var(--muted); font-family: var(--font); }
+a.sap-url-a { display: inline-block; max-width: 100%; text-decoration: none; }
+a.sap-url-a:hover .sap-url { color: var(--accent); text-decoration: underline; }
+@media (max-width: 640px) { .sap-pagecard { padding: 12px; } .sap-brief-std { columns: 1; } }
+.sap-links-table td { vertical-align: top; } .sap-links-table td:first-child { min-width: 200px; max-width: 320px; }
+.sap-seo-diff { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 6px 0; }
+.sap-seo-diff > div { display: grid; gap: 3px; border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; background: #fff; font-size: 13px; min-width: 0; }
+.sap-seo-diff > div.is-new { border-color: #BBF0D0; background: #F6FEF9; }
+.sap-seo-diff span { font-size: 11px; color: var(--muted); }
+.sap-seo-diff b { color: #1A0DAB; font-weight: 600; }
+.sap-seo-diff small { color: var(--ink-2); line-height: 1.7; }
+.sap-seo-diff em { font-style: normal; font-size: 11px; color: var(--muted); }
+@media (max-width: 640px) { .sap-seo-diff { grid-template-columns: 1fr; } }
+.sap-impact-story { margin: 4px 0; font-size: 12.5px; line-height: 1.9; color: var(--ink-2); max-width: 520px; }
+.sap-impact-story { margin: 4px 0; font-size: 12.5px; line-height: 1.9; color: var(--ink-2); max-width: 520px; font-weight: 400; }
+.sap-proposal-main .sap-small { min-width: 0; max-width: 100%; overflow: hidden; } .sap-proposal-main .sap-pagelink { max-width: 100%; } .sap-proposal-main .sap-pagelink-t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }

@@ -180,9 +180,10 @@ function sap_report_impact( $project ) {
 			return $p[0];
 		}, $pillars ),
 		'lessons'       => $s['lessons'],
-		'items'         => array_map( function ( $i ) use ( $pillars, $v ) {
+		'items'         => array_map( function ( $i ) use ( $pillars, $v, $project ) {
 			return array(
 				'title'   => $i['title'],
+				'story'   => sap_impact_story( $project['id'], $i ),
 				'url'     => $i['url'],
 				'pillar'  => $pillars[ $i['pillar'] ][0] ?? '',
 				'done'    => $i['done'],

@@ -485,6 +485,17 @@ add_action( 'rest_api_init', function () {
 			return array( 'ok' => true, 'msg' => $msg . sap_calendar_sync_sheet( sap_project( $project['id'] ) ) );
 		} ),
 	) );
+	// One page's chosen actions → one task with the page brief (+ content calendar update).
+	register_rest_route( $ns, '/page-plan/(?P<project>\d+)', array(
+		'methods'             => 'POST',
+		'permission_callback' => 'sap_can',
+		'callback'            => $project_route( function ( $project, $req ) {
+			$url    = esc_url_raw( (string) $req->get_param( 'url' ) );
+			$period = sap_period_sanitize( (string) ( $req->get_param( 'period' ) ?: sap_period_current() ) );
+			$res    = sap_page_plan_commit( $project, $url, (array) $req->get_param( 'ids' ), $period );
+			return is_wp_error( $res ) ? $res : array( 'ok' => true, 'msg' => $res['msg'], 'task_id' => $res['task_id'] );
+		} ),
+	) );
 	register_rest_route( $ns, '/update/(?P<id>\d+)', array(
 		'methods'             => 'POST',
 		'permission_callback' => 'sap_can',
@@ -778,6 +789,12 @@ add_action( 'rest_api_init', function () {
 			} elseif ( 'resolve' === $do ) {
 				sap_finding_mark_resolved( $f );
 				$msg = 'به‌عنوان حل‌شده ثبت شد؛ تا ۳۰ روز دوباره پیشنهاد نمی‌شود';
+			} elseif ( 'seo_publish' === $do || 'seo_rollback' === $do ) {
+				$res = sap_finding_seo_apply( $f, 'seo_publish' === $do ? 'publish' : 'rollback' );
+				if ( is_wp_error( $res ) ) {
+					return $res;
+				}
+				$msg = $res['msg'];
 			} else {
 				return new WP_Error( 'sap_do', 'عملیات نامعتبر.', array( 'status' => 400 ) );
 			}

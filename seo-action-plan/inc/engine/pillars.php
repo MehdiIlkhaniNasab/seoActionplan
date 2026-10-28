@@ -55,6 +55,11 @@ function sap_proposals_put( $project, $source, $items ) {
 		if ( '' === trim( (string) $i['title'] ) ) {
 			continue;
 		}
+		// Not doable or not worth it: vague (no page, no detail, no ready output) or low impact for long work.
+		if ( ( '' === (string) $i['url'] && mb_strlen( trim( (string) $i['detail'] ) ) < 30 && '' === trim( (string) $i['deliverable'] ) ) || ( 'low' === $i['priority'] && (float) $i['effort'] > 3 ) ) {
+			continue;
+		}
+		$i['effort'] = min( 8, (float) $i['effort'] );
 		// The same kind of work on this page was done / planned / changed on the site recently: don't suggest it again.
 		if ( '' !== (string) $i['url'] && ( '' !== $i['kind'] || 'technical' !== $i['context'] ) && sap_recently_handled( $project['id'], (string) $i['url'], (string) $i['kind'], (string) $i['context'] ) ) {
 			continue;
@@ -155,32 +160,116 @@ function sap_tech_ai_to_proposals( $project, $issues ) {
 }
 
 /**
- * Convert the AI internal-links stage answer into proposals (one per target page).
+ * Internal links a page already has (target url key => anchor), from the pages
+ * read for the analysis, or read now.
+ */
+function sap_page_outlinks( $project, $url ) {
+	static $cache = array();
+	$k = sap_norm_url( $url );
+	if ( isset( $cache[ $k ] ) ) {
+		return $cache[ $k ];
+	}
+	$p = sap_dataset_payload( $project['id'], 'pages' )['pages'][ $k ] ?? null;
+	if ( ! $p && count( $cache ) < 12 ) {
+		$p = sap_page_fetch( $url );
+		$p = is_wp_error( $p ) ? null : $p;
+	}
+	$out = array();
+	foreach ( (array) ( $p['links'] ?? array() ) as $l ) {
+		$out[ sap_norm_url( sap_full_url( $project, (string) $l[0] ) ) ] = (string) ( $l[1] ?? '' );
+	}
+	return $cache[ $k ] = $out;
+}
+
+/**
+ * Is a link suggestion sound? Returns '' or why it is dropped.
+ */
+function sap_link_check( $project, $source, $target, $anchor ) {
+	$sk = sap_norm_url( $source );
+	$tk = sap_norm_url( $target );
+	if ( '' === $sk || '' === $tk || $sk === $tk ) {
+		return 'مبدأ و مقصد یکی است';
+	}
+	$have = sap_page_outlinks( $project, $source );
+	if ( isset( $have[ $tk ] ) ) {
+		return 'صفحه مبدأ همین الان به مقصد لینک دارد (انکر «' . $have[ $tk ] . '»)';
+	}
+	$map  = sap_keymap( $project['id'] );
+	$tm   = $map[ $tk ] ?? null;
+	$sm   = $map[ $sk ] ?? null;
+	$a    = sap_kw_core( $anchor );
+	if ( '' === $a ) {
+		return 'انکر خالی است';
+	}
+	if ( $sm && '' !== $sm['primary_kw'] && sap_kw_core( $sm['primary_kw'] ) === $a && ( ! $tm || sap_kw_core( $tm['primary_kw'] ) !== $a ) ) {
+		return 'انکر کلمه اصلی خود صفحه مبدأ است';
+	}
+	// The anchor names the target: its keyword, a secondary keyword, its title or a real query.
+	$words = array();
+	foreach ( array_filter( array_merge( $tm ? array( $tm['primary_kw'], $tm['title'] ) : array(), $tm ? (array) $tm['secondary'] : array(), array( sap_page_title( $project['id'], $target ) ) ) ) as $t ) {
+		$words = array_merge( $words, sap_tokens( sap_kw_core( (string) $t ) ) );
+	}
+	if ( $words && ! array_intersect( sap_tokens( $a ), $words ) ) {
+		return 'انکر به موضوع صفحه مقصد ربطی ندارد';
+	}
+	foreach ( $map as $k => $m ) {
+		if ( $k !== $tk && '' !== $m['primary_kw'] && sap_kw_core( $m['primary_kw'] ) === $a ) {
+			return 'انکر کلمه اصلی صفحه دیگری است (' . ( $m['title'] ?: sap_short_url( $m['url'], 40 ) ) . ')';
+		}
+	}
+	return '';
+}
+
+/**
+ * Convert the AI internal-links stage answer into proposals: one per target
+ * page, each link with its exact source address, target address and anchor.
+ * Self-links, links that already exist and anchors that don't name the target
+ * are dropped.
  */
 function sap_links_ai_to_proposals( $project, $links ) {
 	$by_target = array();
+	$dropped   = 0;
 	foreach ( $links as $l ) {
-		if ( ! empty( $l['target_url'] ) ) {
-			$by_target[ sap_norm_url( sap_full_url( $project, $l['target_url'] ) ) ][] = $l;
+		if ( empty( $l['target_url'] ) || empty( $l['source_url'] ) ) {
+			continue;
 		}
+		$target = sap_full_url( $project, $l['target_url'] );
+		$source = sap_full_url( $project, $l['source_url'] );
+		if ( '' !== sap_link_check( $project, $source, $target, (string) $l['anchor'] ) ) {
+			++$dropped;
+			continue;
+		}
+		$l['target_full'] = $target;
+		$l['source_full'] = $source;
+		$by_target[ sap_norm_url( $target ) ][ sap_norm_url( $source ) ] = $l; // One link per source → target.
 	}
+	update_option( 'sap_links_dropped_' . $project['id'], $dropped, false );
 	$items = array();
 	foreach ( $by_target as $k => $ls ) {
-		$target  = sap_full_url( $project, $ls[0]['target_url'] );
-		$lines   = array();
-		foreach ( $ls as $l ) {
-			$lines[] = sprintf( '%s ← «%s» (%s)', sap_page_title( $project['id'], sap_full_url( $project, $l['source_url'] ) ) ?: sap_short_url( $l['source_url'], 60 ), $l['anchor'], $l['placement'] );
+		$ls     = array_values( $ls );
+		$target = $ls[0]['target_full'];
+		$tname  = sap_page_title( $project['id'], $target ) ?: sap_short_url( $target, 50 );
+		$lines  = array();
+		$rows   = array();
+		foreach ( $ls as $n => $l ) {
+			$sname   = sap_page_title( $project['id'], $l['source_full'] ) ?: sap_short_url( $l['source_full'], 60 );
+			$lines[] = sprintf( "%s. مبدأ: %s\n   %s\n   مقصد: %s\n   انکر: «%s»%s", sap_num( $n + 1 ), $sname, rawurldecode( $l['source_full'] ), rawurldecode( $target ), $l['anchor'], '' !== (string) $l['placement'] ? "\n   محل: " . $l['placement'] : '' );
+			$rows[]  = array( 'page' => $sname, 'url' => $l['source_full'], 'anchor' => $l['anchor'], 'placement' => (string) $l['placement'] );
 		}
+		$tm      = sap_keymap( $project['id'] )[ $k ] ?? null;
 		$items[] = array(
 			'key'         => 'links:' . $k,
-			'title'       => sprintf( '%s لینک داخلی به «%s»', sap_num( count( $ls ) ), sap_page_title( $project['id'], $target ) ?: sap_short_url( $target, 50 ) ),
+			'title'       => sprintf( '%s لینک داخلی به «%s»%s', sap_num( count( $ls ) ), $tname, $tm && '' !== $tm['primary_kw'] ? ' با انکر «' . $tm['primary_kw'] . '»' : '' ),
 			'detail'      => (string) $ls[0]['reason'],
-			'deliverable' => implode( "\n", $lines ),
+			'deliverable' => 'مقصد: ' . $tname . "\n" . rawurldecode( $target ) . "\n\n" . implode( "\n\n", $lines ),
 			'context'     => 'internal_links',
 			'url'         => $target,
+			'keyword'     => $tm ? (string) $tm['primary_kw'] : '',
 			'priority'    => count( $ls ) >= 3 ? 'high' : 'medium',
-			'effort'      => max( 0.5, 0.2 * count( $ls ) ),
+			'effort'      => max( 0.25, 0.15 * count( $ls ) ),
 			'section'     => 'links',
+			'kind'        => 'links',
+			'meta'        => array( 'links' => $rows ),
 		);
 	}
 	return sap_proposals_put( $project, 'links', $items );

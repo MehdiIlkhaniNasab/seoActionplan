@@ -21,6 +21,7 @@ $q      = isset( $_GET['q'] ) ? sanitize_text_field( wp_unslash( $_GET['q'] ) ) 
 $filter = isset( $_GET['f'] ) ? sanitize_key( $_GET['f'] ) : '';
 $sort   = isset( $_GET['sort'] ) ? sanitize_key( $_GET['sort'] ) : 'impr';
 $pg     = max( 1, isset( $_GET['pg'] ) ? absint( $_GET['pg'] ) : 1 );
+$view   = isset( $_GET['view'] ) && 'plan' === $_GET['view'] ? 'plan' : 'pages';
 // phpcs:enable
 if ( ! $group ) {
 	foreach ( $groups as $g => $def ) {
@@ -94,7 +95,13 @@ $pages = max( 1, (int) ceil( count( $rows ) / $per ) );
 $pg    = min( $pg, $pages );
 $shown = array_slice( $rows, ( $pg - 1 ) * $per, $per );
 $args  = array_filter( array( 'group' => $group, 'q' => $q, 'f' => $filter, 'sort' => 'impr' !== $sort ? $sort : '' ) );
-$here  = sap_project_url( $pid, 'audit', $args + ( $pg > 1 ? array( 'pg' => $pg ) : array() ) );
+$here  = sap_project_url( $pid, 'audit', $args + ( $pg > 1 ? array( 'pg' => $pg ) : array() ) + ( 'plan' === $view ? array( 'view' => 'plan' ) : array() ) );
+// Proposals of this type, one card per page, and the rest (links, keyword opportunities…).
+$props  = sap_proposals( $pid, 'content', array( 'section' => $group ) );
+$others = sap_proposals( $pid, 'content', array( 'filter' => function ( $f ) use ( $groups ) {
+	return ! isset( $groups[ $f['evidence']['section'] ?? '' ] ) && ! sap_tech_section_of( $f );
+} ) );
+$by_page = sap_proposals_by_page( $props );
 ?>
 <section class="sap-panel sap-pillar-head">
 	<div class="sap-pillar-intro">
@@ -113,6 +120,7 @@ $here  = sap_project_url( $pid, 'audit', $args + ( $pg > 1 ? array( 'pg' => $pg 
 				<button type="button" class="sap-btn is-small <?php echo $inv_ds ? 'is-ghost' : 'is-primary'; ?>" data-sap-step="site_inventory,keymap" data-project="<?php echo esc_attr( $pid ); ?>" data-force><?php echo sap_icon( 'refresh', 14 ); // phpcs:ignore ?><?php echo $inv_ds ? 'بروزرسانی فهرست' : 'دریافت فهرست کامل از وردپرس'; ?></button>
 			<?php endif; ?>
 		</div>
+		<?php if ( ! empty( $GLOBALS['sap_content_hidden'][ $pid ] ) ) : ?><p class="sap-small sap-muted"><?php echo esc_html( sap_num( $GLOBALS['sap_content_hidden'][ $pid ] ) ); ?> آدرس ریدایرکت‌شده، حذف‌شده از وردپرس، خطادار در خزش یا هرس‌شده در نقشه کلمات در این فهرست نمی‌آید.</p><?php endif; ?>
 		<div class="sap-actions">
 			<button type="button" class="sap-btn is-primary" data-sap-step="audit_<?php echo esc_attr( $group ); ?>" data-project="<?php echo esc_attr( $pid ); ?>" data-force <?php disabled( ! sap_ai_connected() || ! $all ); ?>><?php echo sap_icon( 'spark' ); // phpcs:ignore ?>تحلیل هوشمند <?php echo esc_html( sap_num( min( 15, count( $all ) ) ) ); ?> صفحه پربازدید «<?php echo esc_html( $groups[ $group ][0] ); ?>»</button>
 			<button type="button" class="sap-btn is-soft" data-sap-cluster-sheet="<?php echo esc_attr( $pid ); ?>" <?php disabled( ! $project['sheet_id'] ); ?>>نوشتن کلاسترینگ و فهرست محتوا در شیت</button>
@@ -128,9 +136,14 @@ $here  = sap_project_url( $pid, 'audit', $args + ( $pg > 1 ? array( 'pg' => $pg 
 	<?php endforeach; ?>
 </nav>
 
-<?php if ( ! $all ) : ?>
+<nav class="sap-seg sap-audit-views" aria-label="نمایش">
+	<a class="<?php echo 'pages' === $view ? 'is-active' : ''; ?>" href="<?php echo esc_url( sap_project_url( $pid, 'audit', array( 'group' => $group ) ) ); ?>"><?php echo sap_icon( 'log', 14 ); // phpcs:ignore ?>فهرست صفحات <small><?php echo esc_html( sap_num( count( $all ) ) ); ?></small></a>
+	<a class="<?php echo 'plan' === $view ? 'is-active' : ''; ?>" href="<?php echo esc_url( sap_project_url( $pid, 'audit', array( 'group' => $group, 'view' => 'plan' ) ) ); ?>"><?php echo sap_icon( 'inbox', 14 ); // phpcs:ignore ?>پیشنهادهای در انتظار تأیید <small><?php echo esc_html( sap_num( count( $by_page ) ) ); ?> صفحه<?php echo $others ? ' + ' . esc_html( sap_num( count( $others ) ) ) : ''; ?></small></a>
+</nav>
+
+<?php if ( 'pages' === $view && ! $all ) : ?>
 	<div class="sap-empty"><p>صفحه‌ای از نوع «<?php echo esc_html( $groups[ $group ][0] ); ?>» پیدا نشد.<?php echo $inv_ds ? '' : ' فهرست کامل وردپرس را بگیرید تا همه صفحات این نوع (حتی بدون نمایش در گوگل) بیایند.'; ?></p></div>
-<?php else : ?>
+<?php elseif ( 'pages' === $view ) : ?>
 	<div class="sap-audit-stats">
 		<a href="<?php echo esc_url( sap_project_url( $pid, 'audit', array( 'group' => $group ) ) ); ?>" class="<?php echo '' === $filter ? 'is-active' : ''; ?>"><b><?php echo esc_html( sap_num( $st['total'] ) ); ?></b><span>کل صفحات</span></a>
 		<a href="<?php echo esc_url( sap_project_url( $pid, 'audit', array( 'group' => $group, 'f' => 'zero' ) ) ); ?>" class="<?php echo 'zero' === $filter ? 'is-active' : ''; ?> <?php echo $st['zero'] ? 'is-warn' : ''; ?>"><b><?php echo esc_html( sap_num( $st['zero'] ) ); ?></b><span>بدون نمایش در گوگل</span></a>
@@ -240,21 +253,19 @@ $here  = sap_project_url( $pid, 'audit', $args + ( $pg > 1 ? array( 'pg' => $pg 
 	</aside>
 </div>
 
+<?php if ( 'plan' === $view ) : ?>
 <div id="proposals">
 <?php
-sap_view( 'proposals', array(
-	'project'  => $project,
-	'items'    => sap_proposals( $pid, 'content', array( 'section' => $group ) ),
-	'title'    => 'پیشنهادهای «' . $groups[ $group ][0] . '»',
-	'here'     => $here,
-	'sections' => $labels,
-	'empty'    => 'پیشنهادی برای این نوع محتوا در انتظار تأیید نیست. «تحلیل هوشمند» را بزنید.',
+sap_view( 'page-proposals', array(
+	'project' => $project,
+	'pages'   => $by_page,
+	'group'   => $group,
+	'title'   => 'پیشنهادهای «' . $groups[ $group ][0] . '» — هر صفحه یک کارت',
+	'here'    => $here,
 ) );
 sap_view( 'proposals', array(
 	'project'  => $project,
-	'items'    => sap_proposals( $pid, 'content', array( 'filter' => function ( $f ) use ( $groups ) {
-		return ! isset( $groups[ $f['evidence']['section'] ?? '' ] ) && ! sap_tech_section_of( $f );
-	} ) ),
+	'items'    => $others,
 	'title'    => 'سایر پیشنهادهای محتوا (لینک داخلی، فرصت کلمات، قوانین خودکار)',
 	'here'     => $here,
 	'sections' => $labels,
@@ -262,3 +273,4 @@ sap_view( 'proposals', array(
 ) );
 ?>
 </div>
+<?php endif; ?>

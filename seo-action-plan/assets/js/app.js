@@ -253,6 +253,69 @@
 		}).catch(function (e) { toast(e.message, true); btn.disabled = false; });
 	});
 
+	/* ---- Title / meta straight to the client site ---- */
+	document.addEventListener('click', function (ev) {
+		var b = ev.target.closest('[data-sap-seo-apply]');
+		if (!b) { return; }
+		ev.preventDefault();
+		if (!window.confirm('تایتل و متای پیشنهادی همین الان روی سایت کارفرما منتشر شود؟ (قابل برگشت است)')) { return; }
+		b.disabled = true;
+		b.classList.add('is-loading');
+		post('finding/' + b.getAttribute('data-sap-seo-apply'), { do: 'seo_publish' }).then(function (res) {
+			toast(res.msg);
+			var li = b.closest('[data-sap-pp-item], .sap-proposal');
+			if (li) { fadeOut(li); setTimeout(function () { li.remove(); }, 400); }
+		}).catch(function (e) { toast(e.message, true); b.disabled = false; b.classList.remove('is-loading'); });
+	});
+
+	/* ---- Page cards: approve the checked actions of one page as one task ---- */
+	document.addEventListener('click', function (ev) {
+		var ok = ev.target.closest('[data-sap-pp-approve]');
+		var rej = ev.target.closest('[data-sap-pp-reject]');
+		var drop = ev.target.closest('[data-sap-pp-drop]');
+		if (!ok && !rej && !drop) { return; }
+		ev.preventDefault();
+		var card = ev.target.closest('[data-sap-pagecard]');
+		if (!card) { return; }
+		var done = function () {
+			if (!card.querySelector('[data-sap-pp-item]')) {
+				fadeOut(card);
+				setTimeout(function () { if (!document.querySelector('[data-sap-pagecard]:not(.is-leaving)')) { location.reload(); } }, 450);
+			}
+		};
+		if (drop) {
+			drop.disabled = true;
+			post('finding/' + drop.getAttribute('data-sap-pp-drop'), { do: 'dismiss' }).then(function () {
+				fadeOut(drop.closest('[data-sap-pp-item]'));
+				setTimeout(function () { var li = drop.closest('[data-sap-pp-item]'); if (li) { li.remove(); } done(); }, 380);
+			}).catch(function (e) { toast(e.message, true); drop.disabled = false; });
+			return;
+		}
+		if (rej) {
+			if (!window.confirm('همه اقدامات این صفحه رد شود؟')) { return; }
+			var ids = Array.prototype.map.call(card.querySelectorAll('[data-sap-pp-item]'), function (li) { return li.getAttribute('data-sap-pp-item'); });
+			rej.disabled = true;
+			Promise.all(ids.map(function (id) { return post('finding/' + id, { do: 'dismiss' }); })).then(function () {
+				toast('اقدامات این صفحه رد شد');
+				card.querySelectorAll('[data-sap-pp-item]').forEach(function (li) { li.remove(); });
+				done();
+			}).catch(function (e) { toast(e.message, true); rej.disabled = false; });
+			return;
+		}
+		var picked = Array.prototype.map.call(card.querySelectorAll('[data-sap-pp-item] input:checked'), function (i) { return i.value; });
+		if (!picked.length) { toast('هیچ اقدامی تیک نخورده.', true); return; }
+		var per = document.querySelector('[data-sap-pp-period]');
+		ok.disabled = true;
+		ok.classList.add('is-loading');
+		post('page-plan/' + ok.getAttribute('data-sap-pp-approve'), { url: card.getAttribute('data-sap-pagecard'), ids: picked, period: per ? per.value : '' }).then(function (res) {
+			toast(res.msg);
+			picked.forEach(function (id) { var li = card.querySelector('[data-sap-pp-item="' + id + '"]'); if (li) { li.remove(); } });
+			ok.disabled = false;
+			ok.classList.remove('is-loading');
+			done();
+		}).catch(function (e) { toast(e.message, true); ok.disabled = false; ok.classList.remove('is-loading'); });
+	});
+
 	/* ---- Search Console properties ---- */
 	document.querySelectorAll('[data-sap-load-gsc]').forEach(function (btn) {
 		btn.addEventListener('click', function () {

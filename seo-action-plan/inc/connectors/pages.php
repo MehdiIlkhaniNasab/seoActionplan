@@ -202,6 +202,11 @@ function sap_content_allowed_html() {
 	$a['img'] = array( 'src' => true, 'alt' => true, 'width' => true, 'height' => true );
 	$a['td']  = array( 'colspan' => true, 'rowspan' => true );
 	$a['th']  = array( 'colspan' => true, 'rowspan' => true );
+	// FAQ accordion, sections and the key-points box of the semantic article output.
+	$a['section']    = array( 'class' => true );
+	$a['details']    = array( 'class' => true, 'open' => true );
+	$a['summary']    = array();
+	$a['blockquote'] = array( 'class' => true );
 	return $a;
 }
 

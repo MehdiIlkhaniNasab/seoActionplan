@@ -209,15 +209,33 @@ function sap_content_inventory( $project ) {
 		}
 	}
 	// Source list: WordPress first (complete and typed), then mapped pages it does not have.
-	$list = array();
+	// Not pages any more: redirected in WordPress (Rank Math / Redirection / Yoast), answering
+	// 3xx / 4xx in the crawl, pruned in the keyword map, or — once the WordPress list is in —
+	// addresses Search Console still remembers but WordPress no longer has.
+	$gone = function ( $k, $m ) use ( $crawl ) {
+		$code = (int) ( $crawl[ $k ]['code'] ?? 200 );
+		return ( $code >= 300 && $code < 500 ) || ( $m && in_array( $m['status'], array( 'prune_410', 'prune_301' ), true ) );
+	};
+	$list   = array();
+	$hidden = 0;
 	foreach ( $site as $k => $it ) {
+		if ( '' !== (string) ( $it['redirect'] ?? '' ) || $gone( $k, $map[ $k ] ?? null ) ) {
+			++$hidden;
+			continue;
+		}
 		$list[ $k ] = array( $map[ $k ] ?? null, $it );
 	}
 	foreach ( $map as $k => $m ) {
-		if ( ! isset( $list[ $k ] ) ) {
-			$list[ $k ] = array( $m, null );
+		if ( isset( $list[ $k ] ) || isset( $site[ $k ] ) ) {
+			continue;
 		}
+		if ( $gone( $k, $m ) || ( $site && 'home' !== $m['page_type'] ) ) {
+			++$hidden;
+			continue;
+		}
+		$list[ $k ] = array( $m, null );
 	}
+	$GLOBALS['sap_content_hidden'][ $pid ] = $hidden;
 	$group_of = array();
 	foreach ( sap_content_groups() as $g => $def ) {
 		foreach ( $def[2] as $t ) {
@@ -545,7 +563,8 @@ add_filter( 'sap_ai_stage_task', function ( $task, $stage ) {
 		'Focusها و هدف پروژه در focuses آمده‌اند؛ تحلیل را از دید همین هدف انجام بده: چه چیزی باعث فروش یا لید بیشتر از این صفحه می‌شود.',
 		sap_audit_lens( $g ),
 		'recent_work کارهایی است که در ۷۵ روز اخیر روی همان صفحه انجام شده یا در برنامه است (تغییر تایتل/متا، آپدیت محتوا، لینک…). آن‌ها را دوباره پیشنهاد نده؛ اگر تایتل/متا یا محتوا تازه تغییر کرده، فرصت بده نتیجه‌اش دیده شود و فقط اشتباه واضح را بگو.',
-		'قواعد: کلی‌گویی نکن، به متن و کوئری واقعی استناد کن؛ برای هر صفحه حداکثر ۶ اقدام مشخص و قابل اجرا با ساعت تخمینی بنویس؛ کارهای کوچک هم‌نوع را ادغام کن؛ اگر صفحه خوب است verdict را good بگذار و اقدام اضافه نساز. نیت هر کلمه را دقیق بسنج و کلمات نامناسب را در keyword_fit بیاور (فله‌ای پیشنهاد نده).',
+		'my_notes دیدگاه متخصص سئوی پروژه درباره همان صفحه است؛ بر هر چیز دیگری مقدم است و پیشنهادهایت باید با آن بخواند.',
+		'قواعد: کلی‌گویی نکن، به متن و کوئری واقعی استناد کن؛ برای هر صفحه حداکثر ۴ اقدام مشخص، عملی و پراثر با ساعت تخمینی بنویس (هر اقدام یک آیتم چک‌لیست همان صفحه است، نه یک کار جدا)؛ کارهای کوچک هم‌نوع را در یک اقدام ادغام کن؛ اقدامی که سخت، مبهم یا کم‌اثر است ننویس؛ اگر صفحه خوب است verdict را good بگذار و اقدام اضافه نساز. نیت هر کلمه را دقیق بسنج و کلمات نامناسب را در keyword_fit بیاور (فله‌ای پیشنهاد نده).',
 	) );
 }, 10, 2 );
 
@@ -587,6 +606,10 @@ add_filter( 'sap_ai_stage_input', function ( $input, $project, $stage, $ctx ) {
 		$recent = array_slice( array_column( sap_recent_work( $project['id'] )[ sap_norm_url( $r['url'] ) ] ?? array(), 'what' ), 0, 6 );
 		if ( $recent ) {
 			$facts['recent_work'] = $recent;
+		}
+		$notes = sap_page_notes( $r['url'] );
+		if ( $notes ) {
+			$facts['my_notes'] = array_slice( $notes, -5 );
 		}
 		$out[]               = $facts;
 	}

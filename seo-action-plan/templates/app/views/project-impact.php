@@ -105,6 +105,7 @@ $base = sap_project_url( $pid, 'impact' );
 							<td class="sap-impact-act">
 								<b><?php echo esc_html( $i['title'] ); ?></b>
 								<span><?php echo sap_page_link( $i['url'], sap_page_title( $pid, $i['url'] ) ?: sap_short_url( $i['url'], 50 ) ); // phpcs:ignore ?></span>
+								<p class="sap-impact-story"><?php echo esc_html( sap_impact_story( $pid, $i ) ); ?></p>
 								<small><span class="sap-chip is-soft"><?php echo esc_html( $pillars[ $i['pillar'] ][0] ?? '' ); ?></span> <?php echo esc_html( sap_context_label( $i['context'] ) ); ?><?php echo '' !== $i['keyword'] ? ' · «' . esc_html( $i['keyword'] ) . '»' : ''; ?></small>
 							</td>
 							<td class="sap-nowrap sap-small"><?php echo esc_html( sap_jdate( $i['done'], 'short' ) ); ?></td>

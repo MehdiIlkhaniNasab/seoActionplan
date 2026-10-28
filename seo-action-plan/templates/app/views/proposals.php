@@ -18,10 +18,17 @@ $pid      = $project['id'];
 $sections = $sections ?? array();
 $fnames   = wp_list_pluck( sap_focuses( $pid ), 'name', 'id' );
 $prio     = array( 'high' => 'اولویت بالا', 'medium' => 'متوسط', 'low' => 'کم' );
+// Long lists are paged (15 per page) so a big site never means endless scrolling.
+$all_n    = count( $items );
+$pkey     = $pager ?? 'op';
+$per      = 15;
+$npg      = max( 1, (int) ceil( $all_n / $per ) );
+$cur      = min( $npg, max( 1, isset( $_GET[ $pkey ] ) ? absint( $_GET[ $pkey ] ) : 1 ) ); // phpcs:ignore WordPress.Security.NonceVerification
+$items    = array_slice( $items, ( $cur - 1 ) * $per, $per );
 ?>
 <section class="sap-panel sap-proposals">
 	<div class="sap-panel-head">
-		<h2><?php echo sap_icon( 'inbox' ); // phpcs:ignore ?><?php echo esc_html( $title ); ?><small><?php echo esc_html( sap_num( count( $items ) ) ); ?> پیشنهاد در انتظار تأیید</small></h2>
+		<h2><?php echo sap_icon( 'inbox' ); // phpcs:ignore ?><?php echo esc_html( $title ); ?><small><?php echo esc_html( sap_num( $all_n ) ); ?> پیشنهاد در انتظار تأیید</small></h2>
 	</div>
 	<?php if ( ! $items ) : ?>
 		<p class="sap-muted"><?php echo esc_html( $empty ?? 'پیشنهادی در انتظار تأیید نیست.' ); ?></p>
@@ -68,7 +75,19 @@ $prio     = array( 'high' => 'اولویت بالا', 'medium' => 'متوسط', 
 							<details>
 								<summary>جزئیات و راه‌حل</summary>
 								<div class="sap-proposal-detail"><?php echo nl2br( esc_html( $f['detail'] ) ); ?></div>
-								<?php if ( ! empty( $f['evidence']['deliverable'] ) ) : ?>
+								<?php if ( ! empty( $f['evidence']['meta']['links'] ) ) : ?>
+									<p class="sap-small">مقصد: <b><?php echo esc_html( sap_page_title( $pid, $f['url'] ) ?: sap_short_url( $f['url'], 50 ) ); ?></b> <?php echo sap_url_tag( $f['url'], 60 ); // phpcs:ignore ?></p>
+									<div class="sap-table-wrap">
+										<table class="sap-table sap-links-table">
+											<thead><tr><th>صفحه مبدأ</th><th>انکر تکست</th><th>محل قرارگیری</th></tr></thead>
+											<tbody>
+												<?php foreach ( (array) $f['evidence']['meta']['links'] as $l ) : ?>
+													<tr><td><b><?php echo esc_html( $l['page'] ?? '' ); ?></b><br><?php echo sap_url_tag( $l['url'] ?? '', 55 ); // phpcs:ignore ?></td><td><span class="sap-chip">«<?php echo esc_html( $l['anchor'] ?? '' ); ?>»</span></td><td class="sap-small" dir="auto"><?php echo esc_html( $l['placement'] ?? '' ); ?></td></tr>
+												<?php endforeach; ?>
+											</tbody>
+										</table>
+									</div>
+								<?php elseif ( ! empty( $f['evidence']['deliverable'] ) ) : ?>
 									<pre class="sap-deliverable" dir="auto"><?php echo esc_html( $f['evidence']['deliverable'] ); ?></pre>
 								<?php endif; ?>
 								<?php if ( ! empty( $f['evidence']['items'] ) && is_array( $f['evidence']['items'] ) ) : ?>
@@ -96,5 +115,12 @@ $prio     = array( 'high' => 'اولویت بالا', 'medium' => 'متوسط', 
 				<?php endforeach; ?>
 			</ul>
 		</form>
+		<?php if ( $npg > 1 ) : ?>
+			<nav class="sap-pager" aria-label="صفحه‌بندی پیشنهادها">
+				<?php for ( $i = 1; $i <= $npg; $i++ ) : ?>
+					<a class="<?php echo $i === $cur ? 'is-active' : ''; ?>" href="<?php echo esc_url( add_query_arg( $pkey, $i, $here ) ); ?>"><?php echo esc_html( sap_num( $i ) ); ?></a>
+				<?php endfor; ?>
+			</nav>
+		<?php endif; ?>
 	<?php endif; ?>
 </section>

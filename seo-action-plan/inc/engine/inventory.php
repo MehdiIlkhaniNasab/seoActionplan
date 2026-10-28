@@ -97,6 +97,7 @@ function sap_inventory_pack_item( $it ) {
 		(int) ( $it['no_alt'] ?? 0 ), (string) ( $it['thumb'] ?? '' ), empty( $it['noindex'] ) ? 0 : 1, (int) ( $it['count'] ?? 0 ),
 		array( (string) ( $seo['seo_title'] ?? '' ), (string) ( $seo['meta_description'] ?? '' ), (string) ( $seo['focus_keyword'] ?? '' ) ),
 		null === $pr ? 0 : array( (string) ( $pr['price'] ?? '' ), (string) ( $pr['sku'] ?? '' ), (string) ( $pr['stock'] ?? '' ), (string) ( $pr['ptype'] ?? '' ), (int) ( $pr['attrs'] ?? 0 ), (int) ( $pr['gallery'] ?? 0 ), (int) ( $pr['reviews'] ?? 0 ), (float) ( $pr['rating'] ?? 0 ), (int) ( $pr['short'] ?? 0 ), array_values( (array) ( $pr['cats'] ?? array() ) ) ),
+		(string) ( $it['redirect'] ?? '' ),
 	);
 }
 
@@ -127,6 +128,7 @@ function sap_inventory_unpack_item( $t ) {
 		'thumb'    => (string) ( $t[13] ?? '' ),
 		'noindex'  => ! empty( $t[14] ),
 		'count'    => (int) ( $t[15] ?? 0 ),
+		'redirect' => (string) ( $t[18] ?? '' ),
 		'seo'      => array(
 			'seo_title'        => (string) ( $t[16][0] ?? '' ),
 			'meta_description' => (string) ( $t[16][1] ?? '' ),

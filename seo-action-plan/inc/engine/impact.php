@@ -352,3 +352,38 @@ function sap_week_digest( $project ) {
 	} );
 	return $out;
 }
+
+/**
+ * The story of one measured action, in one paragraph: when, what, on which
+ * page, for which goal / keyword, and what changed after how many days.
+ */
+function sap_impact_story( $project_id, $i ) {
+	$focus = '';
+	if ( 0 === strpos( (string) ( $i['ref'] ?? '' ), 'task:' ) ) {
+		$t = sap_task( (int) substr( $i['ref'], 5 ) );
+		if ( $t && $t['focus_id'] ) {
+			$focus = wp_list_pluck( sap_focuses( $project_id ), 'name', 'id' )[ $t['focus_id'] ] ?? '';
+		}
+	}
+	$page = sap_page_title( $project_id, $i['url'] ) ?: sap_short_url( $i['url'], 50 );
+	$out  = sprintf( 'در %s «%s» روی صفحه «%s»%s%s انجام شد.', sap_jdate( $i['done'] ), $i['title'], $page, '' !== $focus ? ' با هدف «' . $focus . '»' : '', '' !== (string) ( $i['keyword'] ?? '' ) ? ' برای کلمه «' . $i['keyword'] . '»' : '' );
+	if ( empty( $i['before'] ) || empty( $i['after'] ) ) {
+		return $out . sprintf( ' هنوز %s روز از آن گذشته؛ نتیجه از روز دهم سنجیده می‌شود.', sap_num( (int) ( $i['after_days'] ?? 0 ) ) );
+	}
+	$b    = $i['before']['clicks'] / max( 1, $i['before']['days'] );
+	$a    = $i['after']['clicks'] / max( 1, $i['after']['days'] );
+	$out .= sprintf( ' بعد از %s روز، کلیک روزانه صفحه از %s به %s رسید', sap_num( (int) ( $i['after_days'] ?? $i['after']['days'] ) ), sap_num( $b, 1 ), sap_num( $a, 1 ) );
+	if ( null !== $i['clicks_change'] ) {
+		$out .= ' (' . ( $i['clicks_change'] > 0 ? '+' : '' ) . sap_num( $i['clicks_change'] ) . '٪)';
+	}
+	if ( null !== ( $i['net_change'] ?? null ) ) {
+		$out .= sprintf( '؛ با کسر تغییر کل سایت، اثر خالص %s٪ است', ( $i['net_change'] > 0 ? '+' : '' ) . sap_num( $i['net_change'] ) );
+	}
+	$pb = $i['kw_before'] ?? null;
+	$pa = $i['kw_after'] ?? null;
+	if ( null !== $pb && null !== $pa ) {
+		$out .= sprintf( ' و جایگاه کلمه «%s» از %s به %s رسید', $i['keyword'], sap_num( $pb, 1 ), sap_num( $pa, 1 ) );
+	}
+	$v = sap_impact_verdicts()[ $i['verdict'] ?? 'wait' ][0] ?? '';
+	return $out . '. نتیجه: ' . $v . ( ! empty( $i['early'] ) ? ' (خوانش اولیه)' : '' ) . '.';
+}
