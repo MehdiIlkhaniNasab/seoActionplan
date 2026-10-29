@@ -129,7 +129,7 @@ $len = function ( $s, $min, $max ) {
 	<?php if ( $a && '' !== $a['update_brief'] ) : ?>
 		<section class="sap-ar-sec">
 			<h4>بریف آپدیت</h4>
-			<div class="sap-ar-brief"><?php echo nl2br( esc_html( $a['update_brief'] ) ); // phpcs:ignore ?></div>
+			<div class="sap-ar-brief"><?php echo sap_rich_text( $a['update_brief'] ); // phpcs:ignore ?></div>
 		</section>
 	<?php endif; ?>
 

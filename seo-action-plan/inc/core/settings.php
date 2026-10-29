@@ -51,6 +51,7 @@ function sap_settings_defaults() {
 		'sms_key'                => '',
 		'sms_user'               => '',
 		'sms_footer'             => '',
+		'sms_patterns'           => array(), // event => Melipayamak bodyId (service-line patterns).
 		'smtp_host'              => '',
 		'smtp_port'              => 587,
 		'smtp_secure'            => 'tls',
@@ -69,6 +70,7 @@ function sap_settings_defaults() {
 		'alert_info'             => 'digest',
 		'reminder_hours'         => '8,14',
 		'reminder_sms'           => 1,
+		'notify_batch_minutes'   => 3, // Quiet minutes before assignment notices go out (bursts → one message).
 		'reminder_email'         => 1,
 		// SERP data (top 10 of Google) for SERP analysis and the competitor radar.
 		'serp_provider'          => 'serper', // serper|serpapi.

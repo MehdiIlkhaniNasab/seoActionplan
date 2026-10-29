@@ -65,9 +65,17 @@ function sap_proposals_put( $project, $source, $items ) {
 			continue;
 		}
 		list( $fid, $w ) = sap_focus_match( $fc, (string) $i['url'], (string) $i['keyword'] );
+		// Off-focus work is not proposed (site-wide technical health, high priority and audits
+		// you started yourself for a page type aside).
+		if ( $fc && ! $fid && 'high' !== $i['priority'] && 'technical' !== $i['context'] && 0 !== strpos( $source, 'audit_' ) && 'offpage' !== $source ) {
+			continue;
+		}
+		// The same page with the same kind of work keeps one stable proposal across runs, however
+		// the AI words it this time (its status — planned, dismissed — sticks).
+		$stable = '' !== (string) $i['url'] ? ( ( $i['kind'] ?: $i['context'] ) . '|' . sap_norm_url( $i['url'] ) ) : ( $i['section'] . '|' . $i['context'] . '|' . sap_title_sig( $i['title'] ) );
 		$findings[]      = array(
 			'detector'   => 'ai_' . $source,
-			'key'        => $i['key'] ?: md5( $i['title'] . '|' . $i['url'] ),
+			'key'        => $i['key'] ?: md5( $stable ),
 			'context'    => array_key_exists( $i['context'], sap_contexts() ) ? $i['context'] : 'content_update',
 			'title'      => (string) $i['title'],
 			'detail'     => trim( (string) $i['detail'] . ( $i['steps'] ? "\n\nمراحل:\n" . implode( "\n", array_map( function ( $s, $n ) {
@@ -90,8 +98,27 @@ function sap_proposals_put( $project, $source, $items ) {
 			) ),
 		);
 	}
+	// A manageable list: the strongest proposals of this run (by priority, then effort).
+	$rank = array( 80 => 0, 55 => 1, 30 => 2 );
+	usort( $findings, function ( $a, $b ) use ( $rank ) {
+		return array( $rank[ $a['severity'] ] ?? 1, $a['effort'] ) <=> array( $rank[ $b['severity'] ] ?? 1, $b['effort'] );
+	} );
+	$findings = array_slice( $findings, 0, (int) apply_filters( 'sap_proposals_cap', 0 === strpos( $source, 'audit_' ) ? 200 : 40, $source ) );
 	sap_findings_sync( $project['id'], $findings, array( 'ai_' . $source ) );
 	return count( $findings );
+}
+
+/**
+ * Signature of a title for matching reworded proposals (first meaningful words, normalised).
+ */
+function sap_title_sig( $title ) {
+	$t = sap_norm_text( mb_strtolower( wp_strip_all_tags( (string) $title ) ) );
+	$t = preg_replace( '/[^\p{L}\p{N}\s]/u', ' ', $t );
+	$w = array_values( array_filter( preg_split( '/\s+/u', $t ), function ( $x ) {
+		return mb_strlen( $x ) > 2 && ! in_array( $x, array( 'برای', 'های', 'این', 'صفحه', 'صفحات', 'کردن', 'افزودن', 'بهبود', 'اصلاح' ), true );
+	} ) );
+	sort( $w );
+	return implode( ' ', array_slice( array_unique( $w ), 0, 6 ) );
 }
 
 /**
@@ -145,7 +172,7 @@ function sap_tech_ai_to_proposals( $project, $issues ) {
 	$items           = array();
 	foreach ( $issues as $i ) {
 		$items[] = array(
-			'key'         => md5( $i['area'] . '|' . $i['title'] ),
+			'key'         => md5( $i['area'] . '|' . ( ! empty( $i['urls'][0] ) ? sap_norm_url( $i['urls'][0] ) : sap_title_sig( $i['title'] ) ) ),
 			'title'       => $i['title'],
 			'detail'      => $i['detail'] . ( $i['urls'] ? "\n\nنمونه آدرس‌ها:\n" . implode( "\n", array_slice( $i['urls'], 0, 8 ) ) : '' ),
 			'deliverable' => $i['fix'],

@@ -18,6 +18,7 @@ function sap_sync_steps() {
 	return array(
 		'site_log'     => 'سایت کارفرما: لاگ تغییرات (افزونه رابط)',
 		'site_inventory' => 'سایت کارفرما: فهرست کامل محتوا (نوشته، برگه، محصول، دسته، برچسب، برند)',
+		'redirects'    => 'سایت کارفرما: فهرست ریدایرکت‌ها و مانیتور 404 (رنک‌مث / Redirection)',
 		'gsc_qp'       => 'سرچ کنسول: کوئری‌ها و صفحات',
 		'gsc_pages'    => 'سرچ کنسول: مقایسه صفحات با ۲۸ روز قبل',
 		'gsc_sitemaps' => 'سرچ کنسول: سایت‌مپ‌ها',
@@ -56,6 +57,7 @@ function sap_sync_steps() {
  */
 function sap_sync_step( $project, $step, $force = false ) {
 	$GLOBALS['sap_ai_project'] = $project; // Memory and playbook in the AI prompts.
+	$GLOBALS['sap_ai_known']   = 0 === strpos( $step, 'ai_' ) || 0 === strpos( $step, 'audit_' ); // Existing proposals too.
 	$fn = 'sap_step_' . $step;
 	// On-demand AI stages of the pillars (content audit per type, off-page plan).
 	if ( preg_match( '/^audit_(products|product_tax|posts|post_cat|pages)$/', $step ) || 'ai_offpage' === $step ) {
@@ -135,6 +137,52 @@ function sap_skip( $msg ) {
 }
 
 /* ---- Client site ------------------------------------------------------- */
+
+function sap_step_redirects( $project ) {
+	if ( ! sap_site_connected( $project ) ) {
+		return sap_skip( 'افزونه رابط وصل نیست.' );
+	}
+	$r = sap_site_redirects_sync( $project );
+	if ( is_wp_error( $r ) ) {
+		return 'sap_site_old' === $r->get_error_code() ? sap_skip( $r->get_error_message() ) : $r;
+	}
+	$n = array_sum( array_map( 'intval', (array) ( $r['plugins'] ?? array() ) ) );
+	return array( 'msg' => $n ? sprintf( '%s قانون ریدایرکت و %s آدرس 404 ثبت‌شده', sap_num( $n ), sap_num( count( (array) ( $r['logs'] ?? array() ) ) ) ) : 'افزونه ریدایرکتی پیدا نشد.' );
+}
+
+/**
+ * Prerequisites of a complete analysis, in order: the WordPress list, the crawl.
+ *
+ * @return array[] {key, label, ok, warn, note, link}
+ */
+function sap_analysis_prereqs( $project ) {
+	$pid  = $project['id'];
+	$inv  = sap_dataset( $pid, 'site_inventory' );
+	$cr   = sap_dataset( $pid, 'crawl' );
+	$ln   = sap_dataset( $pid, 'crawl_links' );
+	$age  = function ( $d ) {
+		return $d ? (int) floor( ( time() - strtotime( $d['fetched_at'] ) ) / DAY_IN_SECONDS ) : null;
+	};
+	$out  = array();
+	$conn = sap_site_connected( $project );
+	$out[] = array(
+		'key'   => 'inventory',
+		'label' => '۱) فهرست محتوای وردپرس (برگه، نوشته، محصول، دسته، برچسب)',
+		'ok'    => (bool) $inv,
+		'warn'  => $inv && $age( $inv ) > 14,
+		'note'  => $inv ? sprintf( '%s مورد · %s', sap_num( (int) ( $inv['meta']['count'] ?? 0 ) ), sap_jdate( $inv['fetched_at'], 'short' ) ) : ( $conn ? 'در همین تحلیل دریافت می‌شود' : 'افزونه رابط وصل نیست؛ نوع صفحات از روی آدرس حدس زده می‌شود' ),
+		'link'  => $conn ? '' : sap_project_url( $pid, 'settings' ) . '#site-connector',
+	);
+	$out[] = array(
+		'key'   => 'crawl',
+		'label' => '۲) خزش Screaming Frog (وضعیت واقعی صفحات، ریدایرکت‌ها، لینک‌های داخل متن)',
+		'ok'    => (bool) $cr,
+		'warn'  => $cr && ( $age( $cr ) > 30 || ( $inv && strtotime( $cr['fetched_at'] ) < strtotime( $inv['fetched_at'] ) - 30 * DAY_IN_SECONDS ) || ! $ln ),
+		'note'  => $cr ? sprintf( '%s آدرس · %s%s', sap_num( (int) ( $cr['meta']['urls'] ?? 0 ) ), sap_jdate( $cr['fetched_at'], 'short' ), $ln ? '' : ' · بدون خروجی لینک‌ها (ایجنت جدید را اجرا کنید)' ) . ( $cr && $age( $cr ) > 30 ? ' · قدیمی است' : '' ) : 'هنوز خزشی نرسیده؛ بدون آن صفحات ریدایرکت‌شده و حذف‌شده‌ای که در سرچ کنسول مانده‌اند ممکن است در تحلیل بیایند',
+		'link'  => sap_project_url( $pid, 'technical', array( 'sec' => 'crawl' ) ) . '#sf-wizard',
+	);
+	return $out;
+}
 
 function sap_step_site_log( $project ) {
 	if ( ! sap_site_connected( $project ) ) {

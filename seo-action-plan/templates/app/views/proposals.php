@@ -18,6 +18,29 @@ $pid      = $project['id'];
 $sections = $sections ?? array();
 $fnames   = wp_list_pluck( sap_focuses( $pid ), 'name', 'id' );
 $prio     = array( 'high' => 'اولویت بالا', 'medium' => 'متوسط', 'low' => 'کم' );
+// Several proposals on the same page become one page card (checklist → one task).
+$by_page  = function_exists( 'sap_proposals_by_page' ) && empty( $flat ) ? sap_proposals_by_page( array_filter( $items, 'sap_finding_is_page_level' ) ) : array();
+$cards    = array();
+foreach ( $by_page as $k => $pg ) {
+	if ( '' !== $k && count( $pg['items'] ) >= 2 ) {
+		$cards[ $k ] = $pg;
+	}
+}
+if ( $cards ) {
+	$in_card = array();
+	foreach ( $cards as $pg ) {
+		foreach ( $pg['items'] as $f ) {
+			$in_card[ $f['id'] ] = true;
+		}
+	}
+	$items = array_values( array_filter( $items, function ( $f ) use ( $in_card ) {
+		return ! isset( $in_card[ $f['id'] ] );
+	} ) );
+}
+$ckey   = ( $pager ?? 'op' ) . 'c';
+$c_npg  = max( 1, (int) ceil( count( $cards ) / 6 ) );
+$c_cur  = min( $c_npg, max( 1, isset( $_GET[ $ckey ] ) ? absint( $_GET[ $ckey ] ) : 1 ) ); // phpcs:ignore WordPress.Security.NonceVerification
+$c_show = array_slice( $cards, ( $c_cur - 1 ) * 6, 6, true );
 // Long lists are paged (15 per page) so a big site never means endless scrolling.
 $all_n    = count( $items );
 $pkey     = $pager ?? 'op';
@@ -28,11 +51,36 @@ $items    = array_slice( $items, ( $cur - 1 ) * $per, $per );
 ?>
 <section class="sap-panel sap-proposals">
 	<div class="sap-panel-head">
-		<h2><?php echo sap_icon( 'inbox' ); // phpcs:ignore ?><?php echo esc_html( $title ); ?><small><?php echo esc_html( sap_num( $all_n ) ); ?> پیشنهاد در انتظار تأیید</small></h2>
+		<h2><?php echo sap_icon( 'inbox' ); // phpcs:ignore ?><?php echo esc_html( $title ); ?><small><?php echo esc_html( $cards ? sprintf( '%s صفحه با چند اقدام · %s پیشنهاد دیگر', sap_num( count( $cards ) ), sap_num( $all_n ) ) : sap_num( $all_n ) . ' پیشنهاد در انتظار تأیید' ); ?></small></h2>
+		<?php if ( $cards ) : ?>
+			<label class="sap-small">ماه اکشن پلن:
+				<select data-sap-pp-period>
+					<?php foreach ( sap_period_options( 2, 1 ) as $k => $label ) : ?>
+						<option value="<?php echo esc_attr( $k ); ?>" <?php selected( $k, sap_period_current() ); ?>><?php echo esc_html( $label ); ?></option>
+					<?php endforeach; ?>
+				</select>
+			</label>
+		<?php endif; ?>
 	</div>
-	<?php if ( ! $items ) : ?>
+	<?php if ( $cards ) : ?>
+		<p class="sap-small sap-muted">همه اقدامات هر صفحه در یک کارت است: موارد لازم را تیک بزنید و «تأیید صفحه» را بزنید تا یک کار با چک‌لیست و توضیح هر مورد به اکشن پلن برود.</p>
+		<div class="sap-pagecard-list">
+			<?php foreach ( $c_show as $pg ) : ?>
+				<?php sap_view( 'page-card', array( 'project' => $project, 'pg' => $pg ) ); ?>
+			<?php endforeach; ?>
+		</div>
+		<?php if ( $c_npg > 1 ) : ?>
+			<nav class="sap-pager" aria-label="صفحه‌بندی کارت‌ها">
+				<?php for ( $i = 1; $i <= $c_npg; $i++ ) : ?>
+					<a class="<?php echo $i === $c_cur ? 'is-active' : ''; ?>" href="<?php echo esc_url( add_query_arg( $ckey, $i, $here ) ); ?>"><?php echo esc_html( sap_num( $i ) ); ?></a>
+				<?php endfor; ?>
+			</nav>
+		<?php endif; ?>
+		<?php if ( $items ) : ?><h3 class="sap-h3">پیشنهادهای تکی و کل سایت</h3><?php endif; ?>
+	<?php endif; ?>
+	<?php if ( ! $items && ! $cards ) : ?>
 		<p class="sap-muted"><?php echo esc_html( $empty ?? 'پیشنهادی در انتظار تأیید نیست.' ); ?></p>
-	<?php else : ?>
+	<?php elseif ( $items ) : ?>
 		<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
 			<?php sap_form_fields( 'sap_findings', array( 'project_id' => $pid, '_return' => $here ) ); ?>
 			<div class="sap-proposal-bar">
@@ -74,7 +122,7 @@ $items    = array_slice( $items, ( $cur - 1 ) * $per, $per );
 							<?php endif; ?>
 							<details>
 								<summary>جزئیات و راه‌حل</summary>
-								<div class="sap-proposal-detail"><?php echo nl2br( esc_html( $f['detail'] ) ); ?></div>
+								<div class="sap-proposal-detail"><?php echo sap_rich_text( $f['detail'], sap_site_base( $project ) ); // phpcs:ignore ?></div>
 								<?php if ( ! empty( $f['evidence']['meta']['links'] ) ) : ?>
 									<p class="sap-small">مقصد: <b><?php echo esc_html( sap_page_title( $pid, $f['url'] ) ?: sap_short_url( $f['url'], 50 ) ); ?></b> <?php echo sap_url_tag( $f['url'], 60 ); // phpcs:ignore ?></p>
 									<div class="sap-table-wrap">
@@ -88,7 +136,7 @@ $items    = array_slice( $items, ( $cur - 1 ) * $per, $per );
 										</table>
 									</div>
 								<?php elseif ( ! empty( $f['evidence']['deliverable'] ) ) : ?>
-									<pre class="sap-deliverable" dir="auto"><?php echo esc_html( $f['evidence']['deliverable'] ); ?></pre>
+									<div class="sap-deliverable" dir="auto"><?php echo sap_rich_text( $f['evidence']['deliverable'], sap_site_base( $project ) ); // phpcs:ignore ?></div>
 								<?php endif; ?>
 								<?php if ( ! empty( $f['evidence']['items'] ) && is_array( $f['evidence']['items'] ) ) : ?>
 									<ul class="sap-small">

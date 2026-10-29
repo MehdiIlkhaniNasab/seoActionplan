@@ -161,25 +161,37 @@ function sap_pages_to_read( $project, $limit = 30 ) {
 	$pid   = $project['id'];
 	$urls  = array();
 	$pages = sap_sort( (array) ( sap_dataset_payload( $pid, 'gsc_pages' )['cur'] ?? array() ), 'clicks' );
+	// Only live pages: a redirected or removed address that Google still lists is replaced by
+	// its live target (or dropped); parameter / paginated / utility URLs are not pages to analyse.
+	$add = function ( $u ) use ( $pid, &$urls ) {
+		$u = (string) $u;
+		if ( '' === $u ) {
+			return;
+		}
+		$live = sap_url_live( $pid, $u );
+		if ( '' === $live || '' !== sap_url_skip_reason( $pid, $live ) ) {
+			return;
+		}
+		$urls[ sap_norm_url( $live ) ] = $live;
+	};
 	foreach ( sap_focuses( $pid, true ) as $f ) {
 		foreach ( $pages as $r ) {
 			if ( sap_url_matches( $r['page'], $f['url_patterns'] ) ) {
-				$urls[ sap_norm_url( $r['page'] ) ] = $r['page'];
+				$add( $r['page'] );
 			}
 		}
 	}
 	foreach ( (array) ( sap_dataset_payload( $pid, 'sheet_clusters' )['rows'] ?? array() ) as $r ) {
-		if ( '' !== $r['target'] ) {
-			$urls[ sap_norm_url( $r['target'] ) ] = $r['target'];
-		}
+		$add( $r['target'] );
 	}
-	foreach ( array_slice( $pages, 0, $limit ) as $r ) {
-		$urls[ sap_norm_url( $r['page'] ) ] = $r['page'];
+	foreach ( $pages as $r ) {
+		if ( count( $urls ) >= $limit * 2 ) {
+			break;
+		}
+		$add( $r['page'] );
 	}
 	foreach ( (array) ( sap_dataset_payload( $pid, 'sheet_calendar' )['rows'] ?? array() ) as $r ) {
-		if ( '' !== $r['url'] ) {
-			$urls[ sap_norm_url( $r['url'] ) ] = $r['url'];
-		}
+		$add( $r['url'] );
 	}
 	return array_slice( array_values( $urls ), 0, $limit );
 }

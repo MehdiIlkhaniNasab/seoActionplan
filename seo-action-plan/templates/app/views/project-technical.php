@@ -172,12 +172,14 @@ $inspect = (array) ( sap_dataset_payload( $pid, 'gsc_inspect' )['rows'] ?? array
 					<ul class="sap-small"><?php foreach ( array_slice( $nosch, 0, 10 ) as $sp ) : ?><li><?php echo sap_page_link( $sp['url'], $sp['title'] ?: rawurldecode( $sp['url'] ) ); // phpcs:ignore ?></li><?php endforeach; ?></ul>
 				</div>
 			</div>
+		<?php elseif ( in_array( $open, array( 'redirects', 'links' ), true ) ) : ?>
+			<?php sap_view( 'tech-redirects', array( 'project' => $project, 'mode' => $open ) ); ?>
 		<?php elseif ( 'nodata' === $s['status'] ) : ?>
 			<p class="sap-warn">داده این بخش هنوز دریافت نشده. <?php echo in_array( 'crawl', $s['needs'], true ) ? 'مراحل «اتصال Screaming Frog» در بالای همین بخش را دنبال کنید.' : 'دکمه‌های بالای صفحه یا «تحلیل کامل» را بزنید.'; ?></p>
 		<?php endif; ?>
 		<?php if ( ! empty( $ai['payload']['issues'] ) ) : ?>
 			<?php
-			$map_area = array( 'sitemap' => 'sitemap', 'robots' => 'robots', 'cwv' => 'speed', 'schema' => 'schema', 'index' => 'index', 'pages' => 'pages', 'crawl' => 'crawl', 'onpage' => 'crawl' );
+			$map_area = array( 'sitemap' => 'sitemap', 'robots' => 'robots', 'cwv' => 'speed', 'schema' => 'schema', 'index' => 'index', 'pages' => 'pages', 'crawl' => 'crawl', 'onpage' => 'crawl', 'redirects' => 'redirects', 'links' => 'links' );
 			$ai_here  = array_filter( $ai['payload']['issues'], function ( $i ) use ( $map_area, $open ) {
 				return ( $map_area[ $i['area'] ] ?? '' ) === $open;
 			} );

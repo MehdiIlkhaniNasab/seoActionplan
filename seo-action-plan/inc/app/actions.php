@@ -113,6 +113,15 @@ add_action( 'admin_post_sap_save_settings', function () {
 	$changes['reminder_hours'] = implode( ',', array_unique( $hours ) );
 	$changes['reminder_sms']   = sap_post( 'reminder_sms' ) ? 1 : 0;
 	$changes['reminder_email'] = sap_post( 'reminder_email' ) ? 1 : 0;
+	$changes['notify_batch_minutes'] = max( 0, min( 30, (int) sap_post( 'notify_batch_minutes', 3 ) ) );
+	$pat = array();
+	foreach ( array_keys( sap_sms_events() ) as $ev ) {
+		$id = absint( sap_norm_text( (string) ( ( (array) sap_post( 'sms_patterns', array() ) )[ $ev ] ?? '' ) ) );
+		if ( $id ) {
+			$pat[ $ev ] = $id;
+		}
+	}
+	$changes['sms_patterns'] = $pat;
 	$changes['serp_provider']  = 'serpapi' === sap_post( 'serp_provider' ) ? 'serpapi' : 'serper';
 	$changes['serp_gl']        = sanitize_key( (string) sap_post( 'serp_gl', 'ir' ) ) ?: 'ir';
 	$changes['serp_hl']        = sanitize_key( (string) sap_post( 'serp_hl', 'fa' ) ) ?: 'fa';
@@ -235,15 +244,44 @@ add_action( 'admin_post_sap_regen_key', function () {
 add_action( 'admin_post_sap_crawl_upload', function () {
 	sap_guard( 'sap_crawl_upload' );
 	$id = absint( sap_post( 'project_id' ) );
-	if ( empty( $_FILES['crawl']['tmp_name'] ) ) { // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
+	// One or several files: internal_all.csv, all_inlinks.csv, the redirects report (plain or .gz).
+	$f     = $_FILES['crawl'] ?? array(); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
+	$names = (array) ( $f['name'] ?? array() );
+	$tmps  = (array) ( $f['tmp_name'] ?? array() );
+	$msgs  = array();
+	$fail  = array();
+	foreach ( $tmps as $i => $tmp ) {
+		if ( '' === (string) $tmp || ! is_uploaded_file( $tmp ) ) {
+			continue;
+		}
+		$name = sanitize_file_name( wp_unslash( (string) ( $names[ $i ] ?? '' ) ) );
+		$r    = sap_sf_ingest_file( $id, $tmp, $name, 'upload' );
+		if ( is_wp_error( $r ) ) {
+			$fail[] = $name . ': ' . $r->get_error_message();
+		} else {
+			$msgs[] = $r['msg'];
+		}
+	}
+	if ( ! $msgs && ! $fail ) {
 		sap_back( sap_project_url( $id, 'settings' ), 'فایلی انتخاب نشده است.', false );
 	}
-	$rows = sap_crawl_rows_from_file( $_FILES['crawl']['tmp_name'], sanitize_file_name( wp_unslash( $_FILES['crawl']['name'] ?? '' ) ) ); // phpcs:ignore
-	if ( is_wp_error( $rows ) ) {
-		sap_back( sap_project_url( $id, 'settings' ), $rows->get_error_message(), false );
+	if ( ! $msgs ) {
+		sap_back( sap_project_url( $id, 'settings' ), implode( ' | ', $fail ), false );
 	}
-	sap_sf_store_crawl( $id, $rows, 'upload' );
-	sap_back( sap_project_url( $id, 'overview' ), sprintf( 'خزش با %s آدرس دریافت شد. برای اعمال در تحلیل، «همگام‌سازی و تحلیل» را اجرا کنید.', sap_num( count( $rows ) ) ) );
+	sap_back( sap_project_url( $id, 'overview' ), implode( '؛ ', $msgs ) . '.' . ( $fail ? ' خطا: ' . implode( ' | ', $fail ) : '' ) . ' برای اعمال در تحلیل، «همگام‌سازی و تحلیل» را اجرا کنید.', ! $fail );
+} );
+
+add_action( 'admin_post_sap_redirects_sync', function () {
+	sap_guard( 'sap_redirects_sync' );
+	$id = absint( sap_post( 'project_id' ) );
+	$r  = sap_site_redirects_sync( sap_project( $id ) );
+	if ( is_wp_error( $r ) ) {
+		sap_back( sap_project_url( $id, 'technical', array( 'tab' => 'redirects' ) ) . '#redirects', $r->get_error_message(), false );
+	}
+	$pl = array_map( function ( $k, $n ) {
+		return array( 'rank_math' => 'رنک‌مث', 'redirection' => 'Redirection', 'yoast' => 'یوآست' )[ $k ] . ': ' . sap_num( $n );
+	}, array_keys( (array) $r['plugins'] ), (array) $r['plugins'] );
+	sap_back( sap_project_url( $id, 'technical', array( 'tab' => 'redirects' ) ) . '#redirects', $pl ? 'فهرست ریدایرکت‌ها دریافت شد — ' . implode( '، ', $pl ) . ' قانون.' : 'هیچ افزونه ریدایرکتی (رنک‌مث، Redirection، یوآست پریمیوم) روی سایت پیدا نشد.' );
 } );
 
 add_action( 'admin_post_sap_review_done', function () {
@@ -455,6 +493,9 @@ add_action( 'admin_post_sap_task_delete', function () {
 add_action( 'admin_post_sap_activity_add', function () {
 	sap_guard( 'sap_activity_add', false );
 	$pid  = absint( sap_post( 'project_id' ) );
+	if ( ! sap_can() && ! isset( sap_project_members( $pid )[ get_current_user_id() ] ) ) {
+		wp_die( 'فقط در پروژه‌های خودتان می‌توانید اقدام ثبت کنید.', 403 );
+	}
 	$date = sap_parse_date( sap_post( 'date' ) );
 	sap_activity_add( $pid, array(
 		'focus_id'     => absint( sap_post( 'focus_id' ) ),
@@ -609,6 +650,9 @@ add_action( 'admin_post_sap_member_save', function () {
 		sap_back( sap_url( 'team' ), sap_invite_message( $GLOBALS['sap_last_invite'] ?? array(), '' !== $data['password'] ), ! empty( $GLOBALS['sap_last_invite']['email'] ) || '' !== $data['password'] );
 	}
 	sap_member_update( $uid, $data );
+	if ( null !== sap_post( 'full_access', null ) ) {
+		sap_member_set_full( $uid, '1' === (string) sap_post( 'full_access' ) );
+	}
 	// A new password only for team members (never for managers from this screen).
 	if ( '' !== $data['password'] && sap_is_member_only( get_userdata( $uid ) ) ) {
 		wp_set_password( $data['password'], $uid );
@@ -646,6 +690,18 @@ function sap_invite_message( $r, $has_password = false ) {
 	}
 	return implode( ' ', $parts );
 }
+
+add_action( 'admin_post_sap_sms_delivery', function () {
+	sap_guard( 'sap_sms_delivery' );
+	$n = sap_sms_check_deliveries();
+	sap_back( sap_url( 'settings' ) . '#notify-log', $n ? sprintf( 'وضعیت تحویل %s پیامک به‌روز شد.', sap_num( $n ) ) : 'پیامکی در انتظار گزارش تحویل نبود (یا ملی پیامک هنوز گزارش نداده).' );
+} );
+
+add_action( 'admin_post_sap_assign_flush', function () {
+	sap_guard( 'sap_assign_flush' );
+	$n = sap_assign_flush( true );
+	sap_back( sap_url( 'team' ), $n ? sprintf( 'اطلاع‌رسانی برای %s نفر ارسال شد.', sap_num( $n ) ) : 'اطلاع‌رسانی در صفی نبود.' );
+} );
 
 add_action( 'admin_post_sap_member_invite', function () {
 	sap_guard( 'sap_member_invite' );

@@ -153,6 +153,21 @@ function sap_page_brief_text( $b, $findings ) {
 		if ( '' !== $det ) {
 			$out[] = '   ' . str_replace( "\n", "\n   ", $det );
 		}
+		$cols = (array) ( $f['evidence']['cols'] ?? array() );
+		foreach ( array_slice( (array) ( $f['evidence']['items'] ?? array() ), 0, 8 ) as $it ) {
+			if ( ! is_array( $it ) || ! $cols ) {
+				continue;
+			}
+			$vals = array();
+			foreach ( $cols as $ck => $cl ) {
+				if ( isset( $it[ $ck ] ) && is_scalar( $it[ $ck ] ) && '' !== (string) $it[ $ck ] ) {
+					$vals[] = $cl . ': ' . rawurldecode( (string) $it[ $ck ] );
+				}
+			}
+			if ( $vals ) {
+				$out[] = '   - ' . implode( ' · ', $vals );
+			}
+		}
 	}
 	if ( '' !== $b['new_title'] || '' !== $b['new_meta'] ) {
 		$out[] = "\nمتن آماده:" . ( '' !== $b['new_title'] ? "\nتایتل: " . $b['new_title'] : '' ) . ( '' !== $b['new_meta'] ? "\nمتا: " . $b['new_meta'] : '' );
@@ -165,6 +180,22 @@ function sap_page_brief_text( $b, $findings ) {
 		$out[] = "\nدیدگاه من:\n- " . implode( "\n- ", $b['notes'] );
 	}
 	return implode( "\n", $out );
+}
+
+/**
+ * A finding about one page (not a site-wide list whose «url» is just its first example).
+ */
+function sap_finding_is_page_level( $f ) {
+	if ( '' === (string) $f['url'] ) {
+		return false;
+	}
+	$k = sap_norm_url( $f['url'] );
+	foreach ( (array) ( $f['evidence']['items'] ?? array() ) as $it ) {
+		if ( is_array( $it ) && ! empty( $it['url'] ) && sap_norm_url( $it['url'] ) !== $k ) {
+			return false; // A list of several pages (the url is only its first example).
+		}
+	}
+	return true;
 }
 
 /**

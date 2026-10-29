@@ -30,6 +30,7 @@ $sms_ok   = 'none' !== sap_setting( 'sms_provider', 'none' );
 			<li>عضو را پایین همین صفحه اضافه کنید؛ ایمیل دعوت با آدرس پنل، نام کاربری و لینک تعیین رمز برایش می‌رود (اگر موبایل دارد، پیامک دعوت هم).</li>
 			<li>اگر ایمیل هنوز تنظیم نشده (مثلاً روی لوکال‌هاست)، یا در فرم یک رمز برایش بگذارید، یا دکمه «لینک تعیین رمز» را بزنید و لینک را خودتان برایش بفرستید.</li>
 			<li>عضو از آدرس زیر وارد می‌شود و فقط «کارهای من» را می‌بیند: کارهای همه پروژه‌هایش با برچسب پروژه، وضعیت، هدف و گزارش انجام. ورود به پیشخوان وردپرس هم او را به همین پنل برمی‌گرداند.</li>
+			<li>دسترسی کامل فقط با مدیر سئو است. اگر می‌خواهید عضوی همه‌چیز را ببیند و مدیریت کند، در «ویرایش پروفایل» او تیک «دسترسی کامل به سکان» را بزنید.</li>
 		</ol>
 	</div>
 	<div class="sap-team-url">
@@ -43,6 +44,24 @@ $sms_ok   = 'none' !== sap_setting( 'sms_provider', 'none' );
 <?php endif; ?>
 <?php if ( ! $sms_ok ) : ?>
 	<p class="sap-callout"><?php echo sap_icon( 'alert', 16 ); // phpcs:ignore ?>درگاه پیامک تنظیم نشده؛ یادآوری‌ها فعلاً فقط با ایمیل ارسال می‌شوند. <a href="<?php echo esc_url( sap_url( 'settings' ) . '#notify' ); ?>">تنظیم پیامک</a></p>
+<?php endif; ?>
+<?php $pending = sap_assign_pending(); ?>
+<?php if ( $pending ) : ?>
+	<section class="sap-panel sap-assign-queue">
+		<div>
+			<b><?php echo sap_icon( 'clock', 16 ); // phpcs:ignore ?>اطلاع‌رسانی کارهای تازه در صف</b>
+			<p class="sap-small sap-muted">
+				<?php
+				echo esc_html( implode( '، ', array_map( function ( $uid, $info ) {
+					$mm = sap_member( $uid );
+					return ( $mm['name'] ?? '#' . $uid ) . ': ' . sap_num( $info[0] ) . ' کار (ارسال ~' . sap_num( max( 1, (int) ceil( ( $info[1] - time() ) / 60 ) ) ) . ' دقیقه دیگر)';
+				}, array_keys( $pending ), $pending ) ) );
+				?>
+				— تا وقتی کار پشت سر هم می‌سپارید منتظر می‌ماند و بعد یک ایمیل و یک پیامک خلاصه می‌فرستد.
+			</p>
+		</div>
+		<form method="post" action="<?php echo $post; // phpcs:ignore ?>"><?php sap_form_fields( 'sap_assign_flush' ); ?><button class="sap-btn is-primary is-small" type="submit">ارسال همین حالا</button></form>
+	</section>
 <?php endif; ?>
 
 <div class="sap-team-grid">
@@ -61,6 +80,13 @@ $sms_ok   = 'none' !== sap_setting( 'sms_provider', 'none' );
 					<b><?php echo esc_html( $m['name'] ); ?></b>
 					<small><?php echo esc_html( $m['title'] ?: ( $m['manager'] ? 'مدیر' : 'عضو تیم' ) ); ?></small>
 				</div>
+				<?php if ( user_can( $u->ID, 'manage_options' ) ) : ?>
+					<span class="sap-chip is-info sap-access-chip">مدیر سئو</span>
+				<?php elseif ( sap_member_full( $u->ID ) ) : ?>
+					<span class="sap-chip is-good sap-access-chip">دسترسی کامل</span>
+				<?php else : ?>
+					<span class="sap-chip is-soft sap-access-chip">فقط کارهای خودش</span>
+				<?php endif; ?>
 			</header>
 			<p class="sap-member-contact"><span dir="ltr"><?php echo esc_html( $m['email'] ); ?></span><?php echo '' !== $m['phone'] ? ' · <span dir="ltr">' . esc_html( $m['phone'] ) . '</span>' : ' · <span class="sap-muted">بدون موبایل</span>'; ?></p>
 			<div class="sap-member-stats">
@@ -87,6 +113,13 @@ $sms_ok   = 'none' !== sap_setting( 'sms_provider', 'none' );
 						<label>سمت<input type="text" name="title" value="<?php echo esc_attr( $m['title'] ); ?>" placeholder="کارشناس محتوا"></label>
 						<label>موبایل<input type="text" name="phone" dir="ltr" value="<?php echo esc_attr( $m['phone'] ); ?>" placeholder="09121234567"></label>
 						<div class="sap-check-col"><label class="sap-check"><input type="checkbox" name="notify_sms" value="1" <?php checked( $m['notify_sms'] ); ?>> پیامک</label><label class="sap-check"><input type="checkbox" name="notify_email" value="1" <?php checked( $m['notify_email'] ); ?>> ایمیل</label></div>
+						<?php if ( current_user_can( 'manage_options' ) && ! user_can( $u->ID, 'manage_options' ) && (int) $u->ID !== get_current_user_id() ) : ?>
+							<div class="sap-access-field">
+								<input type="hidden" name="full_access" value="0">
+								<label class="sap-check"><input type="checkbox" name="full_access" value="1" <?php checked( sap_member_full( $u->ID ) ); ?>> <b>دسترسی کامل به سکان</b></label>
+								<small>مثل مدیر سئو: همه پروژه‌ها، تحلیل‌ها، اکشن پلن، اتوماسیون و تنظیمات. خاموش = فقط «کارهای من» با توضیحات کارهای خودش.</small>
+							</div>
+						<?php endif; ?>
 						<?php if ( sap_is_member_only( $u ) ) : ?><label>رمز عبور جدید (اختیاری)<input type="password" name="password" dir="ltr" minlength="8" autocomplete="new-password" placeholder="خالی = بدون تغییر"></label><?php endif; ?>
 					</div>
 					<p class="sap-label">نقش در پروژه‌ها</p>

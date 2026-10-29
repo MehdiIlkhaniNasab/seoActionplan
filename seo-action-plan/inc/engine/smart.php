@@ -94,6 +94,88 @@ function sap_url_skip_reason( $project_id, $url, $title = '' ) {
 	if ( $m && in_array( $m['status'], array( 'none', 'noindex', 'prune_410', 'prune_301' ), true ) ) {
 		return 'در نقشه کلمات «' . ( sap_keymap_statuses()[ $m['status'] ] ?? $m['status'] ) . '»';
 	}
+	return sap_url_dead_reason( $project_id, $url );
+}
+
+/**
+ * Not a live page any more (redirected / removed), from the crawl, the WordPress
+ * list and the redirect manager. Search Console keeps such URLs for weeks; their
+ * data belongs to the target page, so they are left out of page analysis.
+ */
+function sap_url_dead_reason( $project_id, $url ) {
+	$k  = sap_norm_url( $url );
+	$c  = sap_url_ctx( $project_id )['crawl'][ $k ] ?? null;
+	$it = function_exists( 'sap_site_item' ) ? sap_site_item( $project_id, $url ) : null;
+	if ( $c && $c['code'] >= 300 && $c['code'] < 400 ) {
+		return 'ریدایرکت می‌شود' . ( '' !== (string) $c['redirect'] ? ' به ' . sap_short_url( $c['redirect'], 50 ) : '' );
+	}
+	if ( $c && $c['code'] >= 400 ) {
+		return 'صفحه وجود ندارد (کد ' . $c['code'] . ')';
+	}
+	if ( $it && '' !== (string) ( $it['redirect'] ?? '' ) ) {
+		return 'در وردپرس ریدایرکت شده به ' . sap_short_url( $it['redirect'], 50 );
+	}
+	if ( ! $c || 200 !== (int) $c['code'] ) {
+		$st = function_exists( 'sap_url_crawl_state' ) ? sap_url_crawl_state( $project_id, $url ) : '';
+		if ( 'redirect' === $st ) {
+			return 'در افزونه ریدایرکت (رنک‌مث/Redirection) ریدایرکت شده';
+		}
+		if ( 'gone' === $st ) {
+			return 'حذف شده (۴۰۴/۴۱۰)';
+		}
+		// The WordPress list has every post, page, product and term: an address under one of
+		// their bases (/product/…, /product-category/…, root slugs…) that it lacks is gone.
+		// Other bases (custom post types, archives) are not judged.
+		$path = trim( rawurldecode( (string) wp_parse_url( $url, PHP_URL_PATH ) ), '/' );
+		if ( ! $it && '' !== $path && function_exists( 'sap_site_inventory' ) ) {
+			$bases = sap_inventory_bases( $project_id );
+			$seg   = explode( '/', $path );
+			$base  = count( $seg ) > 1 ? $seg[0] : '';
+			if ( ( $bases[ $base ] ?? 0 ) >= 5 ) {
+				return 'در فهرست محتوای وردپرس نیست (حذف یا ریدایرکت شده)';
+			}
+		}
+	}
+	return '';
+}
+
+/**
+ * First path segment of WordPress items => count ('' = items at the root).
+ */
+function sap_inventory_bases( $project_id ) {
+	static $cache = array();
+	if ( ! isset( $cache[ $project_id ] ) ) {
+		$b = array();
+		foreach ( sap_site_inventory( $project_id ) as $it ) {
+			$seg = explode( '/', trim( rawurldecode( (string) wp_parse_url( (string) ( $it['url'] ?? '' ), PHP_URL_PATH ) ), '/' ) );
+			if ( '' === $seg[0] ) {
+				continue;
+			}
+			$k       = count( $seg ) > 1 ? $seg[0] : '';
+			$b[ $k ] = ( $b[ $k ] ?? 0 ) + 1;
+		}
+		$cache[ $project_id ] = $b;
+	}
+	return $cache[ $project_id ];
+}
+
+/**
+ * The live address for a URL: itself, or where it redirects when that page is alive.
+ */
+function sap_url_live( $project_id, $url ) {
+	if ( '' === sap_url_dead_reason( $project_id, $url ) ) {
+		return $url;
+	}
+	$c  = sap_url_ctx( $project_id )['crawl'][ sap_norm_url( $url ) ] ?? null;
+	$it = function_exists( 'sap_site_item' ) ? sap_site_item( $project_id, $url ) : null;
+	$to = $c && '' !== (string) $c['redirect'] ? (string) $c['redirect'] : (string) ( $it['redirect'] ?? '' );
+	for ( $i = 0; $i < 5 && '' !== $to; $i++ ) {
+		if ( '' === sap_url_dead_reason( $project_id, $to ) ) {
+			return $to;
+		}
+		$n  = sap_url_ctx( $project_id )['crawl'][ sap_norm_url( $to ) ] ?? null;
+		$to = $n ? (string) $n['redirect'] : '';
+	}
 	return '';
 }
 

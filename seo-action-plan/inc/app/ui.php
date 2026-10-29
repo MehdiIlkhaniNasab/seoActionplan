@@ -333,6 +333,52 @@ function sap_page_link( $url, $label ) {
 }
 
 /**
+ * Persian text with addresses inside, readable: every URL becomes a clickable,
+ * left-to-right isolated link (decoded, shortened) so it neither flips the Persian
+ * sentence around it nor stays dead text; site paths (/product/…) are isolated too.
+ * Line breaks are kept. Output is escaped HTML.
+ */
+function sap_rich_text( $text, $base = '' ) {
+	$text  = (string) $text;
+	$parts = preg_split( '#(https?://[^\s<>"«»،؛)\]]+)#u', $text, -1, PREG_SPLIT_DELIM_CAPTURE );
+	$out   = '';
+	foreach ( $parts as $i => $part ) {
+		if ( $i % 2 ) {
+			$url  = rtrim( $part, '.,:;!?' );
+			$tail = substr( $part, strlen( $url ) );
+			$out .= sap_url_tag( $url, 60 ) . esc_html( $tail );
+			continue;
+		}
+		$h = esc_html( $part );
+		// Bare site paths: isolated (and linked when the site address is known).
+		$h = preg_replace_callback( '#(^|[\s(«:،])(/[^\s<>"«»،؛)]{2,})#u', function ( $m ) use ( $base ) {
+			$path = html_entity_decode( $m[2], ENT_QUOTES );
+			$path = rtrim( $path, '.,:;!?' );
+			$rest = substr( html_entity_decode( $m[2], ENT_QUOTES ), strlen( $path ) );
+			if ( '' !== $base ) {
+				return $m[1] . sap_url_tag( untrailingslashit( $base ) . $path, 60 ) . esc_html( $rest );
+			}
+			return $m[1] . '<bdi class="sap-url" dir="ltr">' . esc_html( rawurldecode( $path ) ) . '</bdi>' . esc_html( $rest );
+		}, $h );
+		$out .= $h;
+	}
+	return nl2br( $out );
+}
+
+/**
+ * Site address of a task's project (for linking bare paths in its notes).
+ */
+function sap_task_site_base( $t ) {
+	static $cache = array();
+	$pid = (int) ( $t['project_id'] ?? 0 );
+	if ( ! isset( $cache[ $pid ] ) ) {
+		$p             = sap_project( $pid );
+		$cache[ $pid ] = $p ? (string) sap_site_base( $p ) : '';
+	}
+	return $cache[ $pid ];
+}
+
+/**
  * An address shown as text: decoded, isolated left-to-right (a Persian slug no
  * longer scrambles the line) and cut with an ellipsis; the full address on hover.
  */

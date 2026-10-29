@@ -42,6 +42,13 @@ function sap_detectors() {
 		'crawl_4xx'      => array( 'خطای 4xx', array( 'crawl' ) ),
 		'crawl_5xx'      => array( 'خطای 5xx', array( 'crawl' ) ),
 		'crawl_3xx'      => array( 'ریدایرکت‌های داخلی', array( 'crawl' ) ),
+		'broken_links'   => array( 'لینک‌های داخلی شکسته', array( 'crawl_links' ) ),
+		'links_to_redirect' => array( 'لینک داخلی به ریدایرکت', array( 'crawl_links', 'crawl' ) ),
+		'orphans'        => array( 'صفحات مهم بدون لینک از متن', array( 'crawl_links', 'crawl' ) ),
+		'redirect_chain' => array( 'زنجیره و حلقه ریدایرکت', array( 'crawl' ) ),
+		'redirect_temp'  => array( 'ریدایرکت موقت به‌جای دائمی', array( 'crawl' ) ),
+		'redirect_manager' => array( 'قوانین افزونه ریدایرکت (رنک‌مث)', array( 'site_redirects' ) ),
+		'hits_404'       => array( '404 با بازدید (مانیتور 404)', array( 'site_redirects' ) ),
 		'crawl_meta'     => array( 'تایتل / متا / H1', array( 'crawl' ) ),
 		'kw_title'       => array( 'کلمه اصلی در تایتل نیست', array( 'crawl', 'gsc_qp' ) ),
 		'thin'           => array( 'محتوای کم‌حجم', array( 'crawl', 'gsc_qp' ) ),
@@ -1347,8 +1354,13 @@ function sap_ctx_impr( $ctx, $url ) {
  */
 function sap_detect_crawl_4xx( $ctx ) {
 	$items = array();
+	// Pages already reported with their linking pages by «broken_links» are not repeated here.
+	$linked = array();
+	foreach ( (array) ( $ctx['crawl_links']['broken'] ?? array() ) as $l ) {
+		$linked[ sap_norm_url( $l['d'] ) ] = true;
+	}
 	foreach ( (array) ( $ctx['crawl']['rows'] ?? array() ) as $r ) {
-		if ( $r['code'] >= 400 && $r['code'] < 500 ) {
+		if ( $r['code'] >= 400 && $r['code'] < 500 && ! isset( $linked[ sap_norm_url( $r['url'] ) ] ) ) {
 			$items[] = array( 'url' => $r['url'], 'page' => sap_short_url( $r['url'], 70 ), 'code' => $r['code'], 'impr' => sap_ctx_impr( $ctx, $r['url'] ) );
 		}
 	}
@@ -1394,6 +1406,9 @@ function sap_detect_crawl_5xx( $ctx ) {
  * Internal URLs that redirect (internal links pointing to redirects).
  */
 function sap_detect_crawl_3xx( $ctx ) {
+	if ( ! empty( $ctx['crawl_links'] ) ) {
+		return array(); // links_to_redirect shows each link with its page and anchor.
+	}
 	$items = array();
 	foreach ( (array) ( $ctx['crawl']['rows'] ?? array() ) as $r ) {
 		if ( $r['code'] >= 300 && $r['code'] < 400 ) {
@@ -1564,8 +1579,11 @@ function sap_detect_weak_links( $ctx ) {
 	$items = array();
 	foreach ( sap_crawl_pages( $ctx ) as $r ) {
 		$impr = sap_ctx_impr( $ctx, $r['url'] );
-		if ( $impr >= $min && ( $r['inlinks'] <= 2 || $r['depth'] >= 4 ) ) {
-			$items[] = array( 'url' => $r['url'], 'page' => sap_short_url( $r['url'], 60 ), 'inlinks' => $r['inlinks'], 'depth' => $r['depth'], 'impr' => $impr );
+		// With the inlinks export only links inside the content count (menus and footers are on every page).
+		$ci   = sap_content_inlinks( $ctx, $r['url'] );
+		$in   = null === $ci ? $r['inlinks'] : $ci;
+		if ( $impr >= $min && ( null === $ci ? $in <= 2 : ( $in >= 1 && $in <= 2 ) ) || ( $impr >= $min && $r['depth'] >= 4 ) ) {
+			$items[] = array( 'url' => $r['url'], 'page' => sap_ctx_title( $ctx, $r['url'] ), 'inlinks' => $in, 'depth' => $r['depth'], 'impr' => $impr );
 		}
 	}
 	if ( ! $items ) {
@@ -1577,7 +1595,7 @@ function sap_detect_weak_links( $ctx ) {
 		'title'    => 'لینک‌سازی داخلی به %s صفحه پرتقاضا با لینک ورودی کم',
 		'detail'   => 'این صفحات نمایش خوبی دارند ولی لینک داخلی کمی می‌گیرند یا عمق آن‌ها زیاد است. از مقالات و دسته‌های مرتبط با انکر کلمه اصلی به آن‌ها لینک بدهید و در صورت امکان در منو/دسته والد قرار دهید.',
 		'severity' => 40,
-		'cols'     => array( 'page' => 'صفحه', 'inlinks' => 'لینک ورودی', 'depth' => 'عمق', 'impr' => 'نمایش' ),
+		'cols'     => array( 'page' => 'صفحه', 'inlinks' => empty( $ctx['crawl_links'] ) ? 'لینک ورودی' : 'لینک از متن', 'depth' => 'عمق', 'impr' => 'نمایش' ),
 		'per_item' => 0.25,
 	) );
 }

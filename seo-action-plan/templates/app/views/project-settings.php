@@ -58,10 +58,11 @@ $site     = $project['site_url'] ?: 'https://' . sap_project_domain( $project ) 
 	<pre dir="ltr" data-sap-copy>./sf-agent.sh --url <?php echo esc_html( $site ); ?> --endpoint <?php echo esc_html( $crawl ); ?> --key <?php echo esc_html( $key ); ?></pre>
 
 	<h3>آپلود دستی خزش</h3>
+	<p class="sap-muted sap-small">می‌توانید چند فایل را با هم انتخاب کنید (CSV یا gz) — نوع هر فایل از ستون‌هایش تشخیص داده می‌شود: <code dir="ltr">internal_all.csv</code> (Internal › All)، <code dir="ltr">all_inlinks.csv</code> (Bulk Export › Links › All Inlinks — برای لینک‌های داخل متن، لینک‌های شکسته و لینک به ریدایرکت) و گزارش <code dir="ltr">Reports › Redirects › All Redirects</code> (زنجیره و حلقه).</p>
 	<form method="post" action="<?php echo $post; // phpcs:ignore ?>" enctype="multipart/form-data" class="sap-inline">
 		<?php sap_form_fields( 'sap_crawl_upload', array( 'project_id' => $pid ) ); ?>
-		<input type="file" name="crawl" accept=".csv,.gz" required>
-		<button class="sap-btn is-small" type="submit">آپلود internal_all.csv</button>
+		<input type="file" name="crawl[]" accept=".csv,.gz" multiple required>
+		<button class="sap-btn is-small" type="submit">آپلود فایل‌های خزش</button>
 		<span class="sap-muted"><?php echo $crawl_ds ? 'آخرین خزش: ' . esc_html( sap_jdate( $crawl_ds['fetched_at'] ) . ' — ' . sap_num( $crawl_ds['meta']['urls'] ?? 0 ) . ' آدرس' ) : 'هنوز خزشی دریافت نشده.'; ?></span>
 	</form>
 

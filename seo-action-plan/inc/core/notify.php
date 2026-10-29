@@ -33,9 +33,9 @@ function sap_notify_channels() {
 /**
  * Record a send (last 200).
  */
-function sap_notify_log( $channel, $to, $text, $ok, $err = '' ) {
+function sap_notify_log( $channel, $to, $text, $ok, $err = '', $meta = array() ) {
 	$log   = (array) get_option( 'sap_notify_log', array() );
-	$log[] = array( 'at' => sap_now(), 'ch' => $channel, 'to' => mb_substr( (string) $to, 0, 60 ), 'text' => mb_substr( wp_strip_all_tags( (string) $text ), 0, 160 ), 'ok' => (bool) $ok, 'err' => mb_substr( (string) $err, 0, 200 ) );
+	$log[] = array_merge( array( 'at' => sap_now(), 'ch' => $channel, 'to' => mb_substr( (string) $to, 0, 60 ), 'text' => mb_substr( wp_strip_all_tags( (string) $text ), 0, 160 ), 'ok' => (bool) $ok, 'err' => mb_substr( (string) $err, 0, 200 ) ), (array) $meta );
 	update_option( 'sap_notify_log', array_slice( $log, -200 ), false );
 }
 
@@ -183,7 +183,7 @@ add_action( 'phpmailer_init', function ( $mailer ) {
  *
  * @return true|WP_Error
  */
-function sap_sms_send( $phone, $text ) {
+function sap_sms_send( $phone, $text, $event = '', $args = array() ) {
 	$provider = sap_setting( 'sms_provider', 'none' );
 	$phone    = sap_phone_norm( $phone );
 	$key      = (string) sap_setting( 'sms_key' );
@@ -195,11 +195,16 @@ function sap_sms_send( $phone, $text ) {
 		return new WP_Error( 'sap_sms_phone', 'شماره موبایل معتبر نیست.' );
 	}
 	$text = trim( (string) $text );
+	$body = 'melipayamak' === $provider ? sap_sms_pattern( $event ) : 0;
+	if ( $body ) {
+		return sap_melipayamak_pattern( $phone, $body, (array) $args, $text );
+	}
 	$foot = trim( (string) sap_setting( 'sms_footer' ) );
 	if ( '' !== $foot && false === mb_strpos( $text, $foot ) ) {
 		$text .= "\n" . $foot; // E.g. «لغو11» when the panel requires it.
 	}
 	$fail = '';
+	$rec  = '';
 	switch ( $provider ) {
 		case 'kavenegar':
 			$res = wp_remote_get( add_query_arg( array( 'receptor' => $phone, 'sender' => $from, 'message' => rawurlencode( $text ) ), 'https://api.kavenegar.com/v1/' . rawurlencode( $key ) . '/sms/send.json' ), array( 'timeout' => 20 ) );
@@ -216,15 +221,17 @@ function sap_sms_send( $phone, $text ) {
 				// Classic web service: username + password (or the panel's API key as the password).
 				$res = wp_remote_post( 'https://rest.payamak-panel.com/api/SendSMS/SendSMS', array( 'timeout' => 20, 'body' => array( 'username' => $user, 'password' => $key, 'to' => $phone, 'from' => $from, 'text' => $text, 'isflash' => 'false' ) ) );
 				if ( ! is_wp_error( $res ) ) {
-					$j    = json_decode( (string) wp_remote_retrieve_body( $res ), true );
+					$j    = json_decode( (string) wp_remote_retrieve_body( $res ), true, 512, JSON_BIGINT_AS_STRING );
 					$fail = 1 === (int) ( $j['RetStatus'] ?? 0 ) ? '' : sap_melipayamak_error( $j['Value'] ?? ( $j['RetStatus'] ?? '' ), (string) ( $j['StrRetStatus'] ?? '' ) );
+					$rec  = '' === $fail ? (string) ( $j['Value'] ?? '' ) : '';
 				}
 			} else {
 				// Console API: the key from console.melipayamak.com › web service.
 				$res = wp_remote_post( 'https://console.melipayamak.com/api/send/simple/' . rawurlencode( $key ), array( 'timeout' => 20, 'headers' => array( 'Content-Type' => 'application/json' ), 'body' => wp_json_encode( array( 'from' => $from, 'to' => $phone, 'text' => $text ) ) ) );
 				if ( ! is_wp_error( $res ) ) {
-					$j    = json_decode( (string) wp_remote_retrieve_body( $res ), true );
+					$j    = json_decode( (string) wp_remote_retrieve_body( $res ), true, 512, JSON_BIGINT_AS_STRING );
 					$fail = ! empty( $j['recId'] ) && (float) $j['recId'] > 1000 ? '' : sap_melipayamak_error( empty( $j['status'] ) ? ( $j['recId'] ?? '' ) : '', (string) ( $j['status'] ?? '' ) );
+					$rec  = '' === $fail ? (string) $j['recId'] : '';
 				}
 			}
 			break;
@@ -239,7 +246,7 @@ function sap_sms_send( $phone, $text ) {
 	$code = is_wp_error( $res ) ? 0 : (int) wp_remote_retrieve_response_code( $res );
 	// Gateways that answer HTTP 200 with an error inside.
 	if ( ! is_wp_error( $res ) && '' === $fail && $code >= 200 && $code < 300 ) {
-		$j = json_decode( (string) wp_remote_retrieve_body( $res ), true );
+		$j = json_decode( (string) wp_remote_retrieve_body( $res ), true, 512, JSON_BIGINT_AS_STRING );
 		if ( 'kavenegar' === $provider && isset( $j['return']['status'] ) && 200 !== (int) $j['return']['status'] ) {
 			$fail = (string) ( $j['return']['message'] ?? 'خطای کاوه‌نگار' );
 		} elseif ( 'smsir' === $provider && isset( $j['status'] ) && 1 !== (int) $j['status'] ) {
@@ -248,8 +255,196 @@ function sap_sms_send( $phone, $text ) {
 	}
 	$ok   = ! is_wp_error( $res ) && $code >= 200 && $code < 300 && '' === $fail;
 	$err  = is_wp_error( $res ) ? $res->get_error_message() : ( $ok ? '' : ( '' !== $fail ? $fail : 'HTTP ' . $code . ': ' . mb_substr( wp_strip_all_tags( (string) wp_remote_retrieve_body( $res ) ), 0, 160 ) ) );
-	sap_notify_log( 'sms', $phone, $text, $ok, $err );
+	sap_sms_logged( $phone, $text, $ok, $err, $rec );
 	return $ok ? true : new WP_Error( 'sap_sms', 'ارسال پیامک ناموفق بود: ' . $err );
+}
+
+/**
+ * Log an SMS; a Melipayamak message id (recId) queues a delivery check, because the
+ * API accepting a message does not mean the operator delivered it.
+ */
+function sap_sms_logged( $phone, $text, $ok, $err, $rec = '', $mode = 'text' ) {
+	$meta = array( 'mode' => $mode );
+	if ( $ok && preg_match( '/^\d{6,}$/', (string) $rec ) ) {
+		$meta['rec'] = (string) $rec;
+		$meta['dlv'] = 'wait';
+		if ( ! wp_next_scheduled( 'sap_sms_delivery_check' ) ) {
+			wp_schedule_single_event( time() + 150, 'sap_sms_delivery_check' );
+		}
+	}
+	sap_notify_log( 'sms', $phone, $text, $ok, $err, $meta );
+}
+
+/**
+ * Pattern events: key => [label, variables, suggested template text]. Variables are
+ * sent in this order as {0}, {1}…; links are not allowed inside variables, so the
+ * panel address is written into the template itself.
+ */
+function sap_sms_events() {
+	$panel = preg_replace( '#^https?://#', '', untrailingslashit( function_exists( 'sap_url' ) ? sap_url( 'my' ) : home_url() ) );
+	return array(
+		'task'   => array( 'واگذاری یک کار', array( 'نام عضو', 'عنوان کار', 'پروژه', 'سررسید' ), "{0} عزیز، کار جدید در سکان:\n{1}\nپروژه: {2}\nسررسید: {3}" ),
+		'tasks'  => array( 'واگذاری چند کار پشت سر هم (یک پیامک خلاصه)', array( 'نام عضو', 'تعداد کار', 'پروژه', 'عنوان اولین کار' ), "{0} عزیز، {1} کار جدید در سکان برای شما ثبت شد.\nپروژه: {2}\nاز جمله: {3}" ),
+		'done'   => array( 'تشکر بعد از انجام کار', array( 'نام عضو', 'عنوان کار' ), "سکان | خسته نباشید {0}! «{1}» انجام شد و ثبت شد." ),
+		'remind' => array( 'یادآوری کارهای باز', array( 'نام عضو', 'تعداد کار باز', 'تعداد عقب از موعد' ), "سکان | یادآوری {0}\n{1} کار باز دارید ({2} عقب از موعد)." ),
+		'invite' => array( 'دعوت عضو جدید', array( 'نام عضو', 'نام کاربری' ), "{0} عزیز، به تیم سئو اضافه شدید.\nنام کاربری: {1}\nپنل کارها: " . $panel ),
+		'alert'  => array( 'هشدار و پیام به مدیر سئو', array( 'خلاصه پیام' ), "سکان | {0}" ),
+		'test'   => array( 'پیام آزمایشی', array( 'تاریخ' ), "پیام آزمایشی سکان — ارسال با پترن درست است. {0}" ),
+	);
+}
+
+/**
+ * Approved Melipayamak bodyId for an event (0 = send as plain text).
+ */
+function sap_sms_pattern( $event ) {
+	if ( '' === (string) $event ) {
+		return 0;
+	}
+	$all = (array) sap_setting( 'sms_patterns', array() );
+	return (int) ( $all[ $event ] ?? 0 );
+}
+
+/**
+ * Send through a Melipayamak service-line pattern (BaseServiceNumber / console "shared").
+ * Service messages bypass the operators' advertising blacklist and need no «لغو11».
+ *
+ * @return true|WP_Error
+ */
+function sap_melipayamak_pattern( $phone, $body_id, $args, $text = '' ) {
+	$key  = (string) sap_setting( 'sms_key' );
+	$user = (string) sap_setting( 'sms_user' );
+	$args = array_map( function ( $a ) {
+		// Variables: one line, no «;», no links (the panel rejects links in variables).
+		$a = preg_replace( '#https?://\S+#u', '', (string) $a );
+		return mb_substr( trim( preg_replace( '/\s+/u', ' ', str_replace( ';', '،', $a ) ) ), 0, 60 ) ?: '-';
+	}, array_values( (array) $args ) );
+	$fail = '';
+	$rec  = '';
+	if ( '' !== $user ) {
+		$res = wp_remote_post( 'https://rest.payamak-panel.com/api/SendSMS/BaseServiceNumber', array( 'timeout' => 20, 'body' => array( 'username' => $user, 'password' => $key, 'text' => implode( ';', $args ), 'to' => $phone, 'bodyId' => (int) $body_id ) ) );
+		if ( ! is_wp_error( $res ) ) {
+			$j   = json_decode( (string) wp_remote_retrieve_body( $res ), true, 512, JSON_BIGINT_AS_STRING );
+			$val = (string) ( $j['Value'] ?? '' );
+			if ( strlen( $val ) > 12 && ctype_digit( $val ) ) {
+				$rec = $val;
+			} else {
+				$fail = sap_melipayamak_error( '' !== $val ? $val : ( $j['RetStatus'] ?? '' ), (string) ( $j['StrRetStatus'] ?? '' ) );
+			}
+		}
+	} else {
+		$res = wp_remote_post( 'https://console.melipayamak.com/api/send/shared/' . rawurlencode( $key ), array( 'timeout' => 20, 'headers' => array( 'Content-Type' => 'application/json' ), 'body' => wp_json_encode( array( 'bodyId' => (int) $body_id, 'to' => $phone, 'args' => $args ) ) ) );
+		if ( ! is_wp_error( $res ) ) {
+			$j = json_decode( (string) wp_remote_retrieve_body( $res ), true, 512, JSON_BIGINT_AS_STRING );
+			if ( ! empty( $j['recId'] ) && (float) $j['recId'] > 1000 ) {
+				$rec = (string) $j['recId'];
+			} else {
+				$fail = sap_melipayamak_error( empty( $j['status'] ) ? ( $j['recId'] ?? '' ) : '', (string) ( $j['status'] ?? '' ) );
+			}
+		}
+	}
+	$code = is_wp_error( $res ) ? 0 : (int) wp_remote_retrieve_response_code( $res );
+	$ok   = ! is_wp_error( $res ) && $code >= 200 && $code < 300 && '' === $fail;
+	$err  = is_wp_error( $res ) ? $res->get_error_message() : ( $ok ? '' : ( '' !== $fail ? $fail : 'HTTP ' . $code ) );
+	sap_sms_logged( $phone, ( '' !== $text ? $text : implode( ' · ', $args ) ), $ok, $err, $rec, 'pattern' );
+	return $ok ? true : new WP_Error( 'sap_sms', 'ارسال پیامک (پترن ' . (int) $body_id . ') ناموفق بود: ' . $err );
+}
+
+/**
+ * Melipayamak delivery status → [state, label]; state: ok|wait|fail.
+ */
+function sap_melipayamak_delivery_label( $code ) {
+	$c   = (string) (int) $code;
+	$map = array(
+		'1'   => array( 'ok', 'به گوشی گیرنده رسید' ),
+		'0'   => array( 'wait', 'به مخابرات ارسال شد؛ گزارش تحویل هنوز نیامده' ),
+		'8'   => array( 'wait', 'مخابرات دریافت کرد؛ در حال تحویل' ),
+		'200' => array( 'wait', 'ارسال شد؛ گزارش تحویل هنوز نیامده' ),
+		'400' => array( 'wait', 'در صف ارسال' ),
+		'2'   => array( 'fail', 'به گوشی نرسید (گوشی خاموش/خارج از دسترس یا مسدودی پیامک تبلیغاتی)' ),
+		'3'   => array( 'fail', 'خطای مخابراتی' ),
+		'5'   => array( 'fail', 'خطای نامشخص در گزارش تحویل' ),
+		'16'  => array( 'fail', 'مخابرات نپذیرفت — معمولاً یعنی گیرنده پیامک تبلیغاتی را مسدود کرده و خط شما تبلیغاتی/عمومی است؛ با پترن (خط خدماتی) بفرستید' ),
+		'35'  => array( 'fail', 'شماره گیرنده در لیست سیاه مخابرات است — فقط با پترن (خط خدماتی) می‌رسد' ),
+		'100' => array( 'fail', 'وضعیت نامشخص' ),
+		'300' => array( 'fail', 'متن پیامک فیلتر شد (کلمه یا لینک غیرمجاز)' ),
+		'500' => array( 'fail', 'پیامک توسط اپراتور پذیرفته نشد (معمولاً لینک یا محتوای تبلیغاتی روی خط تبلیغاتی)' ),
+	);
+	return $map[ $c ] ?? array( 'fail', 'وضعیت ' . $c );
+}
+
+/**
+ * Query delivery for one Melipayamak message id. Returns the status code or WP_Error.
+ */
+function sap_melipayamak_delivery( $rec ) {
+	$key  = (string) sap_setting( 'sms_key' );
+	$user = (string) sap_setting( 'sms_user' );
+	if ( '' !== $user ) {
+		$res = wp_remote_post( 'https://rest.payamak-panel.com/api/SendSMS/GetDeliveries2', array( 'timeout' => 15, 'body' => array( 'username' => $user, 'password' => $key, 'recId' => $rec ) ) );
+		if ( is_wp_error( $res ) ) {
+			return $res;
+		}
+		$j = json_decode( (string) wp_remote_retrieve_body( $res ), true, 512, JSON_BIGINT_AS_STRING );
+		if ( ! isset( $j['Value'] ) || ( isset( $j['RetStatus'] ) && 1 !== (int) $j['RetStatus'] ) ) {
+			return new WP_Error( 'sap_dlv', sap_melipayamak_error( $j['RetStatus'] ?? '', (string) ( $j['StrRetStatus'] ?? '' ) ) );
+		}
+		return (int) $j['Value'];
+	}
+	$res = wp_remote_post( 'https://console.melipayamak.com/api/receive/status/' . rawurlencode( $key ), array( 'timeout' => 15, 'headers' => array( 'Content-Type' => 'application/json' ), 'body' => '{"recIds":[' . preg_replace( '/\D/', '', (string) $rec ) . ']}' ) ); // Raw digits: ids exceed float precision.
+	if ( is_wp_error( $res ) ) {
+		return $res;
+	}
+	$j = json_decode( (string) wp_remote_retrieve_body( $res ), true, 512, JSON_BIGINT_AS_STRING );
+	if ( ! isset( $j['results'][0] ) ) {
+		return new WP_Error( 'sap_dlv', 'ملی پیامک: ' . ( (string) ( $j['status'] ?? 'گزارش تحویل در دسترس نیست' ) ) );
+	}
+	return (int) $j['results'][0];
+}
+
+/**
+ * Update pending delivery states in the send log (cron + «بررسی تحویل» button).
+ *
+ * @return int Messages whose status was refreshed.
+ */
+function sap_sms_check_deliveries() {
+	$log  = (array) get_option( 'sap_notify_log', array() );
+	$done = 0;
+	$wait = false;
+	foreach ( $log as $i => $l ) {
+		if ( 'sms' !== ( $l['ch'] ?? '' ) || empty( $l['rec'] ) || 'wait' !== ( $l['dlv'] ?? '' ) ) {
+			continue;
+		}
+		if ( strtotime( $l['at'] ) < current_time( 'timestamp' ) - 2 * DAY_IN_SECONDS ) {
+			$log[ $i ]['dlv']   = 'unknown';
+			$log[ $i ]['dlv_t'] = 'گزارش تحویل تا دو روز نیامد';
+			continue;
+		}
+		$code = sap_melipayamak_delivery( $l['rec'] );
+		if ( is_wp_error( $code ) ) {
+			$log[ $i ]['dlv_t'] = $code->get_error_message();
+			$wait               = true;
+			continue;
+		}
+		$lb                  = sap_melipayamak_delivery_label( $code );
+		$log[ $i ]['dlv']    = $lb[0];
+		$log[ $i ]['dlv_c']  = $code;
+		$log[ $i ]['dlv_t']  = $lb[1];
+		$wait                = $wait || 'wait' === $lb[0];
+		++$done;
+	}
+	update_option( 'sap_notify_log', $log, false );
+	if ( $wait && ! wp_next_scheduled( 'sap_sms_delivery_check' ) ) {
+		wp_schedule_single_event( time() + 900, 'sap_sms_delivery_check' );
+	}
+	return $done;
+}
+add_action( 'sap_sms_delivery_check', 'sap_sms_check_deliveries' );
+
+/**
+ * Plain-text line that looks advertising/public (Melipayamak 5000… / 2000… / 9000… shared lines).
+ */
+function sap_sms_line_is_public() {
+	$from = (string) sap_setting( 'sms_sender' );
+	return 'melipayamak' === sap_setting( 'sms_provider' ) && preg_match( '/^(5000|2000|9000|3000)\d{6,}$/', $from );
 }
 
 /**
@@ -257,14 +452,26 @@ function sap_sms_send( $phone, $text ) {
  */
 function sap_melipayamak_error( $code, $status = '' ) {
 	$map = array(
+		'-10' => 'متغیرهای پترن نباید لینک داشته باشند (لینک را در متن خود پترن بنویسید)',
+		'-7'  => 'خطا در شماره فرستنده؛ با پشتیبانی ملی پیامک تماس بگیرید',
+		'-6'  => 'خطای داخلی ملی پیامک',
+		'-5'  => 'تعداد متغیرها با متن پترن نمی‌خواند (متغیرهای {0}، {1}… پترن را با راهنمای سکان مقایسه کنید)',
+		'-4'  => 'کد پترن (bodyId) اشتباه است یا هنوز توسط ملی پیامک تایید نشده',
+		'-3'  => 'خط خدماتی برای این پنل تعریف نشده؛ با پشتیبانی ملی پیامک تماس بگیرید',
+		'-2'  => 'در ارسال با پترن هر بار فقط یک گیرنده مجاز است',
+		'-1'  => 'وب‌سرویس ارسال با پترن برای پنل شما فعال نیست؛ از پشتیبانی بخواهید فعال کنند',
 		'0'   => 'نام کاربری یا رمز عبور (یا کلید API) اشتباه است',
 		'2'   => 'اعتبار پنل کافی نیست',
 		'3'   => 'محدودیت ارسال روزانه',
 		'4'   => 'محدودیت حجم ارسال',
 		'5'   => 'شماره فرستنده معتبر نیست (شماره خط را از پنل ملی پیامک بردارید)',
+		'6'   => 'سامانه ملی پیامک در حال به‌روزرسانی است',
 		'7'   => 'متن پیامک حاوی کلمه فیلترشده است',
 		'10'  => 'کاربر فعال نیست',
 		'11'  => 'ارسال نشد',
+		'12'  => 'مدارک کاربری پنل کامل نیست',
+		'16'  => 'شماره گیرنده پیدا نشد',
+		'17'  => 'متن پیامک خالی است',
 		'35'  => 'شماره گیرنده در لیست سیاه مخابرات است',
 		'108' => 'IP سرور به‌خاطر تلاش ناموفق مسدود شده',
 		'109' => 'باید IP سرور را در پنل ملی پیامک به‌عنوان IP مجاز ثبت کنید',
@@ -287,7 +494,7 @@ function sap_bot_send( $channel, $text, $chat = '' ) {
 	}
 	$base = 'tg' === $channel ? 'https://api.telegram.org/bot' : 'https://tapi.bale.ai/bot';
 	$res  = sap_http( $base . $token . '/sendMessage', array( 'method' => 'POST', 'timeout' => 20, 'headers' => array( 'Content-Type' => 'application/json' ), 'body' => wp_json_encode( array( 'chat_id' => $chat, 'text' => $text, 'parse_mode' => 'HTML', 'disable_web_page_preview' => true ) ) ) );
-	$body = is_wp_error( $res ) ? array() : (array) json_decode( (string) wp_remote_retrieve_body( $res ), true );
+	$body = is_wp_error( $res ) ? array() : (array) json_decode( (string) wp_remote_retrieve_body( $res ), true, 512, JSON_BIGINT_AS_STRING );
 	$ok   = ! is_wp_error( $res ) && ! empty( $body['ok'] );
 	$err  = is_wp_error( $res ) ? $res->get_error_message() : (string) ( $body['description'] ?? 'HTTP ' . wp_remote_retrieve_response_code( $res ) );
 	sap_notify_log( $channel, $chat, $text, $ok, $ok ? '' : $err );
@@ -335,7 +542,8 @@ function sap_notify_manager( $channels, $msg ) {
 		if ( 'email' === $ch ) {
 			$out[ $ch ] = sap_notify_email( sap_manager_email(), $msg['subject'], $msg['email'] ?? array( 'intro' => $msg['text'] ) ) ?: new WP_Error( 'sap_mail', 'wp_mail' );
 		} elseif ( 'sms' === $ch ) {
-			$out[ $ch ] = sap_sms_send( sap_setting( 'notify_manager_phone' ), $msg['sms'] ?? $msg['text'] );
+			$sms        = $msg['sms'] ?? $msg['text'];
+			$out[ $ch ] = sap_sms_send( sap_setting( 'notify_manager_phone' ), $sms, 'alert', array( mb_substr( preg_replace( '/\s+/u', ' ', wp_strip_all_tags( (string) ( $msg['subject'] ?? $sms ) ) ), 0, 60 ) ) );
 		} else {
 			$out[ $ch ] = sap_bot_send( $ch, $msg['bot'] ?? esc_html( $msg['text'] ) );
 		}
@@ -364,7 +572,7 @@ function sap_notify_test( $channel ) {
 			}
 			return sap_notify_email( sap_manager_email(), 'پیام آزمایشی سکان', array( 'title' => 'پیام آزمایشی', 'intro' => $text ) ) ? true : new WP_Error( 'sap_mail', 'ارسال ایمیل ناموفق بود: ' . sap_mail_error_text() );
 		case 'sms':
-			return sap_sms_send( sap_setting( 'notify_manager_phone' ), $text );
+			return sap_sms_send( sap_setting( 'notify_manager_phone' ), $text, 'test', array( sap_jdate( current_time( 'Y-m-d' ) ) ) );
 		default:
 			return sap_bot_send( $channel, $text );
 	}

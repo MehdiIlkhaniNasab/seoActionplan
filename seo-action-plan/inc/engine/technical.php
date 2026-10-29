@@ -495,14 +495,31 @@ function sap_detect_index_inspect( $ctx ) {
 			continue;
 		}
 		if ( 'PASS' !== $r['verdict'] ) {
-			$bad[] = array( 'url' => $r['url'], 'page' => sap_ctx_title( $ctx, $r['url'] ), 'state' => sap_coverage_label( $r['coverage'] ), 'crawl' => $r['last_crawl'] ? sap_jdate( substr( $r['last_crawl'], 0, 10 ), 'short' ) : 'هرگز' );
+			// Cross-check with the crawl: a redirected / removed / noindex / canonicalised page is
+			// expected to be out of the index, so it is not an «indexing problem».
+			$c    = $ctx['crawl_by_url'][ sap_norm_url( $r['url'] ) ] ?? null;
+			$dead = sap_url_dead_reason( $ctx['project']['id'], $r['url'] );
+			if ( '' !== $dead || ( $c && ( ! $c['idx'] || ( '' !== (string) $c['canon'] && sap_norm_url( $c['canon'] ) !== sap_norm_url( $r['url'] ) ) ) ) ) {
+				continue;
+			}
+			$why = '';
+			if ( $c ) {
+				$ci  = sap_content_inlinks( $ctx, $r['url'] );
+				$why = implode( '، ', array_filter( array(
+					$c['words'] && $c['words'] < 300 ? 'محتوای کم (' . sap_num( $c['words'] ) . ' کلمه)' : '',
+					null !== $ci && $ci < 2 ? 'لینک از متن: ' . sap_num( $ci ) : ( null === $ci && $c['inlinks'] < 3 ? 'لینک ورودی: ' . sap_num( $c['inlinks'] ) : '' ),
+					$c['depth'] >= 4 ? 'عمق ' . sap_num( $c['depth'] ) : '',
+					$c['dupes'] ? 'محتوای مشابه با ' . sap_num( $c['dupes'] ) . ' صفحه' : '',
+				) ) );
+			}
+			$bad[] = array( 'url' => $r['url'], 'page' => sap_ctx_title( $ctx, $r['url'] ), 'state' => sap_coverage_label( $r['coverage'] ), 'crawl' => $r['last_crawl'] ? sap_jdate( substr( $r['last_crawl'], 0, 10 ), 'short' ) : 'هرگز', 'why' => '' !== $why ? $why : ( $c ? 'در خزش سالم و قابل‌ایندکس' : '—' ) );
 		}
 		if ( $r['g_canon'] && $r['u_canon'] && sap_norm_url( $r['g_canon'] ) !== sap_norm_url( $r['u_canon'] ) ) {
 			$can[] = array( 'url' => $r['url'], 'page' => sap_ctx_title( $ctx, $r['url'] ), 'google' => $r['g_canon'] );
 		}
 	}
 	if ( $bad ) {
-		$out[] = array( 'key' => 'not_indexed', 'context' => 'technical', 'title' => sprintf( '%s صفحه مهم در گوگل ایندکس نیست', sap_num( count( $bad ) ) ), 'detail' => 'طبق URL Inspection سرچ کنسول این صفحات ایندکس نیستند. برای هر کدام علت را برطرف کنید (noindex، کنونیکال، محتوای کم/تکراری، لینک داخلی کم) و سپس در سرچ کنسول «درخواست ایندکس» بزنید.', 'url' => $bad[0]['url'], 'severity' => 85, 'effort' => 1, 'evidence' => array( 'section' => 'index', 'cols' => array( 'page' => 'صفحه', 'state' => 'وضعیت', 'crawl' => 'آخرین خزش' ), 'items' => $bad ) );
+		$out[] = array( 'key' => 'not_indexed', 'context' => 'technical', 'title' => sprintf( '%s صفحه مهم در گوگل ایندکس نیست', sap_num( count( $bad ) ) ), 'detail' => 'طبق URL Inspection سرچ کنسول این صفحات ایندکس نیستند، در حالی که در خزش Screaming Frog کد ۲۰۰، قابل‌ایندکس و کنونیکال خودشان هستند (صفحات ریدایرکت‌شده، حذف‌شده، noindex و کنونیکال‌شده عمداً حذف شدند). ستون «سرنخ از خزش» علت محتمل را نشان می‌دهد: محتوا را تقویت کنید، از متن صفحات مرتبط لینک بدهید و سپس در سرچ کنسول «درخواست ایندکس» بزنید.', 'url' => $bad[0]['url'], 'severity' => 85, 'effort' => 1, 'evidence' => array( 'section' => 'index', 'cols' => array( 'page' => 'صفحه', 'state' => 'وضعیت در گوگل', 'why' => 'سرنخ از خزش', 'crawl' => 'آخرین خزش گوگل' ), 'items' => $bad ) );
 	}
 	if ( $can ) {
 		$out[] = array( 'key' => 'canonical', 'context' => 'technical', 'title' => sprintf( 'گوگل برای %s صفحه کنونیکال دیگری انتخاب کرده', sap_num( count( $can ) ) ), 'detail' => 'کنونیکال انتخابی گوگل با کنونیکال صفحه یکی نیست؛ یعنی گوگل صفحه را تکراری می‌داند. محتوای این صفحات را متمایز کنید یا کنونیکال/ریدایرکت درست بگذارید.', 'url' => $can[0]['url'], 'severity' => 60, 'effort' => 1, 'evidence' => array( 'section' => 'index', 'cols' => array( 'page' => 'صفحه', 'google' => 'کنونیکال گوگل' ), 'items' => $can ) );
@@ -524,8 +541,10 @@ function sap_tech_sections() {
 		'speed'   => array( 'سرعت و Core Web Vitals', 'clock', array( 'cwv' ), array( 'cwv', 'slow' ), array( 'cwv' ), 'LCP، INP و CLS از داده واقعی کاربران (CrUX)، امتیاز آزمایشگاهی موبایل، زمان پاسخ سرور.' ),
 		'schema'  => array( 'اسکیما و داده ساختاریافته', 'check', array( 'pages' ), array( 'schema' ), array( 'schema' ), 'Product/Offer برای محصول، BreadcrumbList، Article برای مقاله، Organization/WebSite، FAQ؛ خطاهای JSON-LD و Rich Results.' ),
 		'index'   => array( 'ایندکس صفحات مهم', 'research', array( 'gsc_inspect' ), array( 'index_inspect', 'noindex_impr' ), array( 'index' ), 'وضعیت ایندکس صفحات مهم در URL Inspection، کنونیکال انتخابی گوگل، صفحات noindex با نمایش، ایندکس محتوای تازه.' ),
-		'pages'   => array( 'خطاهای صفحات (Pages)', 'alert', array( 'crawl' ), array( 'crawl_4xx', 'crawl_5xx', 'crawl_3xx' ), array( 'pages' ), 'صفحات 404 و 5xx، ریدایرکت‌های داخلی و زنجیره‌ای، لینک‌های داخلی به صفحات خراب.' ),
-		'crawl'   => array( 'تحلیل خزش (Screaming Frog)', 'link', array( 'crawl' ), array( 'crawl_meta', 'weak_links' ), array( 'crawl', 'onpage' ), 'تایتل/متا/H1 تکراری یا خالی، عمق و لینک داخلی صفحات، محتوای کم، کنونیکال‌ها.' ),
+		'pages'   => array( 'خطاهای صفحات (Pages)', 'alert', array( 'crawl' ), array( 'crawl_4xx', 'crawl_5xx' ), array( 'pages' ), 'صفحات 404 و 5xx که خزنده از لینک‌های سایت به آن‌ها رسیده است.' ),
+		'redirects' => array( 'ریدایرکت، 404 و 410', 'refresh', array( 'crawl', 'site_redirects' ), array( 'crawl_3xx', 'redirect_chain', 'redirect_temp', 'redirect_manager', 'hits_404' ), array( 'redirects' ), 'زنجیره و حلقه ریدایرکت، ریدایرکت به صفحه خطا، ریدایرکت موقت، قوانین رنک‌مث/Redirection روی صفحات زنده یا با مقصد خراب، ریدایرکت انبوه به صفحه اصلی، صفحات ۴۱۰ و آدرس‌های 404 که هنوز بازدید دارند.' ),
+		'links'   => array( 'لینک‌های داخلی', 'link', array( 'crawl_links' ), array( 'broken_links', 'links_to_redirect', 'orphans', 'weak_links' ), array( 'links' ), 'فقط لینک‌های داخل متن (نه منو، هدر، فوتر و سایدبار): صفحات مهم بدون لینک متنی، لینک ورودی کم، لینک‌های شکسته و لینک به ریدایرکت با صفحه و انکر هر لینک.' ),
+		'crawl'   => array( 'تحلیل خزش (Screaming Frog)', 'research', array( 'crawl' ), array( 'crawl_meta' ), array( 'crawl', 'onpage' ), 'تایتل/متا/H1 تکراری یا خالی، عمق و لینک داخلی صفحات، محتوای کم، کنونیکال‌ها.' ),
 	);
 }
 
@@ -771,6 +790,33 @@ function sap_tech_kpis( $project, $key ) {
 				$k[] = array( sap_num( count( array_filter( $rows, function ( $r ) {
 					return 'PASS' === ( $r['rich'] ?? '' );
 				} ) ) ), 'Rich Result معتبر', '' );
+			}
+			break;
+		case 'redirects':
+			$a = sap_redirect_audit( $project );
+			if ( $a['have']['crawl'] || $a['have']['site'] ) {
+				$n  = function ( $g ) use ( $a ) {
+					return count( (array) ( $a['groups'][ $g ]['items'] ?? array() ) );
+				};
+				$ch = $n( 'chains' ) + $n( 'dead_end' );
+				$k[] = array( sap_num( $ch ), 'زنجیره / مقصد خراب', $tone( $ch, 1, 10 ) );
+				$k[] = array( sap_num( $n( 'temp' ) ), 'ریدایرکت موقت', $tone( $n( 'temp' ), 1, 20 ) );
+				$k[] = $a['have']['site'] ? array( sap_num( $n( 'hides_live' ) + $n( 'bad_target' ) ), 'قانون مشکل‌دار', $tone( $n( 'hides_live' ) + $n( 'bad_target' ), 1, 5 ) ) : array( '—', 'فهرست رنک‌مث', '' );
+			}
+			break;
+		case 'links':
+			$l = sap_dataset( $pid, 'crawl_links' );
+			if ( $l ) {
+				$pages  = (array) $l['payload']['pages'];
+				$no     = 0;
+				foreach ( sap_dataset_payload( $pid, 'crawl' )['rows'] ?? array() as $r ) {
+					if ( 200 === $r['code'] && $r['idx'] && false !== strpos( $r['type'], 'html' ) && empty( $pages[ sap_norm_url( $r['url'] ) ]['ci'] ) && '' !== trim( (string) wp_parse_url( $r['url'], PHP_URL_PATH ), '/' ) ) {
+						++$no;
+					}
+				}
+				$k[] = array( sap_num( (int) ( $l['meta']['broken'] ?? 0 ) ), 'لینک شکسته', $tone( (int) ( $l['meta']['broken'] ?? 0 ), 1, 20 ) );
+				$k[] = array( sap_num( (int) ( $l['meta']['redirect'] ?? 0 ) ), 'لینک به ریدایرکت', $tone( (int) ( $l['meta']['redirect'] ?? 0 ), 20, 200 ) );
+				$k[] = array( sap_num( $no ), 'صفحه بدون لینک متنی', $tone( $no, 5, 50 ) );
 			}
 			break;
 		case 'pages':

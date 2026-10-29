@@ -35,6 +35,19 @@ $log = (array) ( $project['options']['sync_log'] ?? array() );
 
 <section class="sap-panel sap-sync" data-sap-sync-panel hidden>
 	<h2><?php echo sap_icon( 'spark' ); // phpcs:ignore ?>تحلیل کامل پروژه</h2>
+	<div class="sap-prereq">
+		<p class="sap-label">پیش‌نیازها (به ترتیب): اول داده‌های پایه، بعد تحلیل‌ها روی همین داده‌ها</p>
+		<ul>
+			<?php foreach ( sap_analysis_prereqs( $project ) as $pr ) : ?>
+				<li class="<?php echo $pr['ok'] ? ( $pr['warn'] ? 'is-warn' : 'is-ok' ) : 'is-miss'; ?>">
+					<span class="sap-prereq-dot"><?php echo $pr['ok'] ? ( $pr['warn'] ? '!' : '✓' ) : '○'; ?></span>
+					<div><b><?php echo esc_html( $pr['label'] ); ?></b><small><?php echo esc_html( $pr['note'] ); ?></small></div>
+					<?php if ( $pr['link'] && ( ! $pr['ok'] || $pr['warn'] ) ) : ?><a class="sap-btn is-ghost is-small" href="<?php echo esc_url( $pr['link'] ); ?>"><?php echo 'crawl' === $pr['key'] ? 'اجرای خزش' : 'اتصال'; ?></a><?php endif; ?>
+				</li>
+			<?php endforeach; ?>
+		</ul>
+		<p class="sap-small sap-muted">۳) سپس سرچ کنسول، سئو سیگنال و تحلیل‌ها؛ هر یافته قبل از ثبت با وضعیت واقعی صفحه در خزش چک می‌شود (مثلاً صفحه‌ای که در URL Inspection ایندکس نیست ولی در خزش ریدایرکت یا noindex است، مشکل ایندکس حساب نمی‌شود).</p>
+	</div>
 	<label class="sap-check sap-sync-ask"><input type="checkbox" data-sap-sync-ask checked> قبل از هر بخش سئو سیگنال از من بپرس (با نمایش مصرف سهمیه)</label>
 	<ol class="sap-steps">
 		<?php foreach ( sap_sync_steps() as $id => $label ) : ?>

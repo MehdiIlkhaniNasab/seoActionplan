@@ -48,7 +48,7 @@ $run      = $win ? 'powershell -ExecutionPolicy Bypass -File sokan-sf-agent.ps1'
 				<p>برای سئو تکنیکال لازم نیست هر بار کل سایت خزش شود. «خزش سریع» فقط صفحات مهم را در حالت List Mode می‌خزد: صفحه اصلی، صفحات Focus، صفحات نقشه کلمات، همه دسته‌ها و برندهای محصول، پربازدیدترین محصولات و مقالات و صفحاتی که در سایت‌مپ جا مانده‌اند. چند دقیقه طول می‌کشد، نه چند ساعت.</p>
 				<form class="sap-sfw-scope" data-sap-sf-scope>
 					<label class="sap-sfw-opt"><input type="radio" name="mode" value="quick" <?php checked( 'quick', $set['mode'] ); ?>><span><b>خزش سریع (پیشنهادی)</b><small>حداکثر <input type="number" name="limit" min="20" max="5000" step="10" value="<?php echo esc_attr( $set['limit'] ); ?>"> آدرس مهم · الان <?php echo esc_html( sap_num( $n_imp ) ); ?> آدرس آماده است</small></span></label>
-					<label class="sap-sfw-opt"><input type="radio" name="mode" value="full" <?php checked( 'full', $set['mode'] ); ?>><span><b>خزش کامل سایت</b><small>برای پیدا کردن لینک‌های شکسته و صفحات یتیم؛ هر چند ماه یک بار کافی است (در سایت بزرگ طولانی است)</small></span></label>
+					<label class="sap-sfw-opt"><input type="radio" name="mode" value="full" <?php checked( 'full', $set['mode'] ); ?>><span><b>خزش کامل سایت</b><small>لازمه تحلیل کامل لینک داخلی (لینک‌های داخل متن، صفحات بدون لینک، لینک‌های شکسته با صفحه مبدا و زنجیره ریدایرکت)؛ ماهی یک بار کافی است (در سایت بزرگ طولانی است). خزش سریع فقط همان آدرس‌ها را می‌خواند.</small></span></label>
 					<button type="submit" class="sap-btn is-small <?php echo $done['scope'] ? '' : 'is-primary'; ?>">ذخیره محدوده</button>
 				</form>
 			</div>
@@ -109,7 +109,8 @@ $run      = $win ? 'powershell -ExecutionPolicy Bypass -File sokan-sf-agent.ps1'
 				<?php elseif ( 'failed' === ( $ping['stage'] ?? '' ) ) : ?>
 					<p class="sap-bad sap-small">خزش ناموفق بود: <?php echo esc_html( $ping['note'] ); ?></p>
 				<?php endif; ?>
-				<p class="sap-small sap-muted">بدون ایجنت هم می‌شود: در Screaming Frog خروجی تب Internal › All را CSV بگیرید و در <a href="<?php echo esc_url( sap_project_url( $pid, 'settings' ) ); ?>">تنظیمات پروژه</a> آپلود کنید.</p>
+				<p class="sap-small sap-muted">ایجنت علاوه بر Internal › All، خروجی <b>Bulk Export › Links › All Inlinks</b> (همه لینک‌های داخلی با «Link Position»: متن، منو، هدر، فوتر، سایدبار) و گزارش <b>Reports › Redirects › All Redirects</b> را هم می‌گیرد؛ لینک‌ها را روی کامپیوتر خودتان فیلتر می‌کند (فقط لینک‌های داخل متن و لینک‌های غیر ۲۰۰) تا حجم ارسال کم بماند.</p>
+				<p class="sap-small sap-muted">بدون ایجنت هم می‌شود: همین سه خروجی را از Screaming Frog بگیرید (CSV) و با هم در <a href="<?php echo esc_url( sap_project_url( $pid, 'settings' ) ); ?>">تنظیمات پروژه</a> آپلود کنید.</p>
 			</div>
 		</li>
 	</ol>

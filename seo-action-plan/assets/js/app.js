@@ -510,12 +510,20 @@
 	document.querySelectorAll('[data-sap-copy]').forEach(function (el) {
 		el.title = 'کلیک برای کپی';
 		el.addEventListener('click', function () {
-			if (!navigator.clipboard) { return; }
-			navigator.clipboard.writeText(el.textContent.trim()).then(function () {
+			var text = el.getAttribute('data-sap-copy') || el.textContent.trim();
+			var ok = function () {
 				el.classList.add('is-copied');
 				toast('کپی شد');
 				setTimeout(function () { el.classList.remove('is-copied'); }, 900);
-			});
+			};
+			var fallback = function () {
+				var ta = document.createElement('textarea');
+				ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+				document.body.appendChild(ta); ta.select();
+				try { document.execCommand('copy'); ok(); } catch (e) { toast('کپی نشد؛ متن را دستی انتخاب کنید', true); }
+				ta.remove();
+			};
+			if (navigator.clipboard && window.isSecureContext) { navigator.clipboard.writeText(text).then(ok, fallback); } else { fallback(); }
 		});
 	});
 
@@ -1992,5 +2000,85 @@
 			}
 		});
 	})();
+
+	/* ---- Project transfer: chunked upload → preview → import ---- */
+	(function () {
+		var box = document.querySelector('[data-sap-transfer]');
+		if (!box) { return; }
+		var input = box.querySelector('[data-sap-transfer-file]');
+		var go = box.querySelector('[data-sap-transfer-go]');
+		var prev = box.querySelector('[data-sap-transfer-preview]');
+		var prog = box.querySelector('[data-sap-transfer-progress]');
+		var out = box.querySelector('[data-sap-transfer-result]');
+		var upload = '';
+		var CHUNK = 1024 * 1024; // 1 MB parts: below every host's upload limit.
+		function bar(pct, text) {
+			prog.hidden = false;
+			prog.querySelector('i').style.width = Math.max(4, pct) + '%';
+			prog.querySelector('span').textContent = text;
+		}
+		function esc(t) { var d = document.createElement('div'); d.textContent = t == null ? '' : String(t); return d.innerHTML; }
+		function send(file, i, n) {
+			var fd = new FormData();
+			fd.append('upload', upload);
+			fd.append('index', i);
+			fd.append('chunk', file.slice(i * CHUNK, (i + 1) * CHUNK), 'part');
+			return api('transfer/chunk', { method: 'POST', body: fd }).then(function () {
+				bar(Math.round((i + 1) / n * 90), 'آپلود فایل: ' + (i + 1).toLocaleString('fa-IR') + ' از ' + n.toLocaleString('fa-IR') + ' بخش');
+				return i + 1 < n ? send(file, i + 1, n) : null;
+			});
+		}
+		input.addEventListener('change', function () {
+			var file = input.files[0];
+			go.disabled = true; prev.hidden = true; out.innerHTML = '';
+			if (!file) { return; }
+			upload = (Date.now().toString(36) + Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2)).replace(/[^a-z0-9]/g, '').slice(0, 24);
+			var n = Math.max(1, Math.ceil(file.size / CHUNK));
+			bar(2, 'آپلود فایل…');
+			send(file, 0, n).then(function () {
+				bar(95, 'خواندن فایل…');
+				return post('transfer/import', { upload: upload, step: 'preview' });
+			}).then(function (res) {
+				prog.hidden = true;
+				var html = '<p class="sap-small">از <b dir="ltr">' + esc(res.source) + '</b> · نسخه ' + esc(res.version) + ' · ' + esc(res.at) + ' · ' + Number(res.users).toLocaleString('fa-IR') + ' عضو</p><ul>';
+				res.projects.forEach(function (p) {
+					var c = p.counts || {};
+					html += '<li><b>' + esc(p.name) + '</b> <small dir="ltr">' + esc(p.site) + '</small><br><small>' +
+						[['tasks', 'کار'], ['findings', 'یافته'], ['activity', 'اقدام در لاگ'], ['focuses', 'حوزه'], ['keymap', 'کلمه در نقشه'], ['datasets', 'داده'], ['ranks', 'رتبه']].map(function (k) {
+							return (c[k[0]] || 0).toLocaleString('fa-IR') + ' ' + k[1];
+						}).join(' · ') + '</small></li>';
+				});
+				prev.innerHTML = html + '</ul>';
+				prev.hidden = false;
+				box.querySelector('[data-sap-transfer-settings-row]').hidden = !res.has_settings;
+				go.disabled = false;
+			}).catch(function (e) { prog.hidden = true; toast(e.message, true); });
+		});
+		go.addEventListener('click', function () {
+			go.disabled = true;
+			bar(96, 'در حال وارد کردن پروژه‌ها… (ممکن است چند دقیقه طول بکشد)');
+			post('transfer/import', {
+				upload: upload,
+				create_users: box.querySelector('[data-sap-transfer-users]').checked ? 1 : 0,
+				settings: box.querySelector('[data-sap-transfer-settings]').checked ? 1 : 0
+			}).then(function (res) {
+				bar(100, res.msg);
+				out.innerHTML = '<ul class="sap-transfer-done">' + res.projects.map(function (p) {
+					return '<li><a href="' + esc(p.url) + '">' + esc(p.name) + ' ←</a> <small>' + Number(p.tasks).toLocaleString('fa-IR') + ' کار · ' + Number(p.findings).toLocaleString('fa-IR') + ' یافته · ' + Number(p.activity).toLocaleString('fa-IR') + ' اقدام</small></li>';
+				}).join('') + '</ul>';
+				toast(res.msg);
+				input.value = ''; prev.hidden = true;
+			}).catch(function (e) { toast(e.message, true); go.disabled = false; prog.hidden = true; });
+		});
+	})();
+
+	/* ---- «show more» rows in long lists ---- */
+	document.addEventListener('click', function (ev) {
+		var b = ev.target.closest('[data-sap-more-rows]');
+		if (!b) { return; }
+		var box = b.parentElement;
+		box.querySelectorAll('.is-more[hidden]').forEach(function (li) { li.hidden = false; });
+		b.remove();
+	});
 
 })();

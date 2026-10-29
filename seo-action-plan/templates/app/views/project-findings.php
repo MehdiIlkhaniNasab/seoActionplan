@@ -18,6 +18,35 @@ $focus    = isset( $_GET['focus'] ) && '' !== $_GET['focus'] ? absint( $_GET['fo
 $focuses  = sap_focuses( $pid );
 $fnames   = wp_list_pluck( $focuses, 'name', 'id' );
 $list     = sap_findings( $pid, array( 'status' => $status, 'context' => $context, 'focus_id' => $focus, 'limit' => 400 ) );
+// With focuses defined, the inbox shows the work of the focuses (plus critical site-wide items);
+// the rest is one click away instead of drowning the list.
+$all_off  = isset( $_GET['offfocus'] ); // phpcs:ignore WordPress.Security.NonceVerification
+$hidden   = 0;
+if ( $focuses && '' === $focus && ! $all_off && 'open' === $status ) {
+	$list = array_values( array_filter( $list, function ( $f ) use ( &$hidden ) {
+		$keep = $f['focus_id'] || (float) $f['score'] >= 60;
+		$hidden += $keep ? 0 : 1;
+		return $keep;
+	} ) );
+}
+// Several findings on one page → one card with a checklist (approved as one task).
+$cards = array();
+if ( 'open' === $status ) {
+	foreach ( sap_proposals_by_page( array_filter( $list, 'sap_finding_is_page_level' ) ) as $k => $pg ) {
+		if ( '' !== $k && count( $pg['items'] ) >= 2 ) {
+			$cards[ $k ] = $pg;
+		}
+	}
+	$in_card = array();
+	foreach ( $cards as $pg ) {
+		foreach ( $pg['items'] as $f ) {
+			$in_card[ $f['id'] ] = true;
+		}
+	}
+	$list = array_values( array_filter( $list, function ( $f ) use ( $in_card ) {
+		return ! isset( $in_card[ $f['id'] ] );
+	} ) );
+}
 $period   = sap_period_current();
 $here     = sap_project_url( $pid, 'findings', array_filter( array( 'fstatus' => $status, 'context' => $context, 'focus' => $focus ), 'strlen' ) );
 ?>
@@ -47,12 +76,36 @@ $here     = sap_project_url( $pid, 'findings', array_filter( array( 'fstatus' =>
 	</form>
 </div>
 
-<?php if ( ! $list ) : ?>
+<?php if ( $hidden ) : ?>
+	<p class="sap-callout sap-focus-note"><?php echo sap_icon( 'target', 16 ); // phpcs:ignore ?><span>فقط کارهای مرتبط با Focusها و موارد مهم کل سایت نمایش داده می‌شود. <a href="<?php echo esc_url( add_query_arg( 'offfocus', 1, $here ) ); ?>">نمایش <?php echo esc_html( sap_num( $hidden ) ); ?> مورد خارج از Focus</a></span></p>
+<?php endif; ?>
+<?php if ( $cards ) : ?>
+	<section class="sap-panel sap-proposals">
+		<div class="sap-panel-head">
+			<h2><?php echo sap_icon( 'list' ); // phpcs:ignore ?>صفحاتی که چند کار دارند<small><?php echo esc_html( sap_num( count( $cards ) ) ); ?> صفحه — هر صفحه یک کارت، یک کار در اکشن پلن</small></h2>
+			<label class="sap-small">ماه اکشن پلن:
+				<select data-sap-pp-period>
+					<?php foreach ( sap_period_options( 0, 3 ) as $k => $label ) : ?>
+						<option value="<?php echo esc_attr( $k ); ?>" <?php selected( $k, $period ); ?>><?php echo esc_html( $label ); ?></option>
+					<?php endforeach; ?>
+				</select>
+			</label>
+		</div>
+		<div class="sap-pagecard-list">
+			<?php foreach ( array_slice( $cards, 0, 12, true ) as $pg ) : ?>
+				<?php sap_view( 'page-card', array( 'project' => $project, 'pg' => $pg ) ); ?>
+			<?php endforeach; ?>
+		</div>
+		<?php if ( count( $cards ) > 12 ) : ?><p class="sap-small sap-muted">و <?php echo esc_html( sap_num( count( $cards ) - 12 ) ); ?> صفحه دیگر — بعد از تأیید/رد این‌ها نمایش داده می‌شوند.</p><?php endif; ?>
+	</section>
+	<?php if ( $list ) : ?><h3 class="sap-h3">موارد تکی و کل سایت</h3><?php endif; ?>
+<?php endif; ?>
+<?php if ( ! $list && ! $cards ) : ?>
 	<div class="sap-empty">
 		<?php echo sap_icon( 'inbox', 32 ); // phpcs:ignore ?>
 		<p><?php echo 'open' === $status ? 'صندوق ورودی خالی است. اگر هنوز تحلیل نکرده‌اید، «تحلیل کامل» را بزنید.' : 'موردی نیست.'; ?></p>
 	</div>
-<?php else : ?>
+<?php elseif ( $list ) : ?>
 	<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" class="sap-findings">
 		<?php sap_form_fields( 'sap_findings', array( 'project_id' => $pid, '_return' => $here ) ); ?>
 		<div class="sap-bulk">
@@ -90,7 +143,7 @@ $here     = sap_project_url( $pid, 'findings', array_filter( array( 'fstatus' =>
 					</span>
 				</summary>
 				<div class="sap-finding-body">
-					<p><?php echo nl2br( esc_html( $f['detail'] ) ); ?></p>
+					<p><?php echo sap_rich_text( $f['detail'], sap_site_base( $project ) ); // phpcs:ignore ?></p>
 					<?php if ( ! empty( $f['evidence']['ai']['reason'] ) ) : ?>
 						<p class="sap-ai-note"><?php echo sap_icon( 'spark', 14 ); // phpcs:ignore ?><b>قضاوت هوش مصنوعی:</b> <?php echo esc_html( $f['evidence']['ai']['reason'] . ( $f['evidence']['ai']['action'] ? ' — ' . $f['evidence']['ai']['action'] : '' ) ); ?></p>
 					<?php endif; ?>

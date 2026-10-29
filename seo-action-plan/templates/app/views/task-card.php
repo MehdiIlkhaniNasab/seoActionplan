@@ -70,7 +70,7 @@ $post    = esc_url( admin_url( 'admin-post.php' ) );
 			<p class="sap-task-outcome"><b>خروجی مطلوب:</b> <?php echo esc_html( $t['outcome'] ); ?></p>
 		<?php endif; ?>
 		<?php if ( $t['notes'] ) : ?>
-			<div class="sap-notes"><?php echo nl2br( esc_html( $t['notes'] ) ); ?></div>
+			<div class="sap-notes"><?php echo sap_rich_text( $t['notes'], sap_task_site_base( $t ) ); // phpcs:ignore ?></div>
 		<?php endif; ?>
 		<?php if ( $t['url'] ) : ?>
 			<p class="sap-task-page">صفحه: <?php echo sap_page_link( $t['url'], sap_page_title( $t['project_id'], $t['url'] ) ); // phpcs:ignore ?>

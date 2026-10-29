@@ -131,8 +131,8 @@ $fcache = array();
 					<?php if ( '' !== trim( $t['notes'] ) || '' !== trim( $t['ai_output'] ) ) : ?>
 						<details class="sap-mytask-more">
 							<summary>شرح کار، مراحل و بریف</summary>
-							<?php if ( '' !== trim( $t['notes'] ) ) : ?><div class="sap-notes"><?php echo nl2br( esc_html( $t['notes'] ) ); ?></div><?php endif; ?>
-							<?php if ( '' !== trim( $t['ai_output'] ) ) : ?><pre class="sap-deliverable" dir="auto"><?php echo esc_html( $t['ai_output'] ); ?></pre><?php endif; ?>
+							<?php if ( '' !== trim( $t['notes'] ) ) : ?><div class="sap-notes"><?php echo sap_rich_text( $t['notes'], sap_task_site_base( $t ) ); // phpcs:ignore ?></div><?php endif; ?>
+							<?php if ( '' !== trim( $t['ai_output'] ) ) : ?><div class="sap-deliverable" dir="auto"><?php echo sap_rich_text( $t['ai_output'], sap_task_site_base( $t ) ); // phpcs:ignore ?></div><?php endif; ?>
 							<?php sap_view( 'comments', array( 'type' => 'task', 'object_id' => $t['id'], 'project_id' => $t['project_id'] ) ); ?>
 						</details>
 					<?php endif; ?>

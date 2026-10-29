@@ -142,7 +142,7 @@ function sap_member_invite( $user_id, $with_password_link = true ) {
 	) );
 	$sms = null;
 	if ( '' !== $m['phone'] && 'none' !== sap_setting( 'sms_provider', 'none' ) ) {
-		$sms = true === sap_sms_send( $m['phone'], sprintf( "%s عزیز، به تیم سئو اضافه شدید.\nپنل کارها: %s\nنام کاربری: %s", $m['name'], $panel, $u->user_login ) );
+		$sms = true === sap_sms_send( $m['phone'], sprintf( "%s عزیز، به تیم سئو اضافه شدید.\nپنل کارها: %s\nنام کاربری: %s", $m['name'], $panel, $u->user_login ), 'invite', array( $m['name'], $u->user_login ) );
 	}
 	return array( 'email' => $mail, 'sms' => $sms, 'link' => $link );
 }
@@ -159,8 +159,32 @@ function sap_is_member_only( $user ) {
 }
 
 add_filter( 'login_redirect', function ( $to, $requested, $user ) {
-	return sap_is_member_only( $user ) && ( '' === (string) $requested || false !== strpos( (string) $requested, '/wp-admin' ) ) ? sap_url( 'my' ) : $to;
+	return sap_is_member_only( $user ) && ( '' === (string) $requested || false !== strpos( (string) $requested, '/wp-admin' ) ) ? sap_url( sap_member_full( $user ) ? '' : 'my' ) : $to;
 }, 20, 3 );
+
+/**
+ * A team member the manager gave full access (projects, plans, settings) to.
+ */
+function sap_member_full( $user ) {
+	$user = $user instanceof WP_User ? $user : get_userdata( is_object( $user ) ? (int) ( $user->ID ?? 0 ) : (int) $user );
+	return $user instanceof WP_User && ! user_can( $user, 'manage_options' ) && ! empty( $user->caps[ SAP_CAP ] );
+}
+
+/**
+ * Grant or take back full access (only administrators — the SEO manager — may).
+ */
+function sap_member_set_full( $user_id, $on ) {
+	$u = get_userdata( (int) $user_id );
+	if ( ! $u || user_can( $u, 'manage_options' ) || (int) $user_id === get_current_user_id() || ! current_user_can( 'manage_options' ) ) {
+		return false;
+	}
+	if ( $on ) {
+		$u->add_cap( SAP_CAP );
+	} else {
+		$u->remove_cap( SAP_CAP );
+	}
+	return true;
+}
 
 add_action( 'admin_init', function () {
 	global $pagenow;
@@ -226,25 +250,9 @@ add_action( 'sap_task_saved', function ( $before, $after ) {
 		return;
 	}
 	$me = get_current_user_id();
-	// Assigned (or re-assigned) to someone else.
+	// Assigned (or re-assigned) to someone else: queued, so a burst of assignments becomes one message.
 	if ( $after['assignee'] && ( ! $before || (int) $before['assignee'] !== $after['assignee'] ) && $after['assignee'] !== $me && 'done' !== $after['status'] ) {
-		$m = sap_member( $after['assignee'] );
-		if ( $m ) {
-			$link = sap_url( 'my' ) . '#task-' . $after['id'];
-			if ( $m['notify_email'] ) {
-				sap_notify_email( $m['email'], 'کار جدید: ' . $after['title'], array(
-					'title'  => 'یک کار جدید به شما سپرده شد',
-					'intro'  => $m['name'] . ' عزیز، کار زیر در سکان به شما سپرده شد:' . "\n" . $after['title'],
-					'rows'   => sap_task_brief_line( $after ),
-					'items'  => array_slice( array_filter( array_map( 'trim', explode( "\n", (string) $after['notes'] ) ) ), 0, 12 ),
-					'button' => array( 'مشاهده در «کارهای من»', $link ),
-				) );
-			}
-			if ( $m['notify_sms'] && '' !== $m['phone'] ) {
-				$p = sap_project( $after['project_id'] );
-				sap_sms_send( $m['phone'], sprintf( "سکان | کار جدید (%s):\n%s\n%s", $p['name'] ?? '', mb_substr( $after['title'], 0, 90 ), $after['due_date'] ? 'سررسید: ' . sap_jdate( $after['due_date'], 'short' ) : '' ) );
-			}
-		}
+		sap_assign_queue_add( $after['assignee'], $after['id'] );
 	}
 	// Done: thank the person and tell the manager.
 	if ( 'done' === $after['status'] && ( ! $before || 'done' !== $before['status'] ) && $after['assignee'] ) {
@@ -258,7 +266,7 @@ add_action( 'sap_task_saved', function ( $before, $after ) {
 				) );
 			}
 			if ( $m['notify_sms'] && '' !== $m['phone'] && sap_setting( 'reminder_sms', 1 ) ) {
-				sap_sms_send( $m['phone'], 'سکان | خسته نباشید ' . $m['name'] . '! «' . mb_substr( $after['title'], 0, 70 ) . '» انجام شد و ثبت شد. 🌿' );
+				sap_sms_send( $m['phone'], 'سکان | خسته نباشید ' . $m['name'] . '! «' . mb_substr( $after['title'], 0, 70 ) . '» انجام شد و ثبت شد. 🌿', 'done', array( $m['name'], mb_substr( $after['title'], 0, 60 ) ) );
 			}
 			if ( ! $m['manager'] ) {
 				$p = sap_project( $after['project_id'] );
@@ -270,6 +278,144 @@ add_action( 'sap_task_saved', function ( $before, $after ) {
 		}
 	}
 }, 10, 2 );
+
+/**
+ * Minutes of quiet after the last assignment before the person is told (0 = at once).
+ */
+function sap_assign_wait() {
+	return max( 0, min( 30, (int) sap_setting( 'notify_batch_minutes', 3 ) ) );
+}
+
+/**
+ * Queue an assignment notice. The person hears once the manager has stopped
+ * assigning for a few minutes (or after 30 minutes at most): one task → the full
+ * email and SMS of that task; several → one list email and one summary SMS.
+ */
+function sap_assign_queue_add( $user_id, $task_id ) {
+	$q   = (array) get_option( 'sap_assign_queue', array() );
+	$e   = $q[ $user_id ] ?? array( 'tasks' => array(), 'first' => time() );
+	$e['tasks'][] = (int) $task_id;
+	$e['tasks']   = array_values( array_unique( $e['tasks'] ) );
+	$e['last']    = time();
+	$q[ $user_id ] = $e;
+	update_option( 'sap_assign_queue', $q, false );
+	if ( ! sap_assign_wait() ) {
+		sap_assign_flush( true, (int) $user_id );
+		return;
+	}
+	sap_assign_schedule( $q );
+}
+
+/**
+ * When a queue entry is due.
+ */
+function sap_assign_due_at( $e ) {
+	return min( (int) $e['last'] + sap_assign_wait() * MINUTE_IN_SECONDS, (int) $e['first'] + 30 * MINUTE_IN_SECONDS );
+}
+
+/**
+ * (Re)schedule the flush for the earliest due entry.
+ */
+function sap_assign_schedule( $q = null ) {
+	$q = null === $q ? (array) get_option( 'sap_assign_queue', array() ) : $q;
+	wp_clear_scheduled_hook( 'sap_assign_flush' );
+	if ( $q ) {
+		wp_schedule_single_event( max( time() + 30, min( array_map( 'sap_assign_due_at', $q ) ) ), 'sap_assign_flush' );
+	}
+}
+
+/**
+ * Send the due (or, forced, all / one person's) queued assignment notices.
+ *
+ * @return int people notified
+ */
+function sap_assign_flush( $force = false, $only = 0 ) {
+	$q = (array) get_option( 'sap_assign_queue', array() );
+	$n = 0;
+	foreach ( $q as $uid => $e ) {
+		if ( ( $only && (int) $uid !== $only ) || ( ! $force && time() < sap_assign_due_at( $e ) ) ) {
+			continue;
+		}
+		unset( $q[ $uid ] );
+		update_option( 'sap_assign_queue', $q, false ); // Before sending: a slow gateway must not cause doubles.
+		$tasks = array_values( array_filter( array_map( 'sap_task', $e['tasks'] ), function ( $t ) use ( $uid ) {
+			return $t && (int) $t['assignee'] === (int) $uid && 'done' !== $t['status'];
+		} ) );
+		if ( $tasks && sap_assign_notify( (int) $uid, $tasks ) ) {
+			++$n;
+		}
+	}
+	sap_assign_schedule( $q );
+	return $n;
+}
+add_action( 'sap_assign_flush', function () {
+	sap_assign_flush();
+} );
+
+/**
+ * Email + SMS for one or more newly assigned tasks.
+ */
+function sap_assign_notify( $user_id, $tasks ) {
+	$m = sap_member( $user_id );
+	if ( ! $m ) {
+		return false;
+	}
+	$one   = 1 === count( $tasks );
+	$first = $tasks[0];
+	$p     = sap_project( $first['project_id'] );
+	$pn    = implode( '، ', array_unique( array_map( function ( $t ) {
+		return sap_project( $t['project_id'] )['name'] ?? '';
+	}, $tasks ) ) );
+	if ( $m['notify_email'] ) {
+		if ( $one ) {
+			sap_notify_email( $m['email'], 'کار جدید: ' . $first['title'], array(
+				'title'  => 'یک کار جدید به شما سپرده شد',
+				'intro'  => $m['name'] . ' عزیز، کار زیر در سکان به شما سپرده شد:' . "\n" . $first['title'],
+				'rows'   => sap_task_brief_line( $first ),
+				'items'  => array_slice( array_filter( array_map( 'trim', explode( "\n", (string) $first['notes'] ) ) ), 0, 12 ),
+				'button' => array( 'مشاهده در «کارهای من»', sap_url( 'my' ) . '#task-' . $first['id'] ),
+			) );
+		} else {
+			sap_notify_email( $m['email'], sprintf( '%s کار جدید به شما سپرده شد', sap_num( count( $tasks ) ) ), array(
+				'title'  => sprintf( '%s کار جدید برای شما', sap_num( count( $tasks ) ) ),
+				'intro'  => $m['name'] . ' عزیز، این کارها در سکان به شما سپرده شد (به ترتیب ثبت):',
+				'items'  => array_map( function ( $t ) {
+					$tp = sap_project( $t['project_id'] );
+					return '<b>' . esc_html( $t['title'] ) . '</b><br><small>' . esc_html( ( $tp['name'] ?? '' ) . ' · ' . sap_num( $t['effort'], 1 ) . ' ساعت' . ( $t['due_date'] ? ' · سررسید ' . sap_jdate( $t['due_date'], 'short' ) : '' ) ) . '</small>';
+				}, array_slice( $tasks, 0, 25 ) ),
+				'button' => array( 'باز کردن «کارهای من»', sap_url( 'my' ) ),
+			) );
+		}
+	}
+	if ( $m['notify_sms'] && '' !== $m['phone'] ) {
+		if ( $one ) {
+			$due = $first['due_date'] ? sap_jdate( $first['due_date'], 'short' ) : 'این ماه';
+			sap_sms_send( $m['phone'], sprintf( "سکان | کار جدید (%s):\n%s\nسررسید: %s", $p['name'] ?? '', mb_substr( $first['title'], 0, 90 ), $due ), 'task', array( $m['name'], mb_substr( $first['title'], 0, 60 ), $p['name'] ?? '', $due ) );
+		} else {
+			$lines = array();
+			foreach ( array_slice( $tasks, 0, 3 ) as $i => $t ) {
+				$lines[] = sap_num( $i + 1 ) . ') ' . mb_substr( $t['title'], 0, 50 );
+			}
+			if ( count( $tasks ) > 3 ) {
+				$lines[] = '… و ' . sap_num( count( $tasks ) - 3 ) . ' کار دیگر';
+			}
+			$text  = sprintf( "سکان | %s عزیز، %s کار جدید برای شما (%s):\n%s", $m['name'], sap_num( count( $tasks ) ), $pn, implode( "\n", $lines ) );
+			sap_sms_send( $m['phone'], $text, 'tasks', array( $m['name'], sap_num( count( $tasks ) ), $pn, mb_substr( $first['title'], 0, 50 ) ) );
+		}
+	}
+	return true;
+}
+
+/**
+ * People waiting for an assignment notice: user id => [count, due timestamp].
+ */
+function sap_assign_pending() {
+	$out = array();
+	foreach ( (array) get_option( 'sap_assign_queue', array() ) as $uid => $e ) {
+		$out[ $uid ] = array( count( $e['tasks'] ), sap_assign_due_at( $e ) );
+	}
+	return $out;
+}
 
 /**
  * Open tasks of a person across all projects (this month and overdue).
@@ -312,7 +458,7 @@ function sap_team_remind( $morning = true ) {
 				$p       = sap_project( $t['project_id'] );
 				$lines[] = sap_num( $i + 1 ) . ') ' . mb_substr( $t['title'], 0, 55 ) . ' [' . ( $p['name'] ?? '' ) . ']';
 			}
-			sap_sms_send( $m['phone'], sprintf( "سکان | %s %s\n%s کار باز%s:\n%s", $morning ? 'صبح بخیر' : 'یادآوری', $m['name'], sap_num( count( $tasks ) ), $overdue ? '، ' . sap_num( $overdue ) . ' عقب از موعد' : '', implode( "\n", $lines ) ) );
+			sap_sms_send( $m['phone'], sprintf( "سکان | %s %s\n%s کار باز%s:\n%s", $morning ? 'صبح بخیر' : 'یادآوری', $m['name'], sap_num( count( $tasks ) ), $overdue ? '، ' . sap_num( $overdue ) . ' عقب از موعد' : '', implode( "\n", $lines ) ), 'remind', array( $m['name'], sap_num( count( $tasks ) ), sap_num( $overdue ) ) );
 		}
 		if ( $morning && sap_setting( 'reminder_email', 1 ) && $m['notify_email'] ) {
 			sap_notify_email( $m['email'], sprintf( 'کارهای امروز شما (%s کار باز)', sap_num( count( $tasks ) ) ), array(

@@ -154,6 +154,13 @@ add_action( 'rest_api_init', function () {
 		'permission_callback' => 'sap_can_work',
 		'callback'            => function ( WP_REST_Request $req ) {
 			$type = sanitize_key( (string) $req->get_param( 'type' ) );
+			if ( ! sap_can() ) {
+				// Members: notes only on their own tasks.
+				$t = 'task' === $type ? sap_task( absint( $req->get_param( 'id' ) ) ) : null;
+				if ( ! $t || (int) $t['assignee'] !== get_current_user_id() || (int) $t['project_id'] !== absint( $req->get_param( 'project' ) ) ) {
+					return new WP_Error( 'sap_forbidden', 'فقط روی کارهای خودتان می‌توانید یادداشت بگذارید.', array( 'status' => 403 ) );
+				}
+			}
 			$id   = sap_comment_add( absint( $req->get_param( 'project' ) ), $type, absint( $req->get_param( 'id' ) ), (string) $req->get_param( 'body' ) );
 			if ( ! $id ) {
 				return new WP_Error( 'sap_comment', 'متن یادداشت خالی است.', array( 'status' => 400 ) );
@@ -1104,7 +1111,17 @@ add_action( 'rest_api_init', function () {
 		'callback'            => function ( WP_REST_Request $req ) {
 			$ch  = sanitize_key( (string) $req->get_param( 'channel' ) );
 			$res = sap_notify_test( $ch );
-			return is_wp_error( $res ) ? $res : array( 'ok' => true, 'msg' => 'پیام آزمایشی ارسال شد.' );
+			if ( is_wp_error( $res ) ) {
+				return $res;
+			}
+			$msg = 'پیام آزمایشی ارسال شد.';
+			if ( 'sms' === $ch && 'melipayamak' === sap_setting( 'sms_provider' ) ) {
+				$msg = ( sap_sms_pattern( 'test' ) ? 'ملی پیامک پیام را با پترن پذیرفت.' : 'ملی پیامک پیام متنی را پذیرفت.' ) . ' رسیدن به گوشی را چند دقیقه بعد در «آخرین ارسال‌ها» ببینید (گزارش تحویل خودکار گرفته می‌شود).';
+				if ( ! sap_sms_pattern( 'test' ) && sap_sms_line_is_public() ) {
+					$msg .= ' خط شما عمومی/تبلیغاتی است؛ اگر نرسید، پترن خدماتی را تنظیم کنید.';
+				}
+			}
+			return array( 'ok' => true, 'msg' => $msg );
 		},
 	) );
 
@@ -1211,6 +1228,7 @@ function sap_rest_crawl_ingest( WP_REST_Request $req ) {
 	$meta       = array(
 		'agent'     => sanitize_text_field( (string) $req->get_param( 'agent' ) ),
 		'start_url' => esc_url_raw( (string) $req->get_param( 'start_url' ) ),
+		'mode'      => sanitize_key( (string) $req->get_param( 'mode' ) ),
 	);
 	if ( ! empty( $files['file']['tmp_name'] ) ) {
 		$rows = sap_crawl_rows_from_file( $files['file']['tmp_name'], $files['file']['name'] );

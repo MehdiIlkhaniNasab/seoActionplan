@@ -139,9 +139,32 @@ function sap_ai_project_context() {
 	if ( $mem ) {
 		$out .= "\n\nحافظه این پروژه (تصمیم‌ها، خواسته‌های کارفرما، محدودیت‌ها و درس‌های آموخته؛ پیشنهادت نباید با این‌ها تناقض داشته باشد و محدودیت‌ها را رعایت کن):\n" . implode( "\n", $mem );
 	}
+	// Analysis runs: what is already on the table, so a new run continues the work instead of
+	// re-wording it (dismissed ones are never proposed again).
+	if ( ! empty( $GLOBALS['sap_ai_known'] ) ) {
+		$known = sap_known_proposals_for_ai( $project['id'] );
+		if ( $known ) {
+			$out .= "\n\nپیشنهادهایی که قبلاً ثبت شده (وضعیت | نوع | صفحه | عنوان). قوانین: موارد «رد شده» را هرگز دوباره پیشنهاد نده؛ برای همان صفحه و همان نوع کاری که «باز» یا «در برنامه» است پیشنهاد تازه نساز مگر داده واقعاً تغییر کرده باشد (در آن صورت همان url و kind را بده تا جایگزین شود)؛ فقط کارهای مرتبط با Focusهای پروژه:\n" . implode( "\n", $known );
+		}
+	}
 	$play = function_exists( 'sap_learning_for_ai' ) ? sap_learning_for_ai( $project ) : array();
 	if ( $play ) {
 		$out .= "\n\nتجربه سکان در پروژه‌های دیگر (ناشناس، فقط نوع کار و میانگین اثر؛ برای اولویت‌بندی استفاده کن، نه به‌عنوان داده این سایت):\n" . implode( "\n", $play );
+	}
+	return $out;
+}
+
+/**
+ * Compact list of existing proposals for the AI (open / planned / dismissed).
+ */
+function sap_known_proposals_for_ai( $project_id ) {
+	$out = array();
+	$lab = array( 'open' => 'باز', 'planned' => 'در برنامه', 'dismissed' => 'رد شده' );
+	foreach ( array( 'dismissed' => 40, 'planned' => 30, 'open' => 40 ) as $st => $n ) {
+		foreach ( sap_findings( $project_id, array( 'status' => $st, 'limit' => $n ) ) as $f ) {
+			$kind  = (string) ( $f['evidence']['kind'] ?? $f['context'] );
+			$out[] = sprintf( '%s | %s | %s | %s', $lab[ $st ], $kind, '' !== (string) $f['url'] ? rawurldecode( (string) wp_parse_url( $f['url'], PHP_URL_PATH ) ) : '-', mb_substr( $f['title'], 0, 90 ) );
+		}
 	}
 	return $out;
 }

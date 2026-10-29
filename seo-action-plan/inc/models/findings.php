@@ -76,6 +76,7 @@ function sap_findings_sync( $project_id, $findings, $detectors ) {
 	$seen  = array();
 	$stats = array( 'new' => 0, 'updated' => 0, 'resolved' => 0 );
 	$user_done = function_exists( 'sap_user_resolved' ) ? sap_user_resolved( $project_id ) : array();
+	$taken     = array();
 	foreach ( $findings as $f ) {
 		$f  = apply_filters( 'sap_finding_pre_sync', $f, $project_id );
 		$fp = substr( hash( 'sha256', $f['detector'] . '|' . $f['key'] ), 0, 40 );
@@ -98,7 +99,21 @@ function sap_findings_sync( $project_id, $findings, $detectors ) {
 			'last_seen'  => $now,
 		);
 		$old = $wpdb->get_row( $wpdb->prepare( "SELECT id, status FROM $table WHERE project_id = %d AND fingerprint = %s", $project_id, $fp ), ARRAY_A ); // phpcs:ignore
+		if ( ! $old && 0 === strpos( $f['detector'], 'ai_' ) && '' !== (string) ( $f['url'] ?? '' ) ) {
+			// A reworded AI proposal for the same page and the same kind of work is the same
+			// proposal: take over the existing row (and its status) instead of adding a twin.
+			$kind = (string) ( $f['evidence']['kind'] ?? '' );
+			foreach ( (array) $wpdb->get_results( $wpdb->prepare( "SELECT id, status, url, evidence, context FROM $table WHERE project_id = %d AND detector = %s AND url = %s", $project_id, $f['detector'], $f['url'] ), ARRAY_A ) as $cand ) { // phpcs:ignore
+				$ce = json_decode( (string) $cand['evidence'], true ) ?: array();
+				if ( (string) ( $ce['kind'] ?? '' ) === $kind && ( '' !== $kind || $cand['context'] === $f['context'] ) && ! isset( $taken[ $cand['id'] ] ) ) {
+					$old = $cand;
+					$wpdb->update( $table, array( 'fingerprint' => $fp ), array( 'id' => (int) $cand['id'] ) );
+					break;
+				}
+			}
+		}
 		if ( $old ) {
+			$taken[ $old['id'] ] = true;
 			// A resolved finding that shows up again is reopened; dismissed stays dismissed.
 			// …unless you marked it resolved in the last 30 days (the data behind it may not be refreshed yet).
 			if ( 'resolved' === $old['status'] && ( $user_done[ $fp ] ?? 0 ) < time() - 30 * DAY_IN_SECONDS ) {
@@ -120,6 +135,12 @@ function sap_findings_sync( $project_id, $findings, $detectors ) {
 		$in    = implode( ',', array_fill( 0, count( $detectors ), '%s' ) );
 		$stale = $wpdb->get_col( $wpdb->prepare( "SELECT id FROM $table WHERE project_id = %d AND status = 'open' AND last_seen < %s AND detector IN ($in)", array_merge( array( $project_id, $now ), $detectors ) ) ); // phpcs:ignore
 		foreach ( $stale as $id ) {
+			$row = $wpdb->get_row( $wpdb->prepare( "SELECT detector, last_seen FROM $table WHERE id = %d", $id ), ARRAY_A ); // phpcs:ignore
+			// An AI proposal the model did not repeat this time is not «fixed»: it stays open for
+			// 45 days (rule detectors measure the data, so their stale findings are resolved).
+			if ( $row && 0 === strpos( $row['detector'], 'ai_' ) && strtotime( $row['last_seen'] ) > strtotime( $now ) - 45 * DAY_IN_SECONDS ) {
+				continue;
+			}
 			$wpdb->update( $table, array( 'status' => 'resolved' ), array( 'id' => (int) $id ) );
 			++$stats['resolved'];
 		}

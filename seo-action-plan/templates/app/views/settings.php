@@ -180,6 +180,30 @@ $auth  = sap_google_auth_url();
 			<label>متن پایانی پیامک (اختیاری)<input type="text" name="sms_footer" value="<?php echo esc_attr( $s['sms_footer'] ); ?>" placeholder="لغو11"><small>اگر خط شما خدماتی نیست و پنل درج «لغو11» را الزام می‌کند، اینجا بنویسید تا به انتهای همه پیامک‌ها اضافه شود.</small></label>
 		</div>
 		<label>آدرس درگاه سفارشی (فقط برای «درگاه سفارشی»)<input type="url" name="sms_custom_url" dir="ltr" value="<?php echo esc_attr( $s['sms_custom_url'] ); ?>" placeholder="https://panel.example/send?to={phone}&amp;text={text}&amp;from={sender}&amp;key={key}"></label>
+		<?php $pats = (array) $s['sms_patterns']; ?>
+		<details class="sap-sms-patterns" id="sms-patterns" <?php echo 'melipayamak' === $s['sms_provider'] && ( ! $pats || sap_sms_line_is_public() ) ? 'open' : ''; ?>>
+			<summary><b>ملی پیامک: ارسال با پترن (خط خدماتی)</b> <?php echo $pats ? '<span class="sap-chip is-good">' . esc_html( sap_num( count( $pats ) ) ) . ' پترن فعال</span>' : '<span class="sap-chip is-warn">پترنی ثبت نشده</span>'; ?></summary>
+			<?php if ( sap_sms_line_is_public() && ! $pats ) : ?>
+				<p class="sap-callout"><?php echo sap_icon( 'alert', 16 ); // phpcs:ignore ?><span>خط <b dir="ltr"><?php echo esc_html( $s['sms_sender'] ); ?></b> یک خط عمومی/تبلیغاتی است. پیامک متنی از این خط‌ها به شماره‌هایی که دریافت پیامک تبلیغاتی را بسته‌اند (بیشتر شماره‌ها) نمی‌رسد؛ برای همین در پنل «ارسال نشده» ثبت می‌شود، در حالی که وب‌سرویس خطایی نمی‌دهد. راه درست: ارسال با پترن که از خط خدماتی و بدون «لغو۱۱» می‌رود.</span></p>
+			<?php endif; ?>
+			<ol class="sap-small">
+				<li>در پنل ملی پیامک: «وب‌سرویس خدماتی» (یا «ارسال با الگو/پترن») › «متن جدید». برای هر رویداد زیر، متن پیشنهادی را کپی کنید و ثبت کنید (متغیرها همان <code dir="ltr">{0}</code>، <code dir="ltr">{1}</code>… هستند؛ ترتیب را عوض نکنید).</li>
+				<li>بعد از تایید متن توسط ملی پیامک (معمولاً چند ساعت کاری)، «کد متن» (bodyId) را جلوی همان رویداد بنویسید و ذخیره کنید. رویدادی که کد ندارد مثل قبل به‌صورت متن عادی ارسال می‌شود.</li>
+				<li>لینک داخل متغیر مجاز نیست؛ آدرس پنل در متن خود پترن نوشته شده است. «ارسال آزمایشی پیامک» از پترن «پیام آزمایشی» استفاده می‌کند.</li>
+			</ol>
+			<div class="sap-pattern-list">
+				<?php foreach ( sap_sms_events() as $ev => $def ) : ?>
+					<div class="sap-pattern">
+						<div class="sap-pattern-head"><b><?php echo esc_html( $def[0] ); ?></b><small><?php echo esc_html( implode( ' · ', array_map( function ( $v, $i ) { return '{' . $i . '} ' . $v; }, $def[1], array_keys( $def[1] ) ) ) ); ?></small></div>
+						<pre class="sap-pattern-text" dir="rtl"><?php echo esc_html( $def[2] ); ?></pre>
+						<div class="sap-pattern-foot">
+							<button type="button" class="sap-btn is-ghost is-small" data-sap-copy="<?php echo esc_attr( $def[2] ); ?>">کپی متن</button>
+							<label>کد متن (bodyId)<input type="text" inputmode="numeric" name="sms_patterns[<?php echo esc_attr( $ev ); ?>]" dir="ltr" value="<?php echo esc_attr( $pats[ $ev ] ?? '' ); ?>" placeholder="مثلاً 123456"></label>
+						</div>
+					</div>
+				<?php endforeach; ?>
+			</div>
+		</details>
 		<h3 class="sap-h3">ربات تلگرام و بله</h3>
 		<div class="sap-grid-2">
 			<label>توکن ربات تلگرام<input type="text" name="tg_token" dir="ltr" value="<?php echo esc_attr( sap_mask( $s['tg_token'] ) ); ?>" autocomplete="off" placeholder="123456:ABC…"><small>از ‎@BotFather بسازید؛ تلگرام از مسیر پروکسی ارسال می‌شود.</small></label>
@@ -204,15 +228,31 @@ $auth  = sap_google_auth_url();
 			<div class="sap-check-col"><?php sap_switch( 'reminder_sms', $s['reminder_sms'], 'یادآوری پیامکی به اعضا' ); ?></div>
 			<div class="sap-check-col"><?php sap_switch( 'reminder_email', $s['reminder_email'], 'خلاصه صبحگاهی کارها با ایمیل' ); ?></div>
 		</div>
+		<label class="sap-batch-field">اطلاع‌رسانی واگذاری کار، چند دقیقه بعد از آخرین واگذاری<input type="number" name="notify_batch_minutes" min="0" max="30" dir="ltr" value="<?php echo esc_attr( (int) $s['notify_batch_minutes'] ); ?>" style="width:90px"><small>اگر پشت سر هم چند کار به یک نفر بسپارید، بعد از این چند دقیقه سکوت فقط یک ایمیل فهرست‌دار و یک پیامک خلاصه برایش می‌رود (حداکثر ۳۰ دقیقه بعد از اولین کار). ۰ = هر کار فوری و جدا. در صفحه «تیم» دکمه «ارسال همین حالا» هم هست.</small></label>
 		<div class="sap-actions sap-notify-tests">
 			<?php foreach ( array( 'email' => 'ایمیل', 'sms' => 'پیامک', 'tg' => 'تلگرام', 'bale' => 'بله' ) as $ck => $cl ) : ?>
 				<button type="button" class="sap-btn is-small is-soft" data-sap-notify-test="<?php echo esc_attr( $ck ); ?>">ارسال آزمایشی <?php echo esc_html( $cl ); ?></button>
 			<?php endforeach; ?>
 		</div>
-		<?php $nlog = array_reverse( array_slice( (array) get_option( 'sap_notify_log', array() ), -8 ) ); ?>
+		<?php $nlog = array_reverse( array_slice( (array) get_option( 'sap_notify_log', array() ), -12 ) ); ?>
 		<?php if ( $nlog ) : ?>
-			<details class="sap-small"><summary>آخرین ارسال‌ها</summary>
-				<ul class="sap-notify-log"><?php foreach ( $nlog as $l ) : ?><li class="<?php echo $l['ok'] ? 'is-ok' : 'is-err'; ?>"><b><?php echo esc_html( sap_notify_channels()[ $l['ch'] ] ?? $l['ch'] ); ?></b> <span dir="ltr"><?php echo esc_html( $l['to'] ); ?></span> — <?php echo esc_html( $l['text'] ); ?> <small><?php echo esc_html( sap_jdate( $l['at'], 'short' ) . ' ' . substr( $l['at'], 11, 5 ) ); ?><?php echo $l['ok'] ? '' : ' · ' . esc_html( $l['err'] ); ?></small></li><?php endforeach; ?></ul>
+			<?php $dlv_wait = count( array_filter( $nlog, function ( $l ) { return 'wait' === ( $l['dlv'] ?? '' ); } ) ); ?>
+			<details class="sap-small" id="notify-log" <?php echo $dlv_wait || isset( $_GET['sap_msg'] ) ? 'open' : ''; // phpcs:ignore ?>><summary>آخرین ارسال‌ها</summary>
+				<ul class="sap-notify-log"><?php foreach ( $nlog as $l ) : ?>
+					<?php
+					$dlv = $l['dlv'] ?? '';
+					$cls = ! $l['ok'] || 'fail' === $dlv ? 'is-err' : ( 'wait' === $dlv ? 'is-wait' : 'is-ok' );
+					?>
+					<li class="<?php echo esc_attr( $cls ); ?>">
+						<div><b><?php echo esc_html( sap_notify_channels()[ $l['ch'] ] ?? $l['ch'] ); ?></b><?php echo 'pattern' === ( $l['mode'] ?? '' ) ? ' <span class="sap-chip is-soft">پترن</span>' : ''; ?> <span dir="ltr"><?php echo esc_html( $l['to'] ); ?></span> — <?php echo esc_html( $l['text'] ); ?></div>
+						<small><?php echo esc_html( sap_jdate( $l['at'], 'short' ) . ' ' . substr( $l['at'], 11, 5 ) ); ?><?php echo $l['ok'] ? '' : ' · ' . esc_html( $l['err'] ); ?></small>
+						<?php if ( $dlv ) : ?>
+							<span class="sap-dlv is-<?php echo esc_attr( $dlv ); ?>"><?php echo esc_html( array( 'ok' => '✓ تحویل شد', 'wait' => '⏳ در انتظار گزارش تحویل', 'fail' => '✗ نرسید', 'unknown' => '؟ نامشخص' )[ $dlv ] ?? $dlv ); ?><?php echo ! empty( $l['dlv_t'] ) && 'ok' !== $dlv ? ': ' . esc_html( $l['dlv_t'] ) : ''; ?></span>
+						<?php endif; ?>
+					</li>
+				<?php endforeach; ?></ul>
+				<?php if ( $dlv_wait ) : ?><button type="submit" class="sap-btn is-ghost is-small" form="sap-dlv-form">بررسی وضعیت تحویل پیامک‌ها</button><?php endif; ?>
+				<p class="sap-muted">«ثبت شد» یعنی ملی پیامک پیام را پذیرفت؛ رسیدن به گوشی را گزارش تحویل می‌گوید که سکان چند دقیقه بعد خودکار می‌گیرد.</p>
 			</details>
 		<?php endif; ?>
 	</section>
@@ -277,6 +317,7 @@ $auth  = sap_google_auth_url();
 		<button class="sap-btn is-primary" type="submit">ذخیره تنظیمات</button>
 	</div>
 </form>
+<form method="post" action="<?php echo $post; // phpcs:ignore ?>" id="sap-dlv-form" hidden><?php sap_form_fields( 'sap_sms_delivery' ); ?></form>
 
 <section class="sap-panel">
 	<h2>اتصال حساب گوگل</h2>
@@ -296,4 +337,36 @@ $auth  = sap_google_auth_url();
 		</div>
 		<p class="sap-muted">در صفحه گوگل تیک هر دو دسترسی (Search Console و Google Sheets) را بزنید.</p>
 	<?php endif; ?>
+</section>
+
+<section class="sap-panel sap-transfer" id="transfer">
+	<h2><?php echo sap_icon( 'refresh' ); // phpcs:ignore ?>انتقال پروژه‌ها بین سایت‌ها (مثلاً از لوکال‌هاست به سایت اصلی)</h2>
+	<p class="sap-muted sap-small">همه داده‌های پروژه بدون تغییر منتقل می‌شود: حوزه‌های تمرکز، یافته‌ها، اکشن پلن و کارها با توضیحات و گزارش انجام، لاگ اقدامات، نقشه کلمات، بازنویسی‌ها، یادداشت‌ها، ایده‌ها و آپدیت‌ها، آرشیو ماه‌ها، هشدارها، تاریخچه رتبه، حافظه پروژه و داده‌های دریافت‌شده. شناسه‌ها در سایت مقصد بازسازی می‌شوند و اعضا با ایمیل پیدا می‌شوند.</p>
+	<div class="sap-transfer-grid">
+		<form method="post" action="<?php echo $post; // phpcs:ignore ?>" class="sap-transfer-box">
+			<?php sap_form_fields( 'sap_transfer_export' ); ?>
+			<h3>۱) خروجی گرفتن (در سایت مبدا)</h3>
+			<div class="sap-transfer-projects">
+				<?php foreach ( sap_projects() as $tp ) : ?>
+					<label class="sap-check"><input type="checkbox" name="projects[]" value="<?php echo esc_attr( $tp['id'] ); ?>" checked> <?php echo esc_html( $tp['name'] ); ?> <small dir="ltr" class="sap-muted"><?php echo esc_html( sap_clean_domain( $tp['site_url'] ) ); ?></small></label>
+				<?php endforeach; ?>
+			</div>
+			<label class="sap-check"><input type="checkbox" name="raw" value="1" checked> داده‌های خام هم بیاید (سرچ کنسول، کرال، فهرست محتوای سایت، رتبه‌ها)</label>
+			<label class="sap-check"><input type="checkbox" name="secrets" value="1" checked> کلید اتصال سایت (افزونه رابط) هم منتقل شود</label>
+			<label class="sap-check"><input type="checkbox" name="settings" value="1"> تنظیمات کلی سکان هم بیاید (کلیدهای هوش مصنوعی، پیامک، SMTP…)</label>
+			<p class="sap-small sap-muted">کلیدها در دیتابیس با «salt» همین سایت رمز شده‌اند و در سایت دیگر باز نمی‌شوند؛ برای همین داخل فایل باز (غیررمز) قرار می‌گیرند و در مقصد دوباره رمز می‌شوند. فایل را جایی عمومی نگذارید و بعد از انتقال پاکش کنید.</p>
+			<button class="sap-btn is-primary" type="submit"><?php echo sap_icon( 'download', 15 ); // phpcs:ignore ?>دانلود فایل انتقال</button>
+		</form>
+		<div class="sap-transfer-box" data-sap-transfer>
+			<h3>۲) وارد کردن (در سایت مقصد)</h3>
+			<label class="sap-file-drop"><input type="file" accept=".gz,.json,.sokan" data-sap-transfer-file><span>فایل <b dir="ltr">.sokan.gz</b> را انتخاب کنید</span></label>
+			<div class="sap-transfer-preview" data-sap-transfer-preview hidden></div>
+			<label class="sap-check"><input type="checkbox" data-sap-transfer-users checked> اعضایی که در این سایت حساب ندارند ساخته شوند (بدون ارسال دعوت؛ بعداً از «تیم» دعوت بفرستید)</label>
+			<label class="sap-check" data-sap-transfer-settings-row hidden><input type="checkbox" data-sap-transfer-settings> تنظیمات کلی داخل فایل روی این سایت اعمال شود (اتصال گوگل باید دوباره انجام شود)</label>
+			<div class="sap-serp-progress" data-sap-transfer-progress hidden><i></i><span></span></div>
+			<div class="sap-actions"><button type="button" class="sap-btn is-primary" data-sap-transfer-go disabled>وارد کردن پروژه‌ها</button></div>
+			<div data-sap-transfer-result></div>
+			<p class="sap-small sap-muted">پروژه‌ها به‌عنوان پروژه جدید اضافه می‌شوند و چیزی از پروژه‌های فعلی این سایت تغییر نمی‌کند. بعد از ورود: ۱) در «اتصال گوگل» حساب را وصل کنید ۲) اگر پروژه به افزونه رابط وصل بود، «تست اتصال» را بزنید ۳) اسکریپت عامل اسکریمینگ فراگ را از نو دانلود کنید (شناسه پروژه عوض شده).</p>
+		</div>
+	</div>
 </section>

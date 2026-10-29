@@ -151,25 +151,111 @@ if (-not $Found) { exit 1 }
 
 $out = Join-Path $env:TEMP ("sokan-crawl-" + (Get-Date -Format "yyyyMMdd-HHmmss"))
 New-Item -ItemType Directory -Path $out | Out-Null
-$sfArgs = @("--headless", "--output-folder", $out, "--export-tabs", "Internal:All", "--overwrite")
+$base = @("--headless", "--output-folder", $out, "--export-tabs", "Internal:All", "--overwrite")
 if ($Mode -eq "full") {
-  $sfArgs = @("--crawl", $Site) + $sfArgs
+  $base = @("--crawl", $Site) + $base
 } else {
   $list = Join-Path $out "urls.txt"
   Invoke-WebRequest -Uri "$Base/urls" -Headers $Headers -OutFile $list -UseBasicParsing
   Write-Host "[Sokan] Important URLs: $((Get-Content $list).Count)"
-  $sfArgs = @("--crawl-list", $list) + $sfArgs
+  $base = @("--crawl-list", $list) + $base
 }
-if ($Config) { $sfArgs += @("--config", $Config) }
+if ($Config) { $base += @("--config", $Config) }
+# Extra exports: every internal link with its position (body / menu / footer / sidebar) and the redirects report.
+# Names differ between SEO Spider versions, so older names are tried when a version rejects the new ones.
+$extras = @(
+  @("--bulk-export", "Links:All Inlinks", "--save-report", "Redirects:All Redirects"),
+  @("--bulk-export", "All Inlinks", "--save-report", "Redirect & Canonical Chains"),
+  @()
+)
 Send-Ping "crawling"
-Write-Host "[Sokan] Crawling ($Mode) ..."
-& $SpiderPath @sfArgs
 $csv = Join-Path $out "internal_all.csv"
+foreach ($ex in $extras) {
+  Write-Host "[Sokan] Crawling ($Mode) $($ex -join ' ') ..."
+  $sfArgs = $base + $ex
+  & $SpiderPath @sfArgs
+  if (Test-Path $csv) { break }
+  Write-Warning "SEO Spider did not produce internal_all.csv with these export names; trying the next set."
+}
 if (-not (Test-Path $csv)) { Send-Ping "failed" "internal_all.csv was not produced"; throw "internal_all.csv was not produced in $out" }
 Write-Host "[Sokan] CSV header: $((Get-Content $csv -TotalCount 1).Substring(0, [Math]::Min(200, (Get-Content $csv -TotalCount 1).Length)))"
-Write-Host "[Sokan] Uploading ..."
-$response = & curl.exe -sS -X POST "$Base" -H "X-SAP-Key: $Key" -F "file=@$csv;type=text/csv" -F "agent=sokan-sf-agent.ps1" -F "start_url=$Site"
+Write-Host "[Sokan] Uploading the crawl ..."
+$response = & curl.exe -sS -X POST "$Base" -H "X-SAP-Key: $Key" -F "file=@$csv;type=text/csv" -F "agent=sokan-sf-agent.ps1" -F "start_url=$Site" -F "mode=$Mode"
 Write-Host $response
+
+# All Inlinks can be millions of rows: keep body (Content) links and every link that is not 200, compress, upload.
+$filterSrc = @'
+using System; using System.IO; using System.IO.Compression; using System.Text; using System.Collections.Generic; using Microsoft.VisualBasic.FileIO;
+public static class SokanLinks {
+  static string Q(string s) { return "\"" + (s ?? "").Replace("\"", "\"\"") + "\""; }
+  static string At(string[] f, int i) { return i >= 0 && i < f.Length ? f[i] : ""; }
+  public static long Filter(string inPath, string outPath) {
+    long kept = 0, seen = 0;
+    using (TextFieldParser p = new TextFieldParser(inPath, Encoding.UTF8)) {
+      p.TextFieldType = FieldType.Delimited; p.SetDelimiters(","); p.HasFieldsEnclosedInQuotes = true;
+      string[] h = p.ReadFields();
+      if (h != null && h.Length < 3 && !p.EndOfData) { h = p.ReadFields(); }
+      int iType = Array.IndexOf(h, "Type"), iSrc = Array.IndexOf(h, "Source"), iDst = Array.IndexOf(h, "Destination");
+      int iAnc = Array.IndexOf(h, "Anchor"), iAlt = Array.IndexOf(h, "Alt Text"), iCode = Array.IndexOf(h, "Status Code");
+      int iFol = Array.IndexOf(h, "Follow"), iPos = Array.IndexOf(h, "Link Position");
+      if (iSrc < 0 || iDst < 0) { throw new Exception("Source / Destination columns not found"); }
+      int[] keep = new int[] { iType, iSrc, iDst, iAnc, iAlt, iCode, iFol, iPos };
+      Dictionary<string, int> nav = new Dictionary<string, int>();
+      using (FileStream fs = File.Create(outPath))
+      using (GZipStream gz = new GZipStream(fs, CompressionMode.Compress))
+      using (StreamWriter w = new StreamWriter(gz, new UTF8Encoding(false))) {
+        w.WriteLine("\"Type\",\"Source\",\"Destination\",\"Anchor\",\"Alt Text\",\"Status Code\",\"Follow\",\"Link Position\"");
+        while (!p.EndOfData) {
+          string[] f;
+          try { f = p.ReadFields(); } catch (MalformedLineException) { continue; }
+          if (f == null) { continue; }
+          seen++;
+          if (seen % 500000 == 0) { Console.WriteLine("[Sokan] links read: " + seen + ", kept: " + kept); }
+          string type = iType >= 0 ? At(f, iType) : "Hyperlink";
+          string code = At(f, iCode), pos = At(f, iPos);
+          bool body = iPos < 0 || pos == "" || pos.Equals("Content", StringComparison.OrdinalIgnoreCase);
+          bool problem = code != "" && code != "200";
+          bool link = type.Equals("Hyperlink", StringComparison.OrdinalIgnoreCase) || type.Equals("AHREF", StringComparison.OrdinalIgnoreCase);
+          bool img = type.Equals("Image", StringComparison.OrdinalIgnoreCase) || type.Equals("IMG", StringComparison.OrdinalIgnoreCase);
+          if (link && !body && !problem) {
+            string d = At(f, iDst); int c; nav.TryGetValue(d, out c); nav[d] = c + 1;
+            continue;
+          }
+          if (!((link && (body || problem)) || (img && problem))) { continue; }
+          StringBuilder line = new StringBuilder();
+          for (int k = 0; k < keep.Length; k++) { if (k > 0) { line.Append(','); } line.Append(Q(At(f, keep[k]))); }
+          w.WriteLine(line.ToString());
+          kept++;
+        }
+        // Menu / header / footer / sidebar links that work: one summary row per page.
+        foreach (KeyValuePair<string, int> kv in nav) { w.WriteLine("\"NavCount\",\"\"," + Q(kv.Key) + "," + Q(kv.Value.ToString()) + ",\"\",\"200\",\"true\",\"Navigation\""); }
+      }
+    }
+    return kept;
+  }
+}
+'@
+$extraFiles = Get-ChildItem -Path $out -Filter *.csv -Recurse | Where-Object { $_.Name -ne "internal_all.csv" -and ($_.Name -match "inlink|redirect") }
+foreach ($f in $extraFiles) {
+  try {
+    if ($f.Name -match "inlink") {
+      Write-Host "[Sokan] Filtering $($f.Name) ($([Math]::Round($f.Length / 1MB, 1)) MB) ..."
+      if (-not ("SokanLinks" -as [type])) { Add-Type -TypeDefinition $filterSrc -ReferencedAssemblies Microsoft.VisualBasic }
+      $gzPath = $f.FullName + ".sokan.gz"
+      $kept = [SokanLinks]::Filter($f.FullName, $gzPath)
+      Write-Host "[Sokan] Kept $kept links (body links + links that are not 200)."
+    } else {
+      $gzPath = $f.FullName + ".gz"
+      $in = [IO.File]::OpenRead($f.FullName); $o = [IO.File]::Create($gzPath)
+      $z = New-Object IO.Compression.GZipStream($o, [IO.Compression.CompressionMode]::Compress)
+      $in.CopyTo($z); $z.Dispose(); $o.Dispose(); $in.Dispose()
+    }
+    Write-Host "[Sokan] Uploading $($f.Name) ..."
+    $r = & curl.exe -sS -X POST "$Base/extra" -H "X-SAP-Key: $Key" -F "file=@$gzPath;type=application/gzip" -F "mode=$Mode"
+    Write-Host $r
+  } catch { Write-Warning "Could not send $($f.Name): $($_.Exception.Message)" }
+}
+if (-not $extraFiles) { Write-Warning "No All Inlinks / redirects export was produced; Sokan works with internal_all.csv only." }
 Remove-Item -Recurse -Force $out
 PS1
 		);
@@ -224,15 +310,62 @@ else
 fi
 [[ -n "$CONFIG" ]] && ARGS+=(--config "$CONFIG")
 ping_sokan crawling
-echo "[Sokan] Crawling ($MODE) ..."
-"$SPIDER" "${ARGS[@]}" || echo "[Sokan] SEO Spider exited with $?" >&2
 CSV="$OUT/internal_all.csv"
+# Extra exports (links with position + redirects report); older SEO Spider versions use older names.
+for EXTRA in "Links:All Inlinks|Redirects:All Redirects" "All Inlinks|Redirect & Canonical Chains" ""; do
+  EX=()
+  [[ -n "$EXTRA" ]] && EX=(--bulk-export "${EXTRA%%|*}" --save-report "${EXTRA##*|}")
+  echo "[Sokan] Crawling ($MODE) ${EX[*]:-} ..."
+  "$SPIDER" "${ARGS[@]}" ${EX[@]+"${EX[@]}"} || echo "[Sokan] SEO Spider exited with $?" >&2
+  [[ -f "$CSV" ]] && break
+done
 [[ -f "$CSV" ]] || { ping_sokan failed "internal_all.csv was not produced"; echo "internal_all.csv was not produced" >&2; exit 1; }
 echo "[Sokan] CSV header: $(head -c 200 "$CSV" | head -1)"
 gzip -c "$CSV" > "$OUT/internal_all.csv.gz"
-echo "[Sokan] Uploading ..."
-curl -sS -X POST "$BASE" -H "X-SAP-Key: $KEY" -F "file=@$OUT/internal_all.csv.gz" -F "agent=sokan-sf-agent.sh" -F "start_url=$SITE"
+echo "[Sokan] Uploading the crawl ..."
+curl -sS -X POST "$BASE" -H "X-SAP-Key: $KEY" -F "file=@$OUT/internal_all.csv.gz" -F "agent=sokan-sf-agent.sh" -F "start_url=$SITE" -F "mode=$MODE"
 echo
+while IFS= read -r -d '' F; do
+  NAME="$(basename "$F")"
+  [[ "$NAME" == "internal_all.csv" ]] && continue
+  if [[ "$NAME" == *nlink* ]] && command -v python3 >/dev/null 2>&1; then
+    echo "[Sokan] Filtering $NAME (body links + links that are not 200) ..."
+    python3 - "$F" "$F.sokan.gz" <<'PY'
+import csv, gzip, sys
+csv.field_size_limit(10**8)
+src, dst = sys.argv[1], sys.argv[2]
+cols = ["Type", "Source", "Destination", "Anchor", "Alt Text", "Status Code", "Follow", "Link Position"]
+with open(src, newline="", encoding="utf-8-sig", errors="replace") as fi, gzip.open(dst, "wt", newline="", encoding="utf-8") as fo:
+    r = csv.reader(fi)
+    h = next(r)
+    if len(h) < 3:
+        h = next(r)
+    ix = {c: (h.index(c) if c in h else -1) for c in cols}
+    w = csv.writer(fo, quoting=csv.QUOTE_ALL)
+    w.writerow(cols)
+    kept = 0
+    nav = {}
+    for f in r:
+        at = lambda c: f[ix[c]] if 0 <= ix[c] < len(f) else ""
+        t, code, pos = (at("Type") or "Hyperlink").lower(), at("Status Code"), at("Link Position")
+        body = ix["Link Position"] < 0 or pos == "" or pos.lower() == "content"
+        problem = code not in ("", "200")
+        if t in ("hyperlink", "ahref") and not body and not problem:
+            nav[at("Destination")] = nav.get(at("Destination"), 0) + 1
+        elif (t in ("hyperlink", "ahref") and (body or problem)) or (t in ("image", "img") and problem):
+            w.writerow([at(c) for c in cols]); kept += 1
+    for d, n in nav.items():
+        w.writerow(["NavCount", "", d, str(n), "", "200", "true", "Navigation"])
+print("[Sokan] Kept %d links." % kept)
+PY
+    UP="$F.sokan.gz"
+  else
+    gzip -c "$F" > "$F.gz"; UP="$F.gz"
+  fi
+  echo "[Sokan] Uploading $NAME ..."
+  curl -sS -X POST "$BASE/extra" -H "X-SAP-Key: $KEY" -F "file=@$UP" -F "mode=$MODE" || echo "[Sokan] Could not send $NAME" >&2
+  echo
+done < <(find "$OUT" -name '*.csv' \( -iname '*inlink*' -o -iname '*redirect*' \) -print0)
 SH
 	);
 }
@@ -287,6 +420,22 @@ add_action( 'rest_api_init', function () {
 			);
 			sap_sf_save( $p['id'], array( 'ping' => $ping ) );
 			return array( 'ok' => true, 'message' => 'Sokan received the ping.' );
+		},
+	) );
+	// Agent → Sokan: All Inlinks export / redirects report (kind detected from the columns).
+	register_rest_route( $ns, '/crawl/(?P<project>\d+)/extra', array(
+		'methods'             => 'POST',
+		'permission_callback' => 'sap_rest_key_permission',
+		'callback'            => function ( WP_REST_Request $req ) {
+			$files = $req->get_file_params();
+			if ( empty( $files['file']['tmp_name'] ) ) {
+				return new WP_Error( 'sap_empty', 'No file was sent (field «file»).', array( 'status' => 400 ) );
+			}
+			$r = sap_sf_ingest_file( (int) $req['project'], $files['file']['tmp_name'], (string) $files['file']['name'], 'agent', array( 'mode' => sanitize_key( (string) $req->get_param( 'mode' ) ) ) );
+			if ( is_wp_error( $r ) ) {
+				return new WP_Error( $r->get_error_code(), $r->get_error_message(), array( 'status' => 400 ) );
+			}
+			return array( 'ok' => true, 'kind' => $r['kind'], 'rows' => $r['count'], 'message' => 'Sokan received ' . $r['kind'] . ': ' . $r['count'] . ' rows' );
 		},
 	) );
 	// Agent → Sokan: the important URLs to crawl in list mode (plain text, one per line).
