@@ -1886,3 +1886,4 @@ body.sap-modal-open { overflow: hidden; }
 .sap-team-url code { font-size: 14px; cursor: pointer; word-break: break-all; background: var(--card); padding: 6px 10px; border-radius: 8px; }
 .sap-member-acts { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 4px 0 8px; }
 .sap-member-acts form { margin: 0; }
+.sap-auto-verify { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 6px 0 0 !important; }

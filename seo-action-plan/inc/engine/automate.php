@@ -171,13 +171,74 @@ function sap_auto_apply( $project, $token, $edits = array(), $source = 'user' ) 
 	if ( ! empty( $pv['finding_id'] ) && ! empty( $pv['finding_done'] ) ) {
 		sap_finding_set_status( (int) $pv['finding_id'], 'done', $task_id );
 	}
-	return array( 'msg' => $pv['done_msg'] ?? 'روی سایت اعمال شد و در لاگ اقدامات ثبت شد؛ از بخش «تغییرات اعمال‌شده» قابل برگشت است.', 'entry' => $entry );
+	$msg    = $pv['done_msg'] ?? 'روی سایت اعمال شد و در لاگ اقدامات ثبت شد؛ از بخش «تغییرات اعمال‌شده» قابل برگشت است.';
+	$purged = (array) ( $res['purged'] ?? array() );
+	$msg   .= $purged ? ' درخواست پاک کردن کش این صفحه به ' . implode( '، ', $purged ) . ' داده شد.' : '';
+	// Structured data: check the page as Google gets it (a cached copy hides the change).
+	if ( 'schema' === $pv['type'] && 'autopilot' !== $source ) {
+		$v = sap_schema_verify( $project, $pv['url'], array_column( (array) $changes['schema'], '@type' ) );
+		sap_auto_log_set( $project['id'], $ref, array( 'verify' => $v ) );
+		$msg .= ' ' . $v['msg'];
+	}
+	return array( 'msg' => $msg, 'entry' => $entry );
+}
+
+/**
+ * Update fields of one log entry.
+ */
+function sap_auto_log_set( $project_id, $ref, $fields ) {
+	$log = sap_auto_log( $project_id, '', 600 );
+	foreach ( $log as $i => $e ) {
+		if ( $e['ref'] === $ref ) {
+			$log[ $i ] = array_merge( $e, $fields );
+			sap_auto_log_save( $project_id, $log );
+			return;
+		}
+	}
+}
+
+/**
+ * Is our structured data in the page that visitors and Google get? Compares
+ * the normal page (as Googlebot smartphone) with a cache-bypassing request.
+ *
+ * @return array {state: live|cached|missing|unknown, msg, at}
+ */
+function sap_schema_verify( $project, $url, $types = array() ) {
+	$ua   = 'Mozilla/5.0 (Linux; Android 6.0.1; Nexus 5X Build/MMB29P) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Mobile Safari/537.36 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)';
+	$get  = function ( $u ) use ( $ua ) {
+		$r = sap_http( $u, array( 'timeout' => 20, 'redirection' => 3, 'headers' => array( 'User-Agent' => $ua, 'Accept' => 'text/html' ) ) );
+		return is_wp_error( $r ) || (int) wp_remote_retrieve_response_code( $r ) >= 400 ? null : (string) wp_remote_retrieve_body( $r );
+	};
+	$has  = function ( $html ) use ( $types ) {
+		if ( null === $html || false === strpos( $html, 'sokan-schema' ) ) {
+			return false;
+		}
+		foreach ( $types as $t ) {
+			if ( false === strpos( $html, '"@type":"' . $t . '"' ) ) {
+				return false;
+			}
+		}
+		return true;
+	};
+	$live  = $get( $url );
+	$fresh = $has( $live ) ? null : $get( add_query_arg( 'sokan_nc', time(), $url ) );
+	if ( $has( $live ) ) {
+		$out = array( 'state' => 'live', 'msg' => 'اسکیما در نسخه‌ای که گوگل دریافت می‌کند دیده شد ✓' );
+	} elseif ( null === $live && null === $fresh ) {
+		$out = array( 'state' => 'unknown', 'msg' => 'صفحه برای بررسی در دسترس نبود (فایروال یا CDN درخواست را رد کرد)؛ با ابزار Rich Results گوگل بررسی کنید.' );
+	} elseif ( $has( $fresh ) ) {
+		$out = array( 'state' => 'cached', 'msg' => 'هشدار: اسکیما روی سایت ثبت شده ولی صفحه هنوز از کش قدیمی به گوگل داده می‌شود. کش این صفحه را در افزونه کش (LiteSpeed، WP Rocket و…) یا CDN (آروان، کلادفلر) پاک کنید، بعد «بررسی دوباره» را بزنید.' );
+	} else {
+		$out = array( 'state' => 'missing', 'msg' => 'هشدار: اسکیما در خروجی صفحه دیده نشد (حتی بدون کش). قالب ممکن است wp_head را صدا نزند یا افزونه‌ای خروجی را حذف کند.' );
+	}
+	$out['at'] = sap_now();
+	return $out;
 }
 
 /**
  * Roll an applied change back.
  */
-function sap_auto_rollback( $project, $ref ) {
+function sap_auto_rollback( $project, $ref, $force = false ) {
 	$log = sap_auto_log( $project['id'], '', 600 );
 	foreach ( $log as $i => $e ) {
 		if ( $e['ref'] !== $ref ) {
@@ -186,8 +247,18 @@ function sap_auto_rollback( $project, $ref ) {
 		if ( 'live' !== $e['status'] ) {
 			return new WP_Error( 'sap_rb', 'این تغییر قبلاً برگردانده شده.' );
 		}
-		$res = sap_site_request( $project, 'POST', 'rollback', array( 'kind' => $e['kind'], 'id' => $e['id'], 'ref' => $ref ), 60 );
+		// A newer change of the same kind on the same page sits on top of this one.
+		foreach ( array_slice( $log, 0, $i ) as $newer ) {
+			if ( 'live' === $newer['status'] && $newer['type'] === $e['type'] && $newer['kind'] === $e['kind'] && (int) $newer['id'] === (int) $e['id'] && in_array( $e['type'], array( 'schema', 'attributes', 'link', 'alts' ), true ) ) {
+				return new WP_Error( 'sap_rb_order', 'روی همین صفحه تغییر جدیدتری از همین نوع اعمال شده («' . $newer['label'] . '»)؛ اول آن را برگردانید.', array( 'status' => 409 ) );
+			}
+		}
+		$res = sap_site_request( $project, 'POST', 'rollback', array( 'kind' => $e['kind'], 'id' => $e['id'], 'ref' => $ref, 'force' => $force ? 1 : 0 ), 60 );
 		if ( is_wp_error( $res ) ) {
+			// 409 from the site: edited since — the person can confirm and force.
+			if ( false !== strpos( $res->get_error_code(), '409' ) ) {
+				return new WP_Error( 'sap_rb_changed', $res->get_error_message() . ' اگر مطمئنید، «برگرداندن به‌هرحال» را تأیید کنید.', array( 'status' => 409, 'can_force' => true ) );
+			}
 			return $res;
 		}
 		$log[ $i ]['status'] = 'rolled_back';
@@ -244,13 +315,16 @@ function sap_link_text_nodes( $html ) {
  * @return array|null {offset, length} in bytes of the original text
  */
 function sap_link_find( $text, $phrase ) {
-	$chars = preg_split( '//u', $text, -1, PREG_SPLIT_NO_EMPTY );
+	// One unit per character, and an HTML entity (&zwnj; &nbsp; &#8204;) is one unit too.
+	preg_match_all( '/&(?:[a-z][a-z0-9]*|#\d+|#x[0-9a-f]+);|./isu', $text, $um );
+	$chars = $um[0];
 	$norm  = '';
 	$map   = array(); // Normalized char index → original char index.
 	$prev  = '';
 	foreach ( $chars as $i => $c ) {
-		$n = sap_norm_text( $c );
-		if ( '' === trim( $c ) || "\u{200C}" === $c ) {
+		$d = strlen( $c ) > 1 && '&' === $c[0] ? html_entity_decode( $c, ENT_QUOTES | ENT_HTML5, 'UTF-8' ) : $c;
+		$n = sap_norm_text( $d );
+		if ( '' === trim( $d, " \t\n\r\0\x0B\u{00A0}" ) || "\u{200C}" === $d ) {
 			$n = ' ';
 		}
 		if ( ' ' === $n && ' ' === $prev ) {
@@ -408,7 +482,22 @@ function sap_link_insert_plan( $project, $source, $target, $anchor, $finding_id 
 		$marked  = substr( $ns, 0, $in['offset'] ) . '[[' . substr( $ns, $in['offset'], $in['length'] ) . ']]' . substr( $ns, $in['offset'] + $in['length'] );
 		if ( 'rewrite' === ( $res['mode'] ?? '' ) ) {
 			$old = trim( (string) $res['sentence'] );
-			$pos = '' !== $old ? strpos( $n['text'], $old ) : false; // Not verbatim (or entities inside): append instead.
+			$pos = false;
+			if ( '' !== $old ) {
+				$pos = strpos( $n['text'], $old );
+				if ( false === $pos ) {
+					// The model saw the text with collapsed spaces and decoded entities: match word by word.
+					$words = preg_split( '/[\s\x{200C}\x{00A0}]+/u', $old, -1, PREG_SPLIT_NO_EMPTY );
+					$gap   = '(?:\s|&nbsp;|&zwnj;|&#8204;|&#160;|\x{200C}|\x{00A0})+';
+					$re    = '/' . implode( $gap, array_map( function ( $w ) {
+						return preg_quote( htmlspecialchars( $w, ENT_NOQUOTES, 'UTF-8', false ), '/' );
+					}, $words ) ) . '/u';
+					if ( $words && preg_match( $re, $n['text'], $fm, PREG_OFFSET_CAPTURE ) ) {
+						$pos = $fm[0][1];
+						$old = $fm[0][0];
+					}
+				}
+			}
 			if ( false !== $pos ) {
 				$abs    = $n['start'] + $pos;
 				$new    = substr( $html, 0, $abs ) . $ns_html . substr( $html, $abs + strlen( $old ) );
@@ -630,7 +719,7 @@ function sap_schema_plan( $project, $url ) {
 	$page   = $obj['url'] ?: $url;
 	$nature = sap_schema_nature( $obj );
 	// Types already on the live page from other plugins (ours are replaced as a whole).
-	$live = sap_page_fetch( $page );
+	$live = sap_page_fetch( add_query_arg( 'sokan_nc', time(), $page ) ); // Bypass page caches: the real current output.
 	$ours = array();
 	foreach ( (array) ( $obj['sokan_schema'] ?? array() ) as $j ) {
 		$x = json_decode( (string) $j, true );
@@ -687,11 +776,18 @@ function sap_schema_plan( $project, $url ) {
 		$p     = $d['product'];
 		$code  = strtoupper( (string) ( $p['currency_code'] ?? '' ) );
 		$price = (float) $p['price'];
-		// Toman is not an ISO currency: Google needs Rial (×10).
-		if ( 'IRT' === $code || ( '' === $code && false !== mb_strpos( (string) $p['currency'], 'تومان' ) ) ) {
-			$price *= 10;
-			$code   = 'IRR';
+		// Toman and thousand-Toman/Rial (Persian WooCommerce) are not ISO currencies: Google needs Rial.
+		$mult = array( 'IRT' => 10, 'IRHT' => 10000, 'IRHR' => 1000, 'IRR' => 1 );
+		if ( '' === $code && false !== mb_strpos( (string) $p['currency'], 'تومان' ) ) {
+			$code = false !== mb_strpos( (string) $p['currency'], 'هزار' ) ? 'IRHT' : 'IRT';
 		}
+		$k = $mult[ $code ] ?? 1;
+		if ( isset( $mult[ $code ] ) ) {
+			$code = 'IRR';
+		}
+		$price *= $k;
+		$low    = (float) ( $p['price_min'] ?? 0 ) * $k;
+		$high   = (float) ( $p['price_max'] ?? 0 ) * $k;
 		$avail = array( 'instock' => 'InStock', 'outofstock' => 'OutOfStock', 'onbackorder' => 'BackOrder' );
 		$block = array(
 			'@type'       => 'Product',
@@ -718,6 +814,14 @@ function sap_schema_plan( $project, $url ) {
 				'priceValidUntil' => gmdate( 'Y-12-31', strtotime( '+1 year' ) ),
 				'seller'          => $org ?: null,
 			);
+			// Variable product with different prices: a price range.
+			if ( $low > 0 && $high > $low ) {
+				$block['offers']['@type']     = 'AggregateOffer';
+				$block['offers']['lowPrice']  = (string) round( $low );
+				$block['offers']['highPrice'] = (string) round( $high );
+				$block['offers']['offerCount'] = max( 2, (int) ( $p['variations'] ?? 2 ) );
+				unset( $block['offers']['price'], $block['offers']['priceValidUntil'] );
+			}
 			$block['offers'] = array_filter( $block['offers'] );
 		}
 		if ( (int) $p['reviews'] > 0 && (float) $p['rating'] > 0 ) {
@@ -910,6 +1014,7 @@ function sap_alt_plan( $project, $url, $all = false ) {
 		$weak   = sap_alt_weak( $im['alt'], $im['src'] );
 		$list[] = array(
 			'i'       => $n++,
+			'id'      => (int) ( $im['id'] ?? 0 ),
 			'src'     => $im['src'],
 			'where'   => $im['where'],
 			'file'    => $k,
@@ -969,7 +1074,7 @@ function sap_alt_plan( $project, $url, $all = false ) {
 	}
 	$name    = $title ?: sap_short_url( $url, 50 );
 	$changes = array_values( array_map( function ( $x ) {
-		return array( 'src' => $x['src'], 'alt' => $x['new'] );
+		return array( 'src' => $x['src'], 'id' => (int) $x['id'], 'alt' => $x['new'] );
 	}, array_filter( $list, function ( $x ) {
 		return $x['change'];
 	} ) ) );
@@ -1264,10 +1369,17 @@ function sap_attr_edits( $project, $token, $picks ) {
  * Products of a category from the inventory (with their attribute count).
  */
 function sap_attr_products( $project, $cat_name, $limit = 300 ) {
+	// Attributes applied by Sokan since the last inventory sync (the inventory count is older).
+	$done = array();
+	foreach ( sap_auto_log( $project['id'], 'attributes', 600 ) as $e ) {
+		if ( 'live' === $e['status'] && ! isset( $done[ sap_norm_url( $e['url'] ) ] ) ) {
+			$done[ sap_norm_url( $e['url'] ) ] = $e['at'];
+		}
+	}
 	$rows = array();
-	foreach ( sap_site_inventory( $project['id'] ) as $it ) {
+	foreach ( sap_site_inventory( $project['id'] ) as $k => $it ) {
 		if ( 'product' === $it['ctype'] && ! $it['redirect'] && in_array( $cat_name, (array) ( $it['product']['cats'] ?? array() ), true ) ) {
-			$rows[] = array( 'url' => $it['url'], 'title' => $it['title'], 'attrs' => (int) ( $it['product']['attrs'] ?? 0 ), 'thumb' => $it['thumb'], 'short' => (int) ( $it['product']['short'] ?? 0 ) );
+			$rows[] = array( 'url' => $it['url'], 'title' => $it['title'], 'attrs' => (int) ( $it['product']['attrs'] ?? 0 ), 'thumb' => $it['thumb'], 'short' => (int) ( $it['product']['short'] ?? 0 ), 'done' => $done[ $k ] ?? '' );
 		}
 	}
 	usort( $rows, function ( $a, $b ) {

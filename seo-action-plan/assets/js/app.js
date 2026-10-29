@@ -1630,7 +1630,19 @@
 			if (rb) {
 				if (!window.confirm('این تغییر روی سایت به حالت قبل برگردد؟')) { return; }
 				rb.disabled = true;
-				post('auto/' + rb.getAttribute('data-project') + '/rollback', { ref: rb.getAttribute('data-sap-auto-rollback') }).then(function (res) { toast(res.msg); setTimeout(function () { location.reload(); }, 800); }).catch(function (e) { toast(e.message, true); rb.disabled = false; });
+				var doRb = function (force) {
+					return post('auto/' + rb.getAttribute('data-project') + '/rollback', { ref: rb.getAttribute('data-sap-auto-rollback'), force: force ? 1 : 0 }).then(function (res) { toast(res.msg); setTimeout(function () { location.reload(); }, 800); });
+				};
+				doRb(false).catch(function (e) {
+					// Edited on the site since: only with an explicit second confirmation.
+					if (e.code === 'sap_rb_changed' && window.confirm(e.message + '\n\nبرگرداندن به‌هرحال؟')) { return doRb(true); }
+					throw e;
+				}).catch(function (e) { toast(e.message, true); rb.disabled = false; });
+			}
+			var vf = ev.target.closest('[data-sap-auto-verify]');
+			if (vf) {
+				vf.disabled = true; vf.classList.add('is-loading');
+				post('auto/' + vf.getAttribute('data-project') + '/verify', { ref: vf.getAttribute('data-sap-auto-verify') }).then(function (res) { toast(res.msg, res.state !== 'live'); setTimeout(function () { location.reload(); }, 1600); }).catch(function (e) { toast(e.message, true); vf.disabled = false; vf.classList.remove('is-loading'); });
 			}
 		});
 		document.addEventListener('keydown', function (ev) { if ('Escape' === ev.key && !modal.hidden) { close(); } });

@@ -488,10 +488,16 @@ add_action( 'rest_api_init', function () {
 		$pv    = sap_auto_preview_get( $project['id'], $token );
 		if ( $pv && 'alts' === $pv['type'] && is_array( $req->get_param( 'alts' ) ) ) {
 			$edits['alts'] = array();
+			$ids = array();
+			foreach ( (array) $pv['changes']['alts'] as $pa ) {
+				$ids[ esc_url_raw( (string) $pa['src'] ) ] = (int) ( $pa['id'] ?? 0 );
+			}
 			foreach ( $req->get_param( 'alts' ) as $a ) {
 				$alt = trim( sanitize_text_field( (string) ( $a['alt'] ?? '' ) ) );
-				if ( '' !== $alt && ! empty( $a['src'] ) ) {
-					$edits['alts'][] = array( 'src' => esc_url_raw( (string) $a['src'] ), 'alt' => mb_substr( $alt, 0, 160 ) );
+				$src = esc_url_raw( (string) ( $a['src'] ?? '' ) );
+				// Only images of the preview (with the attachment id Sokan read from WordPress).
+				if ( '' !== $alt && isset( $ids[ $src ] ) ) {
+					$edits['alts'][] = array( 'src' => $src, 'id' => (int) $ids[ $src ], 'alt' => mb_substr( $alt, 0, 160 ) );
 				}
 			}
 			if ( ! $edits['alts'] ) {
@@ -516,7 +522,22 @@ add_action( 'rest_api_init', function () {
 		return sap_auto_apply( $project, $token, $edits );
 	} );
 	$auto( 'rollback', function ( $project, $req ) {
-		return sap_auto_rollback( $project, sanitize_key( (string) $req->get_param( 'ref' ) ) );
+		return sap_auto_rollback( $project, sanitize_key( (string) $req->get_param( 'ref' ) ), rest_sanitize_boolean( $req->get_param( 'force' ) ) );
+	} );
+	$auto( 'verify', function ( $project, $req ) {
+		$ref = sanitize_key( (string) $req->get_param( 'ref' ) );
+		foreach ( sap_auto_log( $project['id'], 'schema', 600 ) as $e ) {
+			if ( $e['ref'] === $ref ) {
+				$types = array();
+				if ( preg_match( '/اسکیمای (.+?) برای/u', $e['label'], $m ) ) {
+					$types = array_map( 'trim', explode( '،', $m[1] ) );
+				}
+				$v = sap_schema_verify( $project, $e['url'], $types );
+				sap_auto_log_set( $project['id'], $ref, array( 'verify' => $v ) );
+				return array( 'msg' => $v['msg'], 'state' => $v['state'] );
+			}
+		}
+		return new WP_Error( 'sap_ref', 'این تغییر پیدا نشد.', array( 'status' => 404 ) );
 	} );
 	$auto( 'attr-set', function ( $project, $req ) {
 		return sap_attr_set_save( $project, absint( $req->get_param( 'cat' ) ), sanitize_text_field( (string) $req->get_param( 'cat_name' ) ), (array) $req->get_param( 'attrs' ), rest_sanitize_boolean( $req->get_param( 'sync' ) ) );

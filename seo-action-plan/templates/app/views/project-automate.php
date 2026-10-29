@@ -212,7 +212,7 @@ $pg    = max( 1, (int) ( $_GET['pg'] ?? 1 ) ); // phpcs:ignore WordPress.Securit
 	$set   = $cat ? ( $sets[ $cid ] ?? null ) : null;
 	$prods = $cat ? sap_attr_products( $project, $cat['name'], 5000 ) : array();
 	$empty = array_values( array_filter( $prods, function ( $r ) {
-		return 0 === $r['attrs'];
+		return 0 === $r['attrs'] && '' === $r['done'];
 	} ) );
 	$npg   = max( 1, (int) ceil( count( $prods ) / 20 ) );
 	$cur   = min( $pg, $npg );
@@ -276,7 +276,11 @@ $pg    = max( 1, (int) ( $_GET['pg'] ?? 1 ) ); // phpcs:ignore WordPress.Securit
 					<li class="has-form">
 						<?php echo $r['thumb'] ? '<img src="' . esc_url( $r['thumb'] ) . '" alt="" loading="lazy">' : '<span class="sap-auto-ph">' . sap_icon( 'tag', 16 ) . '</span>'; // phpcs:ignore ?>
 						<div><b><?php echo esc_html( $r['title'] ); ?></b><?php echo sap_url_tag( $r['url'], 46 ); // phpcs:ignore ?></div>
-						<span class="sap-chip <?php echo $r['attrs'] ? 'is-soft' : 'is-warn'; ?>"><?php echo $r['attrs'] ? esc_html( sap_num( $r['attrs'] ) ) . ' ویژگی' : 'بدون ویژگی'; ?></span>
+						<?php if ( '' !== $r['done'] ) : ?>
+							<span class="sap-chip is-good" title="<?php echo esc_attr( 'ثبت با سکان: ' . sap_jdate( $r['done'], 'short' ) ); ?>">ویژگی ثبت شد</span>
+						<?php else : ?>
+							<span class="sap-chip <?php echo $r['attrs'] ? 'is-soft' : 'is-warn'; ?>"><?php echo $r['attrs'] ? esc_html( sap_num( $r['attrs'] ) ) . ' ویژگی' : 'بدون ویژگی'; ?></span>
+						<?php endif; ?>
 						<button type="button" class="sap-btn is-soft is-small" data-sap-attr-open <?php disabled( ! $set || ! $set['synced'] ); ?>>تکمیل ویژگی‌ها</button>
 						<form class="sap-attr-desc" data-sap-auto-form="attr" data-project="<?php echo esc_attr( $pid ); ?>" hidden>
 							<input type="hidden" name="url" value="<?php echo esc_attr( $r['url'] ); ?>"><input type="hidden" name="cat" value="<?php echo esc_attr( $cid ); ?>">
@@ -360,6 +364,14 @@ $pg    = max( 1, (int) ( $_GET['pg'] ?? 1 ) ); // phpcs:ignore WordPress.Securit
 						<div>
 							<b><?php echo esc_html( $e['label'] ); ?></b>
 							<p class="sap-muted sap-small"><?php echo esc_html( $t[0] . ' · ' . sap_jdate( $e['at'], 'long' ) . ( $e['user'] ? ' · ' . $e['user'] : '' ) ); ?><?php echo 'live' !== $e['status'] ? ' · برگردانده شد' . ( ! empty( $e['rb_at'] ) ? ' در ' . esc_html( sap_jdate( $e['rb_at'], 'short' ) ) : '' ) : ''; ?></p>
+							<?php if ( 'schema' === $e['type'] && 'live' === $e['status'] ) : ?>
+								<?php $vs = array( 'live' => array( 'گوگل اسکیما را می‌بیند', 'is-good' ), 'cached' => array( 'از کش قدیمی سرو می‌شود', 'is-warn' ), 'missing' => array( 'در خروجی صفحه نیست', 'is-bad' ), 'unknown' => array( 'قابل بررسی نبود', 'is-soft' ) ); ?>
+								<p class="sap-auto-verify">
+									<?php if ( ! empty( $e['verify'] ) ) : ?><span class="sap-chip <?php echo esc_attr( $vs[ $e['verify']['state'] ][1] ?? '' ); ?>" title="<?php echo esc_attr( $e['verify']['msg'] ); ?>"><?php echo esc_html( $vs[ $e['verify']['state'] ][0] ?? '' ); ?> · <?php echo esc_html( sap_jdate( $e['verify']['at'], 'short' ) ); ?></span><?php endif; ?>
+									<button type="button" class="sap-btn is-ghost is-small" data-sap-auto-verify="<?php echo esc_attr( $e['ref'] ); ?>" data-project="<?php echo esc_attr( $pid ); ?>">بررسی دوباره صفحه زنده</button>
+									<a class="sap-btn is-ghost is-small" href="<?php echo esc_url( 'https://search.google.com/test/rich-results?url=' . rawurlencode( $e['url'] ) ); ?>" target="_blank" rel="noopener">Rich Results ↗</a>
+								</p>
+							<?php endif; ?>
 							<details><summary>جزئیات</summary><pre dir="auto"><?php echo esc_html( $e['detail'] ); ?></pre></details>
 						</div>
 						<?php echo sap_url_tag( $e['url'], 34 ); // phpcs:ignore ?>
