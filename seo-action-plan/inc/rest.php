@@ -439,6 +439,19 @@ add_action( 'rest_api_init', function () {
 	) );
 	// A calendar article from a keyword you give.
 	// SERP analysis (resumable: call again while more = true).
+	// One-time password link of a team member (to send yourself when email is not set up).
+	register_rest_route( $ns, '/team/link', array(
+		'methods'             => 'POST',
+		'permission_callback' => 'sap_can',
+		'callback'            => function ( WP_REST_Request $req ) {
+			$u = get_userdata( absint( $req->get_param( 'user_id' ) ) );
+			if ( ! $u || ! sap_is_member_only( $u ) ) {
+				return new WP_Error( 'sap_user', 'لینک تعیین رمز فقط برای اعضای تیم ساخته می‌شود.', array( 'status' => 400 ) );
+			}
+			return array( 'ok' => true, 'link' => sap_member_password_link( $u->ID ), 'panel' => sap_url( 'my' ), 'login' => $u->user_login, 'msg' => 'لینک کپی شد؛ حدود یک روز معتبر است و لینک‌های قبلی را باطل می‌کند.' );
+		},
+	) );
+
 	// Site automation with approval: preview → apply → rollback.
 	$auto = function ( $name, $cb ) use ( $ns, $project_route ) {
 		register_rest_route( $ns, '/auto/(?P<project>\d+)/' . $name, array(

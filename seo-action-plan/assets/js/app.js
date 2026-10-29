@@ -493,6 +493,19 @@
 		});
 	});
 
+	/* ---- Team: one-time password link of a member ---- */
+	document.addEventListener('click', function (ev) {
+		var b = ev.target.closest('[data-sap-team-link]');
+		if (!b) { return; }
+		if (!window.confirm('یک لینک تازه تعیین رمز ساخته شود؟ (لینک‌های قبلی این عضو باطل می‌شوند)')) { return; }
+		b.disabled = true;
+		post('team/link', { user_id: b.getAttribute('data-sap-team-link') }).then(function (res) {
+			var text = 'پنل کارها: ' + res.panel + '\nنام کاربری: ' + res.login + '\nتعیین رمز: ' + res.link;
+			var fallback = function () { window.prompt('این متن را کپی کنید و برای عضو بفرستید:', text); };
+			if (navigator.clipboard && window.isSecureContext) { navigator.clipboard.writeText(text).then(function () { toast(res.msg); }, fallback); } else { fallback(); }
+		}).catch(function (e) { toast(e.message, true); }).then(function () { b.disabled = false; });
+	});
+
 	/* ---- Copy to clipboard ---- */
 	document.querySelectorAll('[data-sap-copy]').forEach(function (el) {
 		el.title = 'کلیک برای کپی';

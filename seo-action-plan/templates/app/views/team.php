@@ -23,6 +23,24 @@ $sms_ok   = 'none' !== sap_setting( 'sms_provider', 'none' );
 	</div>
 </header>
 
+<section class="sap-panel sap-team-access">
+	<div>
+		<h2><?php echo sap_icon( 'users' ); // phpcs:ignore ?>اعضا چطور وارد پنل خودشان می‌شوند؟</h2>
+		<ol class="sap-small">
+			<li>عضو را پایین همین صفحه اضافه کنید؛ ایمیل دعوت با آدرس پنل، نام کاربری و لینک تعیین رمز برایش می‌رود (اگر موبایل دارد، پیامک دعوت هم).</li>
+			<li>اگر ایمیل هنوز تنظیم نشده (مثلاً روی لوکال‌هاست)، یا در فرم یک رمز برایش بگذارید، یا دکمه «لینک تعیین رمز» را بزنید و لینک را خودتان برایش بفرستید.</li>
+			<li>عضو از آدرس زیر وارد می‌شود و فقط «کارهای من» را می‌بیند: کارهای همه پروژه‌هایش با برچسب پروژه، وضعیت، هدف و گزارش انجام. ورود به پیشخوان وردپرس هم او را به همین پنل برمی‌گرداند.</li>
+		</ol>
+	</div>
+	<div class="sap-team-url">
+		<span>آدرس پنل اعضا</span>
+		<code dir="ltr" data-sap-copy><?php echo esc_html( sap_url( 'my' ) ); ?></code>
+		<small class="sap-muted">کلیک برای کپی</small>
+	</div>
+</section>
+<?php if ( ! sap_setting( 'notify_email', 1 ) || ( '' === sap_setting( 'smtp_host' ) && ! sap_other_smtp_plugin() ) ) : ?>
+	<p class="sap-callout"><?php echo sap_icon( 'alert', 16 ); // phpcs:ignore ?>سرور ایمیل (SMTP) تنظیم نشده؛ روی لوکال‌هاست و بسیاری از هاست‌ها ایمیل دعوت و کارها ارسال نمی‌شود. <a href="<?php echo esc_url( sap_url( 'settings' ) . '#smtp' ); ?>">تنظیم ایمیل</a></p>
+<?php endif; ?>
 <?php if ( ! $sms_ok ) : ?>
 	<p class="sap-callout"><?php echo sap_icon( 'alert', 16 ); // phpcs:ignore ?>درگاه پیامک تنظیم نشده؛ یادآوری‌ها فعلاً فقط با ایمیل ارسال می‌شوند. <a href="<?php echo esc_url( sap_url( 'settings' ) . '#notify' ); ?>">تنظیم پیامک</a></p>
 <?php endif; ?>
@@ -53,6 +71,13 @@ $sms_ok   = 'none' !== sap_setting( 'sms_provider', 'none' );
 			<?php if ( $mine ) : ?>
 				<p class="sap-member-projects"><?php foreach ( $mine as $p ) : ?><span class="sap-chip" style="--c:<?php echo esc_attr( sap_member_color( $p['id'] + 3 ) ); ?>"><i class="sap-dot" style="background:<?php echo esc_attr( sap_member_color( $p['id'] + 3 ) ); ?>"></i><?php echo esc_html( $p['name'] . ' · ' . ( $roles[ sap_project_members( $p['id'] )[ (int) $u->ID ] ] ?? '' ) ); ?></span><?php endforeach; ?></p>
 			<?php endif; ?>
+			<?php if ( sap_is_member_only( $u ) ) : ?>
+				<div class="sap-member-acts">
+					<form method="post" action="<?php echo $post; // phpcs:ignore ?>"><?php sap_form_fields( 'sap_member_invite', array( 'user_id' => $u->ID ) ); ?><button class="sap-btn is-ghost is-small" type="submit"><?php echo sap_icon( 'bell', 13 ); // phpcs:ignore ?>ارسال دوباره دعوت</button></form>
+					<button type="button" class="sap-btn is-ghost is-small" data-sap-team-link="<?php echo esc_attr( $u->ID ); ?>"><?php echo sap_icon( 'link', 13 ); // phpcs:ignore ?>لینک تعیین رمز</button>
+					<span class="sap-muted sap-small">نام کاربری: <b dir="ltr"><?php echo esc_html( get_userdata( $u->ID )->user_login ); ?></b></span>
+				</div>
+			<?php endif; ?>
 			<details class="sap-member-edit">
 				<summary>ویرایش پروفایل و پروژه‌ها</summary>
 				<form method="post" action="<?php echo $post; // phpcs:ignore ?>" class="sap-form">
@@ -62,6 +87,7 @@ $sms_ok   = 'none' !== sap_setting( 'sms_provider', 'none' );
 						<label>سمت<input type="text" name="title" value="<?php echo esc_attr( $m['title'] ); ?>" placeholder="کارشناس محتوا"></label>
 						<label>موبایل<input type="text" name="phone" dir="ltr" value="<?php echo esc_attr( $m['phone'] ); ?>" placeholder="09121234567"></label>
 						<div class="sap-check-col"><label class="sap-check"><input type="checkbox" name="notify_sms" value="1" <?php checked( $m['notify_sms'] ); ?>> پیامک</label><label class="sap-check"><input type="checkbox" name="notify_email" value="1" <?php checked( $m['notify_email'] ); ?>> ایمیل</label></div>
+						<?php if ( sap_is_member_only( $u ) ) : ?><label>رمز عبور جدید (اختیاری)<input type="password" name="password" dir="ltr" minlength="8" autocomplete="new-password" placeholder="خالی = بدون تغییر"></label><?php endif; ?>
 					</div>
 					<p class="sap-label">نقش در پروژه‌ها</p>
 					<div class="sap-member-roles">
@@ -77,7 +103,7 @@ $sms_ok   = 'none' !== sap_setting( 'sms_provider', 'none' );
 	<?php endforeach; ?>
 
 	<article class="sap-member is-add">
-		<header><span class="sap-avatar"><?php echo sap_icon( 'plus', 18 ); // phpcs:ignore ?></span><div><b>افزودن عضو جدید</b><small>کاربر وردپرس با نقش «عضو تیم سئو» ساخته می‌شود و ایمیل تعیین رمز می‌گیرد</small></div></header>
+		<header><span class="sap-avatar"><?php echo sap_icon( 'plus', 18 ); // phpcs:ignore ?></span><div><b>افزودن عضو جدید</b><small>کاربر وردپرس با نقش «عضو تیم سئو» ساخته می‌شود و دعوت (ایمیل و پیامک) می‌گیرد</small></div></header>
 		<form method="post" action="<?php echo $post; // phpcs:ignore ?>" class="sap-form">
 			<?php sap_form_fields( 'sap_member_save', array( 'user_id' => 0 ) ); ?>
 			<div class="sap-grid-2">
@@ -85,6 +111,7 @@ $sms_ok   = 'none' !== sap_setting( 'sms_provider', 'none' );
 				<label>ایمیل<input type="email" name="email" dir="ltr" required></label>
 				<label>موبایل<input type="text" name="phone" dir="ltr" placeholder="09121234567"></label>
 				<label>سمت<input type="text" name="title" placeholder="نویسنده"></label>
+				<label>رمز عبور (اختیاری)<input type="password" name="password" dir="ltr" minlength="8" autocomplete="new-password" placeholder="خالی = لینک تعیین رمز با ایمیل"><small>اگر ایمیل تنظیم نیست، رمز بگذارید و خودتان به عضو بدهید.</small></label>
 			</div>
 			<input type="hidden" name="notify_sms" value="1"><input type="hidden" name="notify_email" value="1">
 			<div class="sap-form-foot"><button class="sap-btn is-primary" type="submit"><?php echo sap_icon( 'plus', 15 ); // phpcs:ignore ?>افزودن به تیم</button></div>

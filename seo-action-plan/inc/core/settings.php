@@ -7,7 +7,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-const SAP_SECRET_KEYS = array( 'google_client_secret', 'google_refresh_token', 'google_service_account', 'seosignal_key', 'anthropic_key', 'ai_gateway_key', 'psi_key', 'sms_key', 'tg_token', 'bale_token', 'serp_key' );
+const SAP_SECRET_KEYS = array( 'google_client_secret', 'google_refresh_token', 'google_service_account', 'seosignal_key', 'anthropic_key', 'ai_gateway_key', 'psi_key', 'sms_key', 'tg_token', 'bale_token', 'serp_key', 'smtp_pass' );
 
 /**
  * Default settings.
@@ -49,6 +49,15 @@ function sap_settings_defaults() {
 		'notify_manager_phone'   => '',
 		'sms_provider'           => 'none', // none|kavenegar|smsir|ippanel|custom.
 		'sms_key'                => '',
+		'sms_user'               => '',
+		'sms_footer'             => '',
+		'smtp_host'              => '',
+		'smtp_port'              => 587,
+		'smtp_secure'            => 'tls',
+		'smtp_user'              => '',
+		'smtp_pass'              => '',
+		'smtp_from'              => '',
+		'smtp_from_name'         => '',
 		'sms_sender'             => '',
 		'sms_custom_url'         => '', // GET/POST URL with {phone} and {text}.
 		'tg_token'               => '',

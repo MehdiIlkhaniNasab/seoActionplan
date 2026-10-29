@@ -155,13 +155,29 @@ $auth  = sap_google_auth_url();
 		<div class="sap-grid-3">
 			<label>ایمیل مدیر پروژه‌ها<input type="email" name="notify_manager_email" dir="ltr" value="<?php echo esc_attr( $s['notify_manager_email'] ); ?>" placeholder="<?php echo esc_attr( get_option( 'admin_email' ) ); ?>"><small>خالی = ایمیل مدیر وردپرس</small></label>
 			<label>موبایل مدیر (برای پیامک هشدار)<input type="text" name="notify_manager_phone" dir="ltr" value="<?php echo esc_attr( $s['notify_manager_phone'] ); ?>" placeholder="09121234567"></label>
-			<div class="sap-check-col"><?php sap_switch( 'notify_email', $s['notify_email'], 'ارسال ایمیل فعال باشد', 'ایمیل از وردپرس ارسال می‌شود؛ برای تحویل مطمئن یک افزونه SMTP فعال کنید.' ); ?></div>
+			<div class="sap-check-col"><?php sap_switch( 'notify_email', $s['notify_email'], 'ارسال ایمیل فعال باشد', 'ایمیل‌های دعوت اعضا، سپردن کار، یادآوری و هشدار.' ); ?></div>
+		</div>
+		<h3 class="sap-h3" id="smtp">ارسال ایمیل (SMTP)</h3>
+		<p class="sap-muted sap-small">روی لوکال‌هاست و بیشتر هاست‌ها ایمیل بدون سرور SMTP ارسال نمی‌شود یا به اسپم می‌رود. اطلاعات یک صندوق ایمیل را وارد کنید (ایمیل هاست/دامنه خودتان، Gmail با «رمز برنامه»، Zoho و…). این تنظیم برای همه ایمیل‌های وردپرس (از جمله بازیابی رمز) استفاده می‌شود؛ اگر افزونه SMTP دیگری فعال دارید، این بخش را خالی بگذارید.<?php echo '' === $s['smtp_host'] && sap_other_smtp_plugin() ? ' <b>یک افزونه SMTP دیگر روی این سایت فعال است.</b>' : ''; ?></p>
+		<div class="sap-grid-3">
+			<label>سرور SMTP<input type="text" name="smtp_host" dir="ltr" value="<?php echo esc_attr( $s['smtp_host'] ); ?>" placeholder="mail.yourdomain.com / smtp.gmail.com"></label>
+			<label>پورت و رمزنگاری<span class="sap-inline"><input type="number" name="smtp_port" dir="ltr" value="<?php echo esc_attr( (int) $s['smtp_port'] ); ?>" style="width:90px"><select name="smtp_secure"><option value="tls" <?php selected( 'tls', $s['smtp_secure'] ); ?>>TLS (۵۸۷)</option><option value="ssl" <?php selected( 'ssl', $s['smtp_secure'] ); ?>>SSL (۴۶۵)</option><option value="none" <?php selected( 'none', $s['smtp_secure'] ); ?>>بدون رمزنگاری</option></select></span></label>
+			<label>نام کاربری (آدرس ایمیل)<input type="text" name="smtp_user" dir="ltr" value="<?php echo esc_attr( $s['smtp_user'] ); ?>" autocomplete="off" placeholder="seo@yourdomain.com"></label>
+			<label>رمز عبور<input type="password" name="smtp_pass" dir="ltr" value="<?php echo esc_attr( sap_mask( $s['smtp_pass'] ) ); ?>" autocomplete="new-password"><small>Gmail: حساب گوگل › امنیت › App passwords (رمز ۱۶ حرفی).</small></label>
+			<label>ایمیل فرستنده<input type="email" name="smtp_from" dir="ltr" value="<?php echo esc_attr( $s['smtp_from'] ); ?>" placeholder="خالی = همان نام کاربری"></label>
+			<label>نام فرستنده<input type="text" name="smtp_from_name" value="<?php echo esc_attr( $s['smtp_from_name'] ); ?>" placeholder="<?php echo esc_attr( get_bloginfo( 'name' ) ); ?>"></label>
 		</div>
 		<h3 class="sap-h3">پیامک</h3>
 		<div class="sap-grid-3">
 			<label>سرویس پیامک<select name="sms_provider"><?php foreach ( sap_sms_providers() as $k => $l ) : ?><option value="<?php echo esc_attr( $k ); ?>" <?php selected( $k, $s['sms_provider'] ); ?>><?php echo esc_html( $l ); ?></option><?php endforeach; ?></select></label>
 			<label>کلید API سرویس پیامک<input type="text" name="sms_key" dir="ltr" value="<?php echo esc_attr( sap_mask( $s['sms_key'] ) ); ?>" autocomplete="off"></label>
 			<label>شماره فرستنده (خط)<input type="text" name="sms_sender" dir="ltr" value="<?php echo esc_attr( $s['sms_sender'] ); ?>" placeholder="10008663"></label>
+		</div>
+		<div class="sap-grid-2">
+			<label>نام کاربری پنل (فقط ملی پیامک، روش نام کاربری)<input type="text" name="sms_user" dir="ltr" value="<?php echo esc_attr( $s['sms_user'] ); ?>" autocomplete="off" placeholder="خالی = روش کلید API کنسول">
+				<small>ملی پیامک دو روش دارد: ۱) کلید API از console.melipayamak.com › وب‌سرویس: فقط «کلید API» و «شماره فرستنده» را پر کنید و این فیلد را خالی بگذارید. ۲) وب‌سرویس قدیمی: نام کاربری پنل اینجا و رمز (یا کلید) در «کلید API». اگر پنل IP مجاز خواست، IP سرور سایت را در پنل ثبت کنید.</small>
+			</label>
+			<label>متن پایانی پیامک (اختیاری)<input type="text" name="sms_footer" value="<?php echo esc_attr( $s['sms_footer'] ); ?>" placeholder="لغو11"><small>اگر خط شما خدماتی نیست و پنل درج «لغو11» را الزام می‌کند، اینجا بنویسید تا به انتهای همه پیامک‌ها اضافه شود.</small></label>
 		</div>
 		<label>آدرس درگاه سفارشی (فقط برای «درگاه سفارشی»)<input type="url" name="sms_custom_url" dir="ltr" value="<?php echo esc_attr( $s['sms_custom_url'] ); ?>" placeholder="https://panel.example/send?to={phone}&amp;text={text}&amp;from={sender}&amp;key={key}"></label>
 		<h3 class="sap-h3">ربات تلگرام و بله</h3>

@@ -100,17 +100,87 @@ function sap_member_create( $data ) {
 		if ( is_wp_error( $uid ) ) {
 			return $uid;
 		}
-		$key = get_password_reset_key( get_userdata( $uid ) );
-		$set = is_wp_error( $key ) ? wp_lostpassword_url() : network_site_url( 'wp-login.php?action=rp&key=' . $key . '&login=' . rawurlencode( $login ), 'login' );
-		sap_notify_email( $email, 'دعوت به تیم سئو در سکان', array(
-			'title'  => 'به تیم سئو خوش آمدید',
-			'intro'  => sprintf( "%s عزیز، شما به تیم سئو در سکان اضافه شدید. کارهایی که به شما سپرده می‌شود در پنل «کارهای من» می‌آید و یادآوری آن‌ها برایتان ارسال می‌شود.\nنام کاربری: %s", sanitize_text_field( (string) ( $data['name'] ?? '' ) ), $login ),
-			'button' => array( 'تعیین رمز عبور و ورود', $set ),
-		) );
+		if ( ! empty( $data['password'] ) ) {
+			wp_set_password( (string) $data['password'], $uid );
+		}
 	}
 	sap_member_update( $uid, $data );
+	// Existing WordPress users already have a password: they get the panel address only.
+	$GLOBALS['sap_last_invite'] = sap_member_invite( $uid, ! $existing && empty( $data['password'] ) );
 	return $uid;
 }
+
+/**
+ * A one-time link to set the password (valid about a day; a new one cancels the old).
+ */
+function sap_member_password_link( $user_id ) {
+	$u   = get_userdata( $user_id );
+	$key = $u ? get_password_reset_key( $u ) : new WP_Error( 'sap_user', '' );
+	return is_wp_error( $key ) ? wp_lostpassword_url( sap_url( 'my' ) ) : network_site_url( 'wp-login.php?action=rp&key=' . $key . '&login=' . rawurlencode( $u->user_login ), 'login' );
+}
+
+/**
+ * Invite a member: email with the panel address, the username and a link to
+ * set the password; SMS with the panel address when a mobile is known.
+ *
+ * @return array {email: bool, sms: bool|null, link}
+ */
+function sap_member_invite( $user_id, $with_password_link = true ) {
+	$u = get_userdata( $user_id );
+	if ( ! $u ) {
+		return array( 'email' => false, 'sms' => null, 'link' => '' );
+	}
+	$m     = sap_member( $user_id );
+	$panel = sap_url( 'my' );
+	$link  = $with_password_link ? sap_member_password_link( $user_id ) : '';
+	$mail  = sap_notify_email( $u->user_email, 'دعوت به تیم سئو در سکان', array(
+		'title'  => 'به تیم سئو خوش آمدید',
+		'intro'  => sprintf( "%s عزیز، شما به تیم سئو در سکان اضافه شدید. کارهایی که به شما سپرده می‌شود در پنل «کارهای من» می‌آید و یادآوری آن‌ها برایتان ارسال می‌شود.", $m['name'] ),
+		'rows'   => array( 'آدرس پنل شما' => $panel, 'نام کاربری' => $u->user_login ),
+		'items'  => $link ? array( '۱) با دکمه زیر رمز عبور خود را تعیین کنید (لینک حدود یک روز معتبر است).', '۲) بعد از آن همیشه از «آدرس پنل شما» وارد شوید.' ) : array(),
+		'button' => $link ? array( 'تعیین رمز عبور', $link ) : array( 'ورود به پنل', $panel ),
+	) );
+	$sms = null;
+	if ( '' !== $m['phone'] && 'none' !== sap_setting( 'sms_provider', 'none' ) ) {
+		$sms = true === sap_sms_send( $m['phone'], sprintf( "%s عزیز، به تیم سئو اضافه شدید.\nپنل کارها: %s\nنام کاربری: %s", $m['name'], $panel, $u->user_login ) );
+	}
+	return array( 'email' => $mail, 'sms' => $sms, 'link' => $link );
+}
+
+/*
+ * Members live in the Sokan panel: after any login they land on «my tasks»,
+ * and wp-admin (except their profile) sends them back there.
+ */
+function sap_is_member_only( $user ) {
+	if ( ! $user instanceof WP_User ) {
+		$user = get_userdata( is_object( $user ) ? (int) ( $user->ID ?? 0 ) : (int) $user );
+	}
+	return $user instanceof WP_User && $user->exists() && user_can( $user, SAP_CAP_WORK ) && ! user_can( $user, 'manage_options' ) && ! user_can( $user, 'edit_posts' );
+}
+
+add_filter( 'login_redirect', function ( $to, $requested, $user ) {
+	return sap_is_member_only( $user ) && ( '' === (string) $requested || false !== strpos( (string) $requested, '/wp-admin' ) ) ? sap_url( 'my' ) : $to;
+}, 20, 3 );
+
+add_action( 'admin_init', function () {
+	global $pagenow;
+	if ( wp_doing_ajax() || wp_doing_cron() || in_array( $pagenow, array( 'admin-post.php', 'admin-ajax.php', 'profile.php', 'async-upload.php' ), true ) ) {
+		return;
+	}
+	if ( sap_is_member_only( wp_get_current_user() ) ) {
+		wp_safe_redirect( sap_url( 'my' ) );
+		exit;
+	}
+} );
+
+// WooCommerce sends non-editors to «My account»; members are handled above (panel, profile allowed).
+add_filter( 'woocommerce_prevent_admin_access', function ( $prevent ) {
+	return sap_is_member_only( wp_get_current_user() ) ? false : $prevent;
+} );
+
+add_filter( 'show_admin_bar', function ( $show ) {
+	return sap_is_member_only( wp_get_current_user() ) ? false : $show;
+} );
 
 /**
  * Update a member's profile fields.

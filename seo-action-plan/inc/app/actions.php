@@ -89,6 +89,19 @@ add_action( 'admin_post_sap_save_settings', function () {
 	$changes['sms_provider']         = array_key_exists( (string) sap_post( 'sms_provider' ), sap_sms_providers() ) ? (string) sap_post( 'sms_provider' ) : 'none';
 	$changes['sms_sender']           = sanitize_text_field( (string) sap_post( 'sms_sender' ) );
 	$changes['sms_custom_url']       = esc_url_raw( trim( (string) sap_post( 'sms_custom_url' ) ) );
+	$changes['sms_user']             = sanitize_text_field( (string) sap_post( 'sms_user' ) );
+	$changes['sms_footer']           = sanitize_text_field( (string) sap_post( 'sms_footer' ) );
+	$changes['smtp_host']            = preg_replace( '/[^a-zA-Z0-9.\-]/', '', (string) sap_post( 'smtp_host' ) );
+	$changes['smtp_port']            = max( 1, min( 65535, (int) sap_post( 'smtp_port', 587 ) ) );
+	$changes['smtp_secure']          = in_array( sap_post( 'smtp_secure' ), array( 'tls', 'ssl', 'none' ), true ) ? (string) sap_post( 'smtp_secure' ) : 'tls';
+	$changes['smtp_user']            = sanitize_text_field( (string) sap_post( 'smtp_user' ) );
+	$changes['smtp_from']            = sanitize_email( (string) sap_post( 'smtp_from' ) );
+	$changes['smtp_from_name']       = sanitize_text_field( (string) sap_post( 'smtp_from_name' ) );
+	// The SMTP password is kept as typed (sanitizing would break special characters); stored encrypted.
+	$sp = str_replace( array( "\r", "\n" ), '', trim( (string) sap_post( 'smtp_pass' ) ) );
+	if ( '' !== $sp && false === strpos( $sp, '•' ) ) {
+		$changes['smtp_pass'] = $sp;
+	}
 	$changes['tg_chat']              = sanitize_text_field( (string) sap_post( 'tg_chat' ) );
 	$changes['bale_chat']            = sanitize_text_field( (string) sap_post( 'bale_chat' ) );
 	foreach ( array( 'critical', 'warning', 'info' ) as $sv ) {
@@ -583,15 +596,23 @@ add_action( 'admin_post_sap_member_save', function () {
 		'title'        => sap_post( 'title' ),
 		'notify_sms'   => sap_post( 'notify_sms' ) ? 1 : 0,
 		'notify_email' => sap_post( 'notify_email' ) ? 1 : 0,
+		'password'     => (string) sap_post( 'password' ),
 	);
+	if ( '' !== $data['password'] && strlen( $data['password'] ) < 8 ) {
+		sap_back( sap_url( 'team' ), 'رمز عبور باید حداقل ۸ کاراکتر باشد.', false );
+	}
 	if ( ! $uid ) {
 		$uid = sap_member_create( $data );
 		if ( is_wp_error( $uid ) ) {
 			sap_back( sap_url( 'team' ), $uid->get_error_message(), false );
 		}
-		sap_back( sap_url( 'team' ), 'عضو اضافه شد و ایمیل دعوت برایش ارسال شد.' );
+		sap_back( sap_url( 'team' ), sap_invite_message( $GLOBALS['sap_last_invite'] ?? array(), '' !== $data['password'] ), ! empty( $GLOBALS['sap_last_invite']['email'] ) || '' !== $data['password'] );
 	}
 	sap_member_update( $uid, $data );
+	// A new password only for team members (never for managers from this screen).
+	if ( '' !== $data['password'] && sap_is_member_only( get_userdata( $uid ) ) ) {
+		wp_set_password( $data['password'], $uid );
+	}
 	foreach ( (array) sap_post( 'roles', array() ) as $pid => $role ) {
 		$p = sap_project( absint( $pid ) );
 		if ( ! $p ) {
@@ -606,6 +627,34 @@ add_action( 'admin_post_sap_member_save', function () {
 		sap_project_set_option( $p['id'], 'members', $members );
 	}
 	sap_back( sap_url( 'team' ), 'پروفایل ذخیره شد.' );
+} );
+
+/**
+ * Result of an invitation in words.
+ */
+function sap_invite_message( $r, $has_password = false ) {
+	$parts = array( 'عضو اضافه شد.' );
+	if ( ! empty( $r['email'] ) ) {
+		$parts[] = 'ایمیل دعوت (آدرس پنل و ' . ( $has_password ? 'نام کاربری' : 'لینک تعیین رمز' ) . ') ارسال شد.';
+	} else {
+		$log     = (array) get_option( 'sap_notify_log', array() );
+		$last    = end( $log );
+		$parts[] = 'ایمیل دعوت ارسال نشد' . ( $last && 'email' === $last['ch'] && $last['err'] ? ': ' . $last['err'] : '.' ) . ( $has_password ? ' عضو با رمزی که تعیین کردید از آدرس پنل وارد می‌شود.' : ' از دکمه «لینک تعیین رمز» در کارت عضو، لینک را کپی و برایش بفرستید.' );
+	}
+	if ( true === ( $r['sms'] ?? null ) ) {
+		$parts[] = 'پیامک دعوت هم ارسال شد.';
+	}
+	return implode( ' ', $parts );
+}
+
+add_action( 'admin_post_sap_member_invite', function () {
+	sap_guard( 'sap_member_invite' );
+	$uid = absint( sap_post( 'user_id' ) );
+	if ( ! get_userdata( $uid ) ) {
+		sap_back( sap_url( 'team' ), 'عضو پیدا نشد.', false );
+	}
+	$r = sap_member_invite( $uid, sap_is_member_only( get_userdata( $uid ) ) );
+	sap_back( sap_url( 'team' ), str_replace( 'عضو اضافه شد. ', '', sap_invite_message( $r ) ), ! empty( $r['email'] ) || true === $r['sms'] );
 } );
 
 add_action( 'admin_post_sap_rank_keywords', function () {

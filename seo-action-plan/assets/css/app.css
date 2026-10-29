@@ -1876,3 +1876,13 @@ body.sap-modal-open { overflow: hidden; }
 @media (max-width: 900px) { .sap-geo-kpis, .sap-exp-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } .sap-geo-kpis .is-main, .sap-exp-stats .is-main { grid-column: 1 / -1; } .sap-mem-row { grid-template-columns: 1fr 1fr; } .sap-ap-modes { grid-template-columns: 1fr; } }
 @media (max-width: 640px) { .sap-mem-row { grid-template-columns: 1fr; } .sap-mem-list li { grid-template-columns: 30px minmax(0, 1fr); } .sap-mem-acts { grid-column: 2; } .sap-chat-act { flex-direction: column; align-items: stretch; } .sap-msg-body { padding: 10px 12px; } .sap-chat-log { max-height: 58vh; } .sap-learn-kpis { width: 100%; } }
 .sap-chat-log > * { flex-shrink: 0; } /* Messages keep their height; the log scrolls. */
+
+/* ---- Team access ---- */
+.sap-team-access { display: flex; flex-wrap: wrap; gap: 16px; justify-content: space-between; align-items: center; }
+.sap-team-access > div:first-child { flex: 1 1 460px; } .sap-team-access h2 { margin: 0 0 6px; }
+.sap-team-access ol { margin: 0; padding-inline-start: 20px; line-height: 2; color: var(--ink-2); }
+.sap-team-url { display: grid; gap: 4px; padding: 12px 16px; border-radius: 14px; background: var(--accent-soft); border: 1px solid #CFDDFB; min-width: 0; max-width: 100%; }
+.sap-team-url span { font-size: 12px; font-weight: 700; color: var(--accent-ink); }
+.sap-team-url code { font-size: 14px; cursor: pointer; word-break: break-all; background: var(--card); padding: 6px 10px; border-radius: 8px; }
+.sap-member-acts { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 4px 0 8px; }
+.sap-member-acts form { margin: 0; }
