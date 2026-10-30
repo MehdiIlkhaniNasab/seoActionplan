@@ -69,7 +69,7 @@ $link     = function ( $key, $url, $icon, $label, $badge = 0 ) use ( $nav ) {
 			<?php $link( 'guide', sap_url( 'guide' ), 'log', 'راهنما و ساختار شیت' ); ?>
 		</nav>
 		<div class="sap-side-foot">
-			<span class="sap-user"><i><?php echo esc_html( mb_substr( $user->display_name, 0, 1 ) ); ?></i><?php echo esc_html( $user->display_name ); ?></span>
+			<button type="button" class="sap-user" data-sap-profile-open title="ویرایش پروفایل"><?php echo sap_avatar( $user->ID, 30 ); // phpcs:ignore ?><span><?php echo esc_html( $user->display_name ); ?></span></button>
 			<span class="sap-side-links">
 				<?php if ( current_user_can( 'edit_posts' ) ) : ?>
 					<a href="<?php echo esc_url( admin_url() ); ?>" title="پیشخوان وردپرس">وردپرس</a>
@@ -79,6 +79,36 @@ $link     = function ( $key, $url, $icon, $label, $badge = 0 ) use ( $nav ) {
 		</div>
 	</aside>
 	<div class="sap-backdrop" data-sap-close-nav></div>
+	<?php $u_phone = (string) get_user_meta( $user->ID, 'sap_phone', true ); ?>
+	<dialog class="sap-profile" data-sap-profile>
+		<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" enctype="multipart/form-data" class="sap-form">
+			<?php sap_form_fields( 'sap_profile_save', array( '_return' => ( is_ssl() ? 'https://' : 'http://' ) . ( $_SERVER['HTTP_HOST'] ?? '' ) . strtok( (string) ( $_SERVER['REQUEST_URI'] ?? '' ), '?' ) ) ); // phpcs:ignore ?>
+			<header class="sap-profile-head">
+				<h2>پروفایل من</h2>
+				<button type="button" class="sap-icon-btn" data-sap-profile-close aria-label="بستن"><?php echo sap_icon( 'x', 18 ); // phpcs:ignore ?></button>
+			</header>
+			<div class="sap-profile-photo">
+				<span class="sap-profile-preview" data-sap-avatar-preview><?php echo sap_avatar( $user->ID, 84 ); // phpcs:ignore ?></span>
+				<div>
+					<label class="sap-btn is-soft is-small sap-file-btn"><?php echo sap_icon( 'image', 14 ); // phpcs:ignore ?>انتخاب تصویر<input type="file" name="avatar" accept="image/jpeg,image/png,image/webp" data-sap-avatar-input hidden></label>
+					<?php if ( '' !== sap_avatar_url( $user->ID ) ) : ?><label class="sap-check sap-small"><input type="checkbox" name="remove_avatar" value="1"> حذف تصویر</label><?php endif; ?>
+					<small class="sap-muted">JPG، PNG یا WebP تا ۵ مگابایت؛ مربع برش داده می‌شود.</small>
+				</div>
+			</div>
+			<div class="sap-grid-2">
+				<label>نام و نام خانوادگی<input type="text" name="name" value="<?php echo esc_attr( $user->display_name ); ?>" required></label>
+				<label>شماره موبایل<input type="tel" name="phone" dir="ltr" value="<?php echo esc_attr( $u_phone ); ?>" placeholder="09121234567"></label>
+				<label class="sap-span-2">ایمیل<input type="email" name="email" dir="ltr" value="<?php echo esc_attr( $user->user_email ); ?>" required></label>
+				<label>رمز عبور جدید<input type="password" name="password" dir="ltr" minlength="8" autocomplete="new-password" placeholder="خالی = بدون تغییر"></label>
+				<label>رمز فعلی<input type="password" name="current" dir="ltr" autocomplete="current-password" placeholder="فقط برای تغییر ایمیل یا رمز"></label>
+			</div>
+			<p class="sap-small sap-muted">موبایل و ایمیل برای پیامک و ایمیل کارها و یادآوری‌ها استفاده می‌شوند.</p>
+			<footer class="sap-profile-foot">
+				<button type="button" class="sap-btn is-ghost" data-sap-profile-close>انصراف</button>
+				<button type="submit" class="sap-btn is-primary"><?php echo sap_icon( 'check', 15 ); // phpcs:ignore ?>ذخیره پروفایل</button>
+			</footer>
+		</form>
+	</dialog>
 
 	<main class="sap-main">
 		<div class="sap-topbar">

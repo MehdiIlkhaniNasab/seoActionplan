@@ -75,7 +75,7 @@ $sms_ok   = 'none' !== sap_setting( 'sms_provider', 'none' );
 		?>
 		<article class="sap-member">
 			<header>
-				<span class="sap-avatar" style="background:<?php echo esc_attr( $m['color'] ); ?>"><?php echo esc_html( mb_substr( $m['name'], 0, 1 ) ); ?></span>
+				<?php echo sap_avatar( $u->ID, 44, 'sap-avatar' ); // phpcs:ignore ?>
 				<div>
 					<b><?php echo esc_html( $m['name'] ); ?></b>
 					<small><?php echo esc_html( $m['title'] ?: ( $m['manager'] ? 'مدیر' : 'عضو تیم' ) ); ?></small>

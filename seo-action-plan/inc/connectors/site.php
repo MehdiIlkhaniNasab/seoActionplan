@@ -210,10 +210,9 @@ add_filter( 'sap_content_source', function ( $pre, $url, $project ) {
 		unset( $b );
 		$page['format'] = 'elementor';
 	} elseif ( '' === trim( (string) ( $obj['content'] ?? '' ) ) ) {
-		if ( 'term' !== ( $obj['kind'] ?? '' ) ) {
-			return null;
-		}
-		$page = array( 'blocks' => array(), 'format' => 'classic' ); // Empty category description: still a valid source (nothing to rewrite yet).
+		// Empty description in WordPress (or the theme keeps the text elsewhere, e.g. a «bottom
+		// description» field): read what the live page shows instead.
+		return null;
 	} else {
 		$page = sap_content_blocks_from_raw( (string) $obj['content'], (string) $obj['editor'] );
 	}

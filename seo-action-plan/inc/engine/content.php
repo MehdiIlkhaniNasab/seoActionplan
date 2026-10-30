@@ -73,8 +73,14 @@ function sap_content_start( $project, $url, $task_id = 0 ) {
 	if ( is_wp_error( $page ) ) {
 		return $page;
 	}
-	if ( count( $page['blocks'] ) < 2 ) {
-		return new WP_Error( 'sap_content_empty', 'محتوای اصلی این صفحه پیدا نشد (ممکن است با جاوااسکریپت ساخته شود). در فاز بعد، محتوا مستقیم از افزونه رابط سایت خوانده می‌شود.' );
+	$text_blocks = array_filter( (array) $page['blocks'], function ( $b ) {
+		return mb_strlen( (string) ( $b['text'] ?? '' ) ) >= 20;
+	} );
+	if ( ! $text_blocks ) {
+		$is_tax = (bool) preg_match( '#/(product-category|product-tag|category|tag|brand)/#', rawurldecode( (string) $url ) );
+		return new WP_Error( 'sap_content_empty', $is_tax
+			? 'این صفحه دسته/برچسب هنوز متن توضیحات ندارد (یا قالب سایت متن را جایی نگه می‌دارد که در صفحه نمایش داده نمی‌شود). برای دسته‌ای که متن ندارد بازنویسی معنا ندارد: از «سئو محتوا › پیشنهادهای صفحه» بریف نوشتن متن دسته را بگیرید یا اول یک متن کوتاه در «توضیحات» دسته در وردپرس بگذارید.'
+			: 'متن اصلی این صفحه پیدا نشد. اگر صفحه با صفحه‌ساز یا جاوااسکریپت ساخته شده، افزونه رابط سکان را روی سایت نصب و به پروژه وصل کنید تا محتوا مستقیم از وردپرس خوانده شود.' );
 	}
 	$rid = sap_revision_save( array(
 		'project_id' => $project['id'],

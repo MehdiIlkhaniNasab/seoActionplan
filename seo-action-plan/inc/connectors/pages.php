@@ -274,6 +274,34 @@ function sap_content_blocks_from_html( $html, $url = '' ) {
 		return mb_strlen( trim( preg_replace( '/\s+/u', ' ', (string) $node->textContent ) ) );
 	};
 	$main = null;
+	// Product grids are never «content» (category pages, related/upsell rows).
+	foreach ( $xp->query( '//ul[contains(concat(" ",normalize-space(@class)," ")," products ")]|//*[contains(@class,"product-grid") or contains(@class,"products-grid") or contains(@class,"wd-products") or contains(@class,"woocommerce-pagination") or contains(@class,"woocommerce-result-count") or contains(@class,"woocommerce-ordering")]' ) as $n ) {
+		$n->parentNode && $n->parentNode->removeChild( $n );
+	}
+	// Category / tag archives: the text lives in description boxes, often one above and one
+	// below the products (theme «bottom description»). Collect them all, short or long.
+	$body_cls = (string) ( $xp->query( '//body' )->item( 0 ) ? $xp->query( '//body' )->item( 0 )->getAttribute( 'class' ) : '' );
+	if ( preg_match( '/\b(tax-product_cat|tax-product_tag|tax-product_brand|archive|category|tag)\b/', $body_cls ) ) {
+		$desc = $xp->query( '//*[contains(@class,"term-description") or contains(@class,"woocommerce-products-header__description") or contains(@class,"category-description") or contains(@class,"archive-description") or contains(@class,"taxonomy-description") or contains(@class,"page-description") or contains(@class,"cat-desc") or contains(@class,"category-desc") or contains(@class,"term-desc") or contains(@class,"bottom-desc") or contains(@class,"desc-bottom") or contains(@class,"description-bottom") or contains(@class,"bottom-description") or contains(@class,"seo-text") or contains(@class,"seo-content") or contains(@class,"more-desc") or contains(@class,"read-more")]' );
+		$box  = $dom->createElement( 'div' );
+		$seen = array();
+		foreach ( $desc as $n ) {
+			// Skip a box nested in one already taken.
+			for ( $pn = $n->parentNode; $pn; $pn = $pn->parentNode ) {
+				if ( in_array( $pn, $seen, true ) ) {
+					continue 2;
+				}
+			}
+			if ( $len( $n ) > 40 ) {
+				$seen[] = $n;
+				$box->appendChild( $n->cloneNode( true ) );
+			}
+		}
+		if ( $len( $box ) > 80 ) {
+			$dom->documentElement->appendChild( $box );
+			$main = $box;
+		}
+	}
 	// Known content containers of WordPress themes, page builders and WooCommerce.
 	foreach ( array(
 		'//*[@itemprop="articleBody"]',
@@ -286,6 +314,9 @@ function sap_content_blocks_from_html( $html, $url = '' ) {
 		'//article',
 		'//main',
 	) as $q ) {
+		if ( $main ) {
+			break;
+		}
 		foreach ( $xp->query( $q ) as $n ) {
 			if ( $len( $n ) > 300 ) {
 				$main = $n;

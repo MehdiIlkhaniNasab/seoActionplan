@@ -18,7 +18,7 @@ $list = sap_comments( $type, $object_id );
 		<?php foreach ( $list as $c ) : ?>
 			<li data-id="<?php echo esc_attr( $c['id'] ); ?>">
 				<p><?php echo sap_rich_text( $c['body'] ); // phpcs:ignore ?></p>
-				<small class="sap-muted"><?php echo esc_html( sap_user_name( $c['user_id'] ) . ' · ' . sap_jdate( $c['created_at'] ) ); ?></small>
+				<small class="sap-muted sap-comment-by"><?php echo sap_avatar( $c['user_id'], 18 ); // phpcs:ignore ?><?php echo esc_html( sap_user_name( $c['user_id'] ) . ' · ' . sap_jdate( $c['created_at'] ) ); ?></small>
 				<button type="button" class="sap-icon-btn" data-sap-comment-del title="حذف"><?php echo sap_icon( 'trash', 13 ); // phpcs:ignore ?></button>
 			</li>
 		<?php endforeach; ?>

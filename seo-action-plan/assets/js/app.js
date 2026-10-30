@@ -2081,4 +2081,29 @@
 		b.remove();
 	});
 
+	/* ---- Profile dialog ---- */
+	(function () {
+		var dlg = document.querySelector('[data-sap-profile]');
+		if (!dlg) { return; }
+		document.addEventListener('click', function (ev) {
+			if (ev.target.closest('[data-sap-profile-open]')) { ev.preventDefault(); if (dlg.showModal) { dlg.showModal(); } else { dlg.setAttribute('open', ''); } }
+			if (ev.target.closest('[data-sap-profile-close]')) { ev.preventDefault(); dlg.close ? dlg.close() : dlg.removeAttribute('open'); }
+		});
+		dlg.addEventListener('click', function (ev) { if (ev.target === dlg) { dlg.close(); } });
+		var inp = dlg.querySelector('[data-sap-avatar-input]');
+		var prev = dlg.querySelector('[data-sap-avatar-preview]');
+		if (inp && prev) {
+			inp.addEventListener('change', function () {
+				var f = inp.files[0];
+				if (!f) { return; }
+				if (f.size > 5 * 1024 * 1024) { toast('حجم تصویر بیشتر از ۵ مگابایت است.', true); inp.value = ''; return; }
+				var img = document.createElement('img');
+				img.className = 'sap-av';
+				img.src = URL.createObjectURL(f);
+				prev.innerHTML = '';
+				prev.appendChild(img);
+			});
+		}
+	})();
+
 })();

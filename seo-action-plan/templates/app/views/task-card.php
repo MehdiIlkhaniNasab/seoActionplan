@@ -44,7 +44,7 @@ $post    = esc_url( admin_url( 'admin-post.php' ) );
 				<span class="sap-chip is-roi is-<?php echo esc_attr( $roi['confidence'] ); ?>" title="<?php echo esc_attr( 'پیش‌بینی اگر کار موفق شود · اطمینان: ' . array( 'low' => 'کم', 'medium' => 'متوسط', 'high' => 'زیاد' )[ $roi['confidence'] ] . "\n" . implode( "\n", $roi['basis'] ) ); ?>"><?php echo sap_icon( 'chart', 11 ); // phpcs:ignore ?><?php echo esc_html( $rb ); ?></span>
 			<?php endif; ?>
 			<?php if ( $t['assignee'] ) : ?>
-				<span class="sap-muted"><?php echo sap_icon( 'user', 12 ); // phpcs:ignore ?><?php echo esc_html( sap_user_name( $t['assignee'] ) ); ?></span>
+				<?php echo sap_person( $t['assignee'], 20 ); // phpcs:ignore ?>
 			<?php endif; ?>
 			<?php if ( $t['waiting_for'] ) : ?>
 				<span class="sap-muted">منتظر: <?php echo esc_html( $t['waiting_for'] ); ?></span>
