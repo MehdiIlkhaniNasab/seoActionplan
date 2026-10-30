@@ -187,15 +187,15 @@ $auth  = sap_google_auth_url();
 				<p class="sap-callout"><?php echo sap_icon( 'alert', 16 ); // phpcs:ignore ?><span>خط <b dir="ltr"><?php echo esc_html( $s['sms_sender'] ); ?></b> یک خط عمومی/تبلیغاتی است. پیامک متنی از این خط‌ها به شماره‌هایی که دریافت پیامک تبلیغاتی را بسته‌اند (بیشتر شماره‌ها) نمی‌رسد؛ برای همین در پنل «ارسال نشده» ثبت می‌شود، در حالی که وب‌سرویس خطایی نمی‌دهد. راه درست: ارسال با پترن که از خط خدماتی و بدون «لغو۱۱» می‌رود.</span></p>
 			<?php endif; ?>
 			<ol class="sap-small">
-				<li>در پنل ملی پیامک: «وب‌سرویس خدماتی» (یا «ارسال با الگو/پترن») › «متن جدید». برای هر رویداد زیر، متن پیشنهادی را کپی کنید و ثبت کنید (متغیرها همان <code dir="ltr">{0}</code>، <code dir="ltr">{1}</code>… هستند؛ ترتیب را عوض نکنید).</li>
+				<li>در پنل ملی پیامک: «وب‌سرویس خدماتی» (یا «ارسال با الگو/پترن») › «متن جدید». برای هر رویداد زیر، متن پیشنهادی را کپی کنید و ثبت کنید (متغیرها نام انگلیسی دارند مثل <code dir="ltr">{name}</code>؛ ترتیب متغیرها را عوض نکنید چون به همین ترتیب پر می‌شوند).</li>
 				<li>بعد از تایید متن توسط ملی پیامک (معمولاً چند ساعت کاری)، «کد متن» (bodyId) را جلوی همان رویداد بنویسید و ذخیره کنید. رویدادی که کد ندارد مثل قبل به‌صورت متن عادی ارسال می‌شود.</li>
-				<li><b>قانون تایید ملی پیامک:</b> هر متغیر باید با فاصله از بقیه متن جدا باشد؛ <code dir="ltr">{0}!</code>، <code dir="ltr">«{1}»</code>، <code dir="ltr">({2}</code> یا دو متغیر پشت سر هم <code dir="ltr">{0} {1}</code> رد می‌شوند («نام متغیرها را به درستی مشخص نمایید»). متنی که فقط یک متغیر است هم رد می‌شود. «لغو11» را در پترن خدماتی ننویسید.</li>
+				<li><b>قانون تایید ملی پیامک:</b> متغیر باید نام انگلیسی داشته باشد (<code dir="ltr">{name}</code> نه <code dir="ltr">{0}</code>) و با فاصله از بقیه متن جدا باشد؛ <code dir="ltr">{name}!</code>، <code dir="ltr">«{task}»</code>، <code dir="ltr">({late}</code> یا دو متغیر پشت سر هم رد می‌شوند («نام متغیرها را به درستی مشخص نمایید»). متنی که فقط یک متغیر است هم رد می‌شود. «لغو11» را در پترن خدماتی ننویسید.</li>
 				<li>لینک داخل متغیر مجاز نیست؛ آدرس پنل در متن خود پترن نوشته شده است. «ارسال آزمایشی پیامک» از پترن «پیام آزمایشی» استفاده می‌کند.</li>
 			</ol>
 			<div class="sap-pattern-list">
 				<?php foreach ( sap_sms_events() as $ev => $def ) : ?>
 					<div class="sap-pattern">
-						<div class="sap-pattern-head"><b><?php echo esc_html( $def[0] ); ?></b><small><?php echo esc_html( implode( ' · ', array_map( function ( $v, $i ) { return '{' . $i . '} ' . $v; }, $def[1], array_keys( $def[1] ) ) ) ); ?></small></div>
+						<div class="sap-pattern-head"><b><?php echo esc_html( $def[0] ); ?></b><small><?php echo esc_html( implode( ' · ', array_map( function ( $v, $i ) { return '{' . $i . '} ' . $v; }, array_values( $def[1] ), array_keys( $def[1] ) ) ) ); ?></small></div>
 						<pre class="sap-pattern-text" dir="rtl"><?php echo esc_html( $def[2] ); ?></pre>
 						<div class="sap-pattern-foot">
 							<button type="button" class="sap-btn is-ghost is-small" data-sap-copy="<?php echo esc_attr( $def[2] ); ?>">کپی متن</button>

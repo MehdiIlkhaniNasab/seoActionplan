@@ -357,19 +357,19 @@ function sap_sms_logged( $phone, $text, $ok, $err, $rec = '', $mode = 'text' ) {
 
 /**
  * Pattern events: key => [label, variables, suggested template text]. Variables are
- * sent in this order as {0}, {1}…; links are not allowed inside variables, so the
+ * sent in this order (named variables such as {name}; Melipayamak fills them by position); links are not allowed inside variables, so the
  * panel address is written into the template itself.
  */
 function sap_sms_events() {
 	$panel = preg_replace( '#^https?://#', '', untrailingslashit( function_exists( 'sap_url' ) ? sap_url( 'my' ) : home_url() ) );
 	return array(
-		'task'   => array( 'واگذاری یک کار', array( 'نام عضو', 'عنوان کار', 'پروژه', 'سررسید' ), "{0} عزیز، کار جدید در سکان:\n{1}\nپروژه: {2}\nسررسید: {3}" ),
-		'tasks'  => array( 'واگذاری چند کار پشت سر هم (یک پیامک خلاصه)', array( 'نام عضو', 'تعداد کار', 'پروژه', 'عنوان اولین کار' ), "{0} عزیز، {1} کار جدید در سکان برای شما ثبت شد.\nپروژه: {2}\nاز جمله: {3}" ),
-		'done'   => array( 'تشکر بعد از انجام کار', array( 'نام عضو', 'عنوان کار' ), "سکان | خسته نباشید {0} ، کار {1} انجام شد و در گزارش ثبت شد." ),
-		'remind' => array( 'یادآوری کارهای باز', array( 'نام عضو', 'تعداد کار باز', 'تعداد عقب از موعد' ), "سکان | یادآوری برای {0} :\nتعداد کارهای باز: {1}\nعقب از موعد: {2}\n" . $panel ),
-		'invite' => array( 'دعوت عضو جدید', array( 'نام عضو', 'نام کاربری' ), "{0} عزیز، به تیم سئو اضافه شدید.\nنام کاربری: {1}\nپنل کارها: " . $panel ),
-		'alert'  => array( 'هشدار و پیام به مدیر سئو', array( 'خلاصه پیام' ), "سکان | هشدار برای مدیر سئو: {0} \nجزئیات در پنل سکان: " . $panel ),
-		'test'   => array( 'پیام آزمایشی', array( 'تاریخ' ), "پیام آزمایشی سکان — ارسال با پترن درست است. {0}" ),
+		'task'   => array( 'واگذاری یک کار', array( 'name' => 'نام عضو', 'task' => 'عنوان کار', 'project' => 'پروژه', 'due' => 'سررسید' ), "سکان | {name} عزیز، یک کار جدید برای شما ثبت شد.\nعنوان کار: {task}\nپروژه: {project}\nسررسید: {due}\nپنل کارها: " . $panel ),
+		'tasks'  => array( 'واگذاری چند کار پشت سر هم (یک پیامک خلاصه)', array( 'name' => 'نام عضو', 'count' => 'تعداد کار', 'project' => 'پروژه', 'first' => 'عنوان اولین کار' ), "سکان | {name} عزیز، تعداد {count} کار جدید برای شما ثبت شد.\nپروژه: {project}\nاز جمله: {first}\nپنل کارها: " . $panel ),
+		'done'   => array( 'تشکر بعد از انجام کار', array( 'name' => 'نام عضو', 'task' => 'عنوان کار' ), "سکان | خسته نباشید {name} ، کار {task} انجام شد و در گزارش ثبت شد." ),
+		'remind' => array( 'یادآوری کارهای باز', array( 'name' => 'نام عضو', 'open' => 'تعداد کار باز', 'late' => 'تعداد عقب از موعد' ), "سکان | یادآوری برای {name} :\nتعداد کارهای باز: {open}\nعقب از موعد: {late}\nپنل کارها: " . $panel ),
+		'invite' => array( 'دعوت عضو جدید', array( 'name' => 'نام عضو', 'user' => 'نام کاربری' ), "سکان | {name} عزیز، به تیم سئو اضافه شدید.\nنام کاربری: {user}\nلینک تعیین رمز به ایمیل شما ارسال شد.\nپنل کارها: " . $panel ),
+		'alert'  => array( 'هشدار و پیام به مدیر سئو', array( 'alert' => 'خلاصه هشدار' ), "سکان | هشدار برای مدیر سئو: {alert}\nجزئیات در پنل سکان: " . $panel ),
+		'test'   => array( 'پیام آزمایشی', array( 'date' => 'تاریخ' ), "سکان | پیام آزمایشی ارسال با پترن در تاریخ {date} انجام شد." ),
 	);
 }
 
