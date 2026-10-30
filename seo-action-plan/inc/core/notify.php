@@ -175,6 +175,13 @@ function sap_mail_error_text() {
 	if ( '' === sap_setting( 'smtp_host' ) && ! sap_other_smtp_plugin() ) {
 		return 'سرور ایمیل (SMTP) تنظیم نشده؛ روی لوکال‌هاست و بیشتر هاست‌ها تابع mail() کار نمی‌کند. در «تنظیمات › اعلان‌ها › ارسال ایمیل (SMTP)» سرور ایمیل را وارد کنید.' . ( '' !== $err ? ' (' . $err . ')' : '' );
 	}
+	// The certificate of the mail server is issued for the hosting server's own name (shared hosting).
+	if ( preg_match( '/Peer certificate CN=.([^\'`"]+).\s+did not match/i', $err, $cn ) ) {
+		return sprintf( 'گواهی SSL سرور ایمیل به نام «%1$s» صادر شده، نه «%2$s». در فیلد «سرور SMTP» به‌جای %2$s بنویسید: %1$s (نام کاربری و رمز همان قبلی بماند).', $cn[1], (string) sap_setting( 'smtp_host' ) );
+	}
+	if ( false !== stripos( $err, 'subjectAltName did not match' ) || false !== stripos( $err, 'certificate verify failed' ) ) {
+		return sprintf( 'گواهی SSL سرور ایمیل برای «%s» نیست (معمول در هاست اشتراکی). در فیلد «سرور SMTP» نام خود سرور هاست را بنویسید (cPanel › Email Accounts › Connect Devices، یا از پشتیبانی هاست بپرسید؛ مثل server123.example.com). ', (string) sap_setting( 'smtp_host' ) ) . $err;
+	}
 	if ( false !== stripos( $err, 'authenticate' ) ) {
 		return 'نام کاربری یا رمز SMTP پذیرفته نشد (برای Gmail «رمز برنامه» App Password لازم است، نه رمز اصلی). ' . $err;
 	}
