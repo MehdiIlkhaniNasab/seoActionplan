@@ -688,7 +688,7 @@ function sap_alerts_digest() {
 	if ( ! $items ) {
 		return;
 	}
-	sap_notify_email( sap_manager_email(), sprintf( 'سکان | خلاصه هشدارهای امروز (%s مورد باز)', sap_num( count( $items ) ) ), array( 'title' => 'هشدارهای باز پروژه‌ها', 'items' => array_slice( $items, 0, 40 ), 'button' => array( 'باز کردن سکان', sap_url() ) ) );
+	sap_notify_email( sap_manager_email(), sprintf( '🔔 خلاصه هشدارهای امروز: %s مورد نیاز به بررسی دارد', sap_num( count( $items ) ) ), array( 'title' => 'هشدارهای باز پروژه‌ها', 'badge' => '🔔 خلاصه روزانه', 'tone' => '#DC2626', 'items' => array_slice( $items, 0, 40 ), 'button' => array( 'باز کردن سکان', sap_url() ) ) );
 }
 
 /* ---------------------------------------------------------------------------

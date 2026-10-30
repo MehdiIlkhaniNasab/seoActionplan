@@ -68,31 +68,104 @@ function sap_notify_email( $to, $subject, $args ) {
 	if ( ! $to ) {
 		return false;
 	}
-	$a    = wp_parse_args( $args, array( 'title' => $subject, 'intro' => '', 'rows' => array(), 'items' => array(), 'button' => null, 'footer' => '', 'tone' => '#2563EB' ) );
-	$rows = '';
-	foreach ( $a['rows'] as $k => $v ) {
-		$rows .= '<tr><td style="padding:6px 0;color:#64748b;width:120px;vertical-align:top">' . esc_html( $k ) . '</td><td style="padding:6px 0;color:#0f172a">' . nl2br( esc_html( (string) $v ) ) . '</td></tr>';
-	}
-	$items = '';
-	foreach ( $a['items'] as $it ) {
-		$items .= '<li style="margin:0 0 8px">' . wp_kses( (string) $it, array( 'b' => array(), 'a' => array( 'href' => array() ), 'small' => array(), 'span' => array( 'style' => array() ) ) ) . '</li>';
-	}
-	$btn  = $a['button'] ? '<p style="margin:22px 0 4px"><a href="' . esc_url( $a['button'][1] ) . '" style="background:' . esc_attr( $a['tone'] ) . ';color:#fff;text-decoration:none;padding:11px 22px;border-radius:10px;font-weight:700;display:inline-block">' . esc_html( $a['button'][0] ) . '</a></p>' : '';
-	$html = '<!doctype html><html lang="fa" dir="rtl"><body style="margin:0;background:#f1f5f9;font-family:Tahoma,Vazirmatn,Arial,sans-serif">'
-		. '<div style="max-width:600px;margin:0 auto;padding:24px 14px"><div style="background:#fff;border-radius:16px;overflow:hidden;border:1px solid #e2e8f0">'
-		. '<div style="background:' . esc_attr( $a['tone'] ) . ';height:5px"></div><div style="padding:24px 26px;direction:rtl;text-align:right;line-height:1.9;font-size:14px">'
-		. '<p style="margin:0 0 4px;color:#64748b;font-size:12px">سُکان — دستیار سئو</p>'
-		. '<h1 style="margin:0 0 12px;font-size:19px;color:#0f172a">' . esc_html( $a['title'] ) . '</h1>'
-		. ( $a['intro'] ? '<p style="margin:0 0 12px;color:#334155">' . nl2br( esc_html( $a['intro'] ) ) . '</p>' : '' )
-		. ( $rows ? '<table style="width:100%;border-collapse:collapse;font-size:13.5px;margin:6px 0 10px">' . $rows . '</table>' : '' )
-		. ( $items ? '<ul style="padding-right:18px;margin:8px 0;color:#0f172a">' . $items . '</ul>' : '' )
-		. $btn
-		. '</div></div><p style="text-align:center;color:#94a3b8;font-size:11px;margin:12px 0">' . esc_html( $a['footer'] ?: 'این پیام خودکار از سکان ارسال شده است.' ) . '</p></div></body></html>';
+	$a    = wp_parse_args( $args, array( 'title' => $subject, 'intro' => '', 'rows' => array(), 'items' => array(), 'button' => null, 'footer' => '', 'tone' => '#2563EB', 'badge' => '', 'preheader' => '', 'note' => '' ) );
+	$html = sap_email_html( $a );
+	// Plain-text part: better inbox placement than HTML-only mail.
+	$GLOBALS['sap_mail_alt'] = sap_email_text( $a );
 	$GLOBALS['sap_mail_error'] = '';
 	$ok = wp_mail( $to, $subject, $html, array( 'Content-Type: text/html; charset=UTF-8' ) );
+	unset( $GLOBALS['sap_mail_alt'] );
 	sap_notify_log( 'email', implode( ', ', $to ), $subject, $ok, $ok ? '' : sap_mail_error_text() );
 	return $ok;
 }
+
+/**
+ * Branded RTL email (table layout + inline styles: renders in Gmail, Outlook and mobile apps).
+ */
+function sap_email_html( $a ) {
+	$tone  = preg_match( '/^#[0-9a-f]{6}$/i', (string) $a['tone'] ) ? $a['tone'] : '#2563EB';
+	$site  = (string) ( sap_setting( 'smtp_from_name' ) ?: get_bloginfo( 'name' ) );
+	$font  = "Vazirmatn,Tahoma,'Segoe UI',Arial,sans-serif";
+	$rows  = '';
+	foreach ( (array) $a['rows'] as $k => $v ) {
+		if ( '' === trim( (string) $v ) ) {
+			continue;
+		}
+		$val   = preg_match( '#^https?://#', (string) $v ) ? '<a href="' . esc_url( $v ) . '" style="color:' . $tone . ';text-decoration:none;direction:ltr;unicode-bidi:embed">' . esc_html( rawurldecode( (string) $v ) ) . '</a>' : nl2br( esc_html( (string) $v ) );
+		$rows .= '<tr><td style="padding:9px 14px;color:#64748b;font-size:12.5px;width:110px;vertical-align:top;border-bottom:1px solid #eef2f7;white-space:nowrap">' . esc_html( $k ) . '</td><td style="padding:9px 14px;color:#0f172a;font-size:13.5px;font-weight:600;border-bottom:1px solid #eef2f7">' . $val . '</td></tr>';
+	}
+	$items = '';
+	$n     = 0;
+	foreach ( (array) $a['items'] as $it ) {
+		++$n;
+		$body   = wp_kses( (string) $it, array( 'b' => array(), 'br' => array(), 'a' => array( 'href' => array() ), 'small' => array(), 'span' => array( 'style' => array() ) ) );
+		$body   = str_replace( '<small>', '<small style="color:#64748b;font-size:12px">', $body );
+		$items .= '<tr><td style="padding:0 0 8px"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f8fafc;border-radius:10px;border-right:3px solid ' . $tone . '"><tr>'
+			. '<td style="padding:10px 12px;width:26px;vertical-align:top;color:' . $tone . ';font-weight:800;font-size:13px">' . esc_html( sap_num( $n ) ) . '</td>'
+			. '<td style="padding:10px 4px 10px 12px;color:#0f172a;font-size:13.5px;line-height:1.9">' . $body . '</td></tr></table></td></tr>';
+	}
+	$btn = '';
+	if ( $a['button'] ) {
+		$btn = '<table role="presentation" cellspacing="0" cellpadding="0" style="margin:24px 0 6px"><tr><td style="border-radius:12px;background:' . $tone . ';box-shadow:0 6px 16px ' . $tone . '40">'
+			. '<a href="' . esc_url( $a['button'][1] ) . '" style="display:inline-block;padding:13px 28px;color:#ffffff;text-decoration:none;font-weight:700;font-size:15px;font-family:' . $font . '">' . esc_html( $a['button'][0] ) . ' &larr;</a></td></tr></table>'
+			. '<p style="margin:8px 0 0;color:#94a3b8;font-size:11.5px">اگر دکمه باز نشد این آدرس را در مرورگر باز کنید:<br><a href="' . esc_url( $a['button'][1] ) . '" style="color:#64748b;direction:ltr;unicode-bidi:embed;word-break:break-all">' . esc_html( rawurldecode( $a['button'][1] ) ) . '</a></p>';
+	}
+	$badge = '' !== $a['badge'] ? '<span style="display:inline-block;background:#ffffff26;color:#ffffff;border:1px solid #ffffff55;border-radius:999px;padding:3px 12px;font-size:12px;margin-bottom:10px">' . esc_html( $a['badge'] ) . '</span><br>' : '';
+	$pre   = '' !== $a['preheader'] ? $a['preheader'] : wp_strip_all_tags( (string) $a['intro'] );
+	return '<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
+		. '<link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;600;800&display=swap" rel="stylesheet"><title>' . esc_html( $a['title'] ) . '</title></head>'
+		. '<body style="margin:0;padding:0;background:#eef2f7;font-family:' . $font . '">'
+		. '<div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent">' . esc_html( mb_substr( $pre, 0, 140 ) ) . str_repeat( '&#8204;&nbsp;', 40 ) . '</div>'
+		. '<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#eef2f7"><tr><td align="center" style="padding:28px 12px">'
+		. '<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:600px">'
+		// Brand line.
+		. '<tr><td style="padding:0 6px 12px;direction:rtl;text-align:right;font-family:' . $font . '"><span style="display:inline-block;width:30px;height:30px;line-height:30px;text-align:center;border-radius:9px;background:' . $tone . ';color:#fff;font-weight:800;font-size:15px;vertical-align:middle">س</span> <b style="color:#0f172a;font-size:15px;vertical-align:middle">سُکان</b> <span style="color:#94a3b8;font-size:12px;vertical-align:middle">· ' . esc_html( $site ) . '</span></td></tr>'
+		. '<tr><td style="background:#ffffff;border-radius:18px;overflow:hidden;box-shadow:0 8px 28px rgba(15,23,42,.08)">'
+		// Hero.
+		. '<table role="presentation" width="100%" cellspacing="0" cellpadding="0"><tr><td style="background:' . $tone . ';background-image:linear-gradient(135deg,' . $tone . ' 0%,#0f172a 140%);padding:26px 28px;direction:rtl;text-align:right;font-family:' . $font . '">'
+		. $badge . '<h1 style="margin:0;color:#ffffff;font-size:21px;line-height:1.6;font-weight:800">' . esc_html( $a['title'] ) . '</h1></td></tr></table>'
+		// Body.
+		. '<table role="presentation" width="100%" cellspacing="0" cellpadding="0"><tr><td style="padding:24px 28px 28px;direction:rtl;text-align:right;line-height:1.95;font-size:14px;color:#334155;font-family:' . $font . '">'
+		. ( $a['intro'] ? '<p style="margin:0 0 16px">' . nl2br( esc_html( $a['intro'] ) ) . '</p>' : '' )
+		. ( $rows ? '<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border:1px solid #eef2f7;border-radius:12px;margin:4px 0 16px;border-collapse:separate;overflow:hidden">' . $rows . '</table>' : '' )
+		. ( $items ? '<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin:6px 0 4px">' . $items . '</table>' : '' )
+		. ( '' !== $a['note'] ? '<p style="margin:14px 0 0;padding:10px 14px;background:#fffbeb;border-radius:10px;color:#92400e;font-size:13px">' . esc_html( $a['note'] ) . '</p>' : '' )
+		. $btn
+		. '</td></tr></table></td></tr>'
+		// Footer.
+		. '<tr><td style="padding:16px 10px;text-align:center;color:#94a3b8;font-size:11.5px;line-height:1.9;font-family:' . $font . '">' . esc_html( $a['footer'] ?: 'این پیام خودکار از سکان (' . $site . ') ارسال شده است؛ لازم نیست به آن پاسخ دهید.' ) . '</td></tr>'
+		. '</table></td></tr></table></body></html>';
+}
+
+/**
+ * Plain-text version of the same email.
+ */
+function sap_email_text( $a ) {
+	$out = array( $a['title'], '' );
+	if ( $a['intro'] ) {
+		$out[] = wp_strip_all_tags( (string) $a['intro'] );
+		$out[] = '';
+	}
+	foreach ( (array) $a['rows'] as $k => $v ) {
+		if ( '' !== trim( (string) $v ) ) {
+			$out[] = $k . ': ' . rawurldecode( (string) $v );
+		}
+	}
+	foreach ( array_values( (array) $a['items'] ) as $i => $it ) {
+		$out[] = sap_num( $i + 1 ) . ') ' . trim( preg_replace( '/\s+/u', ' ', wp_strip_all_tags( str_replace( array( '<br>', '<br/>', '<br />' ), ' — ', (string) $it ) ) ) );
+	}
+	if ( $a['button'] ) {
+		$out[] = '';
+		$out[] = $a['button'][0] . ': ' . $a['button'][1];
+	}
+	return implode( "\n", $out );
+}
+
+add_action( 'phpmailer_init', function ( $mailer ) {
+	if ( ! empty( $GLOBALS['sap_mail_alt'] ) ) {
+		$mailer->AltBody = (string) $GLOBALS['sap_mail_alt'];
+	}
+}, 30 );
 
 /**
  * Why the last email failed, in words a person can act on.
@@ -570,7 +643,7 @@ function sap_notify_test( $channel ) {
 			if ( ! sap_setting( 'notify_email', 1 ) ) {
 				return new WP_Error( 'sap_mail_off', 'ارسال ایمیل در تنظیمات خاموش است؛ کلید «ارسال ایمیل فعال باشد» را روشن کنید.' );
 			}
-			return sap_notify_email( sap_manager_email(), 'پیام آزمایشی سکان', array( 'title' => 'پیام آزمایشی', 'intro' => $text ) ) ? true : new WP_Error( 'sap_mail', 'ارسال ایمیل ناموفق بود: ' . sap_mail_error_text() );
+			return sap_notify_email( sap_manager_email(), '✅ ایمیل سکان درست کار می‌کند — پیام آزمایشی', array( 'title' => 'تبریک! ارسال ایمیل فعال است', 'badge' => '✅ پیام آزمایشی', 'tone' => '#16A34A', 'intro' => 'اگر این ایمیل را در صندوق ورودی (نه اسپم) می‌بینید، تنظیمات SMTP سکان کامل است و از این به بعد دعوت اعضا، واگذاری کارها، یادآوری‌ها و هشدارها با همین ظاهر ارسال می‌شوند.', 'rows' => array( 'سرور' => (string) sap_setting( 'smtp_host' ), 'فرستنده' => (string) ( sap_setting( 'smtp_from' ) ?: sap_setting( 'smtp_user' ) ), 'تاریخ' => sap_jdate( current_time( 'Y-m-d' ) ) . ' ساعت ' . sap_fa( current_time( 'H:i' ) ) ), 'items' => array( '<b>واگذاری کار</b><br><small>هر کار با هدف، خروجی مطلوب، سررسید و چک‌لیست برای عضو ارسال می‌شود.</small>', '<b>یادآوری صبحگاهی</b><br><small>فهرست کارهای باز هر عضو به ترتیب اولویت.</small>', '<b>هشدارها</b><br><small>افت ترافیک، خطاهای ایندکس و مشکلات فنی برای مدیر سئو.</small>' ), 'button' => array( 'باز کردن سکان', sap_url() ) ) ) ? true : new WP_Error( 'sap_mail', 'ارسال ایمیل ناموفق بود: ' . sap_mail_error_text() );
 		case 'sms':
 			return sap_sms_send( sap_setting( 'notify_manager_phone' ), $text, 'test', array( sap_jdate( current_time( 'Y-m-d' ) ) ) );
 		default:

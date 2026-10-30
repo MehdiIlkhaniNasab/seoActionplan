@@ -133,8 +133,11 @@ function sap_member_invite( $user_id, $with_password_link = true ) {
 	$m     = sap_member( $user_id );
 	$panel = sap_url( 'my' );
 	$link  = $with_password_link ? sap_member_password_link( $user_id ) : '';
-	$mail  = sap_notify_email( $u->user_email, 'دعوت به تیم سئو در سکان', array(
-		'title'  => 'به تیم سئو خوش آمدید',
+	$mail  = sap_notify_email( $u->user_email, '🎉 ' . $m['name'] . ' عزیز، به تیم سئو ' . get_bloginfo( 'name' ) . ' خوش آمدید', array(
+		'title'  => 'به تیم سئو خوش آمدید 🎉',
+		'badge'  => 'دعوت به تیم',
+		'tone'   => '#7C3AED',
+		'preheader' => $link ? 'رمز عبورتان را تعیین کنید و وارد پنل کارهای خودتان شوید.' : 'از همین حالا کارهایتان در پنل «کارهای من» است.',
 		'intro'  => sprintf( "%s عزیز، شما به تیم سئو در سکان اضافه شدید. کارهایی که به شما سپرده می‌شود در پنل «کارهای من» می‌آید و یادآوری آن‌ها برایتان ارسال می‌شود.", $m['name'] ),
 		'rows'   => array( 'آدرس پنل شما' => $panel, 'نام کاربری' => $u->user_login ),
 		'items'  => $link ? array( '۱) با دکمه زیر رمز عبور خود را تعیین کنید (لینک حدود یک روز معتبر است).', '۲) بعد از آن همیشه از «آدرس پنل شما» وارد شوید.' ) : array(),
@@ -259,8 +262,9 @@ add_action( 'sap_task_saved', function ( $before, $after ) {
 		$m = sap_member( $after['assignee'] );
 		if ( $m ) {
 			if ( $m['notify_email'] ) {
-				sap_notify_email( $m['email'], 'خسته نباشید! «' . $after['title'] . '» انجام شد', array(
-					'title' => 'خسته نباشید 🌿',
+				sap_notify_email( $m['email'], '🌿 دمت گرم ' . $m['name'] . '! «' . mb_substr( $after['title'], 0, 60 ) . '» ثبت شد', array(
+					'title' => 'خسته نباشید ' . $m['name'] . ' 🌿',
+					'badge' => '✅ کار انجام شد',
 					'tone'  => '#16A34A',
 					'intro' => $m['name'] . ' عزیز، کار «' . $after['title'] . '» انجام شد و در لاگ اقدامات و گزارش ماهانه ثبت شد. اثرش در سرچ کنسول هم سنجیده می‌شود. ممنون از زحمتت!',
 				) );
@@ -368,16 +372,20 @@ function sap_assign_notify( $user_id, $tasks ) {
 	}, $tasks ) ) );
 	if ( $m['notify_email'] ) {
 		if ( $one ) {
-			sap_notify_email( $m['email'], 'کار جدید: ' . $first['title'], array(
-				'title'  => 'یک کار جدید به شما سپرده شد',
-				'intro'  => $m['name'] . ' عزیز، کار زیر در سکان به شما سپرده شد:' . "\n" . $first['title'],
+			sap_notify_email( $m['email'], '📌 کار تازه برای شما: ' . mb_substr( $first['title'], 0, 70 ) . ( $first['due_date'] ? ' (تا ' . sap_jdate( $first['due_date'], 'short' ) . ')' : '' ), array(
+				'title'  => $first['title'],
+				'badge'  => '📌 کار جدید · ' . ( $p['name'] ?? '' ),
+				'preheader' => $m['name'] . ' عزیز، این کار به شما سپرده شد' . ( $first['due_date'] ? '؛ سررسید ' . sap_jdate( $first['due_date'], 'short' ) : '' ) . '.',
+				'intro'  => $m['name'] . ' عزیز، سلام! کار بالا در سکان به شما سپرده شد. جزئیات و قدم‌های انجامش اینجاست:',
 				'rows'   => sap_task_brief_line( $first ),
-				'items'  => array_slice( array_filter( array_map( 'trim', explode( "\n", (string) $first['notes'] ) ) ), 0, 12 ),
+				'items'  => sap_email_note_items( $first['notes'] ),
 				'button' => array( 'مشاهده در «کارهای من»', sap_url( 'my' ) . '#task-' . $first['id'] ),
 			) );
 		} else {
-			sap_notify_email( $m['email'], sprintf( '%s کار جدید به شما سپرده شد', sap_num( count( $tasks ) ) ), array(
-				'title'  => sprintf( '%s کار جدید برای شما', sap_num( count( $tasks ) ) ),
+			sap_notify_email( $m['email'], sprintf( '📋 %s کار تازه در سکان منتظر شماست — %s', sap_num( count( $tasks ) ), $pn ), array(
+				'title'  => sprintf( '%s کار تازه برای شما', sap_num( count( $tasks ) ) ),
+				'badge'  => '📋 ' . $pn,
+				'preheader' => 'از جمله: ' . mb_substr( $first['title'], 0, 80 ),
 				'intro'  => $m['name'] . ' عزیز، این کارها در سکان به شما سپرده شد (به ترتیب ثبت):',
 				'items'  => array_map( function ( $t ) {
 					$tp = sap_project( $t['project_id'] );
@@ -404,6 +412,25 @@ function sap_assign_notify( $user_id, $tasks ) {
 		}
 	}
 	return true;
+}
+
+/**
+ * Task notes → checklist lines for an email (headings and own numbering removed).
+ */
+function sap_email_note_items( $notes, $max = 12 ) {
+	$out = array();
+	foreach ( explode( "\n", (string) $notes ) as $l ) {
+		$l = trim( $l );
+		if ( '' === $l || preg_match( '/[:：]$/u', $l ) ) {
+			continue;
+		}
+		$l = preg_replace( '/^(?:[-•*]|[0-9۰-۹]+[.)\-])\s*/u', '', $l );
+		if ( '' !== $l ) {
+			// Addresses stay left-to-right inside the Persian line.
+			$out[] = preg_replace( '#(https?://\S+|/[A-Za-z0-9\-_./%]{3,})#u', '&#8206;<span style="direction:ltr;unicode-bidi:isolate;color:#2563EB">$1</span>&#8206;', esc_html( rawurldecode( $l ) ) );
+		}
+	}
+	return array_slice( $out, 0, $max );
 }
 
 /**
@@ -461,8 +488,10 @@ function sap_team_remind( $morning = true ) {
 			sap_sms_send( $m['phone'], sprintf( "سکان | %s %s\n%s کار باز%s:\n%s", $morning ? 'صبح بخیر' : 'یادآوری', $m['name'], sap_num( count( $tasks ) ), $overdue ? '، ' . sap_num( $overdue ) . ' عقب از موعد' : '', implode( "\n", $lines ) ), 'remind', array( $m['name'], sap_num( count( $tasks ) ), sap_num( $overdue ) ) );
 		}
 		if ( $morning && sap_setting( 'reminder_email', 1 ) && $m['notify_email'] ) {
-			sap_notify_email( $m['email'], sprintf( 'کارهای امروز شما (%s کار باز)', sap_num( count( $tasks ) ) ), array(
-				'title'  => 'صبح بخیر ' . $m['name'],
+			sap_notify_email( $m['email'], sprintf( '☀️ صبح بخیر %s — %s کار امروز%s', $m['name'], sap_num( count( $tasks ) ), $overdue ? '، ' . sap_num( $overdue ) . ' عقب از موعد' : '' ), array(
+				'title'  => 'صبح بخیر ' . $m['name'] . ' ☀️',
+				'badge'  => sprintf( '%s کار باز%s', sap_num( count( $tasks ) ), $overdue ? ' · ' . sap_num( $overdue ) . ' عقب افتاده' : '' ),
+				'tone'   => $overdue ? '#EA580C' : '#2563EB',
 				'intro'  => 'کارهای باز شما در همه پروژه‌ها، به ترتیب اولویت:',
 				'items'  => array_map( function ( $t ) use ( $today ) {
 					$p = sap_project( $t['project_id'] );
