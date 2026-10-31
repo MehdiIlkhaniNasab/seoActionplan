@@ -126,6 +126,7 @@ add_action( 'admin_post_sap_save_settings', function () {
 	$changes['serp_provider']  = 'serpapi' === sap_post( 'serp_provider' ) ? 'serpapi' : 'serper';
 	$changes['serp_gl']        = sanitize_key( (string) sap_post( 'serp_gl', 'ir' ) ) ?: 'ir';
 	$changes['serp_hl']        = sanitize_key( (string) sap_post( 'serp_hl', 'fa' ) ) ?: 'fa';
+	$changes['ai_model_help']  = preg_replace( '/[^a-zA-Z0-9._:\/-]/', '', (string) sap_post( 'ai_model_help', '' ) );
 	$changes['geo_model']      = preg_replace( '/[^a-zA-Z0-9._:\/-]/', '', (string) sap_post( 'geo_model', '' ) );
 	$changes['hourly_cost']    = max( 0, (float) sap_post( 'hourly_cost', 0 ) );
 	foreach ( array( 'sms_key', 'tg_token', 'bale_token', 'serp_key' ) as $k ) {
@@ -476,6 +477,10 @@ add_action( 'admin_post_sap_task_save', function () {
 			sap_back( sap_return_url( sap_project_url( $pid, 'plan' ) ), 'عنوان کار الزامی است.', false );
 		}
 	}
+	if ( $id && ! sap_can() && 'done' === ( $data['status'] ?? '' ) ) {
+		$r = sap_task_submit( $task, (string) ( $data['result'] ?? $task['result'] ), $data['spent'] ?? null );
+		sap_back( sap_return_url( sap_url( 'my' ) ), is_wp_error( $r ) ? $r->get_error_message() : $r['msg'], ! is_wp_error( $r ) );
+	}
 	sap_task_save( $data, $id );
 	sap_back( sap_return_url( sap_project_url( $pid, 'plan' ) ), $id ? 'کار بروز شد.' : 'کار به اکشن پلن اضافه شد.' );
 } );
@@ -651,8 +656,8 @@ add_action( 'admin_post_sap_member_save', function () {
 		sap_back( sap_url( 'team' ), sap_invite_message( $GLOBALS['sap_last_invite'] ?? array(), '' !== $data['password'] ), ! empty( $GLOBALS['sap_last_invite']['email'] ) || '' !== $data['password'] );
 	}
 	sap_member_update( $uid, $data );
-	if ( null !== sap_post( 'full_access', null ) ) {
-		sap_member_set_full( $uid, '1' === (string) sap_post( 'full_access' ) );
+	if ( null !== sap_post( 'sap_role', null ) ) {
+		sap_member_set_role( $uid, sanitize_key( (string) sap_post( 'sap_role' ) ) );
 	}
 	// A new password only for team members (never for managers from this screen).
 	if ( '' !== $data['password'] && sap_is_member_only( get_userdata( $uid ) ) ) {
@@ -702,6 +707,30 @@ add_action( 'admin_post_sap_assign_flush', function () {
 	sap_guard( 'sap_assign_flush' );
 	$n = sap_assign_flush( true );
 	sap_back( sap_url( 'team' ), $n ? sprintf( 'اطلاع‌رسانی برای %s نفر ارسال شد.', sap_num( $n ) ) : 'اطلاع‌رسانی در صفی نبود.' );
+} );
+
+add_action( 'admin_post_sap_roles_save', function () {
+	sap_guard( 'sap_roles_save' );
+	$labels = (array) sap_post( 'role_label', array() );
+	$keys   = (array) sap_post( 'role_key', array() );
+	$del    = array_map( 'sanitize_key', (array) sap_post( 'role_del', array() ) );
+	$out    = array();
+	foreach ( $labels as $i => $label ) {
+		$label = sanitize_text_field( (string) $label );
+		$key   = sanitize_key( (string) ( $keys[ $i ] ?? '' ) );
+		if ( '' === $label || ( '' !== $key && in_array( $key, $del, true ) ) ) {
+			continue;
+		}
+		if ( '' === $key ) {
+			$key = 'r' . substr( md5( $label . microtime() ), 0, 6 );
+		}
+		$out[ $key ] = $label;
+	}
+	if ( ! $out ) {
+		sap_back( sap_url( 'team' ) . '#roles', 'حداقل یک نقش لازم است.', false );
+	}
+	update_option( 'sap_project_roles', $out, false );
+	sap_back( sap_url( 'team' ) . '#roles', 'نقش‌های پروژه ذخیره شد.' );
 } );
 
 add_action( 'admin_post_sap_member_invite', function () {

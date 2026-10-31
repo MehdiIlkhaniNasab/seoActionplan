@@ -80,13 +80,8 @@ $sms_ok   = 'none' !== sap_setting( 'sms_provider', 'none' );
 					<b><?php echo esc_html( $m['name'] ); ?></b>
 					<small><?php echo esc_html( $m['title'] ?: ( $m['manager'] ? 'مدیر' : 'عضو تیم' ) ); ?></small>
 				</div>
-				<?php if ( user_can( $u->ID, 'manage_options' ) ) : ?>
-					<span class="sap-chip is-info sap-access-chip">مدیر سئو</span>
-				<?php elseif ( sap_member_full( $u->ID ) ) : ?>
-					<span class="sap-chip is-good sap-access-chip">دسترسی کامل</span>
-				<?php else : ?>
-					<span class="sap-chip is-soft sap-access-chip">فقط کارهای خودش</span>
-				<?php endif; ?>
+				<?php $ur = sap_user_role( $u->ID ); ?>
+				<span class="sap-chip <?php echo esc_attr( array( 'full' => 'is-info', 'pm' => 'is-good', 'member' => 'is-soft' )[ $ur ] ?? 'is-soft' ); ?> sap-access-chip"><?php echo esc_html( array( 'full' => 'دسترسی کامل', 'pm' => 'مدیر پروژه', 'member' => 'فقط کارهای خودش' )[ $ur ] ?? '' ); ?></span>
 			</header>
 			<p class="sap-member-contact"><span dir="ltr"><?php echo esc_html( $m['email'] ); ?></span><?php echo '' !== $m['phone'] ? ' · <span dir="ltr">' . esc_html( $m['phone'] ) . '</span>' : ' · <span class="sap-muted">بدون موبایل</span>'; ?></p>
 			<div class="sap-member-stats">
@@ -113,11 +108,10 @@ $sms_ok   = 'none' !== sap_setting( 'sms_provider', 'none' );
 						<label>سمت<input type="text" name="title" value="<?php echo esc_attr( $m['title'] ); ?>" placeholder="کارشناس محتوا"></label>
 						<label>موبایل<input type="text" name="phone" dir="ltr" value="<?php echo esc_attr( $m['phone'] ); ?>" placeholder="09121234567"></label>
 						<div class="sap-check-col"><label class="sap-check"><input type="checkbox" name="notify_sms" value="1" <?php checked( $m['notify_sms'] ); ?>> پیامک</label><label class="sap-check"><input type="checkbox" name="notify_email" value="1" <?php checked( $m['notify_email'] ); ?>> ایمیل</label></div>
-						<?php if ( current_user_can( 'manage_options' ) && ! user_can( $u->ID, 'manage_options' ) && (int) $u->ID !== get_current_user_id() ) : ?>
+						<?php if ( (int) $u->ID !== get_current_user_id() ) : ?>
 							<div class="sap-access-field">
-								<input type="hidden" name="full_access" value="0">
-								<label class="sap-check"><input type="checkbox" name="full_access" value="1" <?php checked( sap_member_full( $u->ID ) ); ?>> <b>دسترسی کامل به سکان</b></label>
-								<small>مثل مدیر سئو: همه پروژه‌ها، تحلیل‌ها، اکشن پلن، اتوماسیون و تنظیمات. خاموش = فقط «کارهای من» با توضیحات کارهای خودش.</small>
+								<label><b>نقش در سکان</b><select name="sap_role"><?php foreach ( sap_roles_sokan() as $rk => $rl ) : ?><option value="<?php echo esc_attr( $rk ); ?>" <?php selected( $rk, sap_user_role( $u->ID ) ); ?>><?php echo esc_html( $rl ); ?></option><?php endforeach; ?></select></label>
+								<small>مستقل از نقش وردپرس: کسی که در پیشخوان سایت مدیر است هم می‌تواند در سکان فقط کارهای خودش را ببیند. مدیر پروژه پروژه‌ها و اعضا را می‌بیند و کار ثبت می‌کند؛ کارهایش بعد از تأیید شما به مسئول واگذار می‌شود.</small>
 							</div>
 						<?php endif; ?>
 						<?php if ( sap_is_member_only( $u ) ) : ?><label>رمز عبور جدید (اختیاری)<input type="password" name="password" dir="ltr" minlength="8" autocomplete="new-password" placeholder="خالی = بدون تغییر"></label><?php endif; ?>
@@ -156,4 +150,25 @@ $sms_ok   = 'none' !== sap_setting( 'sms_provider', 'none' );
 	<div class="sap-panel-head"><h2><?php echo sap_icon( 'clock' ); // phpcs:ignore ?>یادآوری‌ها</h2></div>
 	<p class="sap-muted sap-small">یادآوری بعدی: <?php echo esc_html( implode( ' و ', array_map( function ( $h ) { return 'ساعت ' . sap_num( (int) $h ) . ':۰۰'; }, sap_list( (string) sap_setting( 'reminder_hours', '8,14' ) ) ) ) ); ?> (جمعه‌ها ارسال نمی‌شود). آخرین ارسال: <?php echo esc_html( get_option( 'sap_remind_slot' ) ? sap_jdate( substr( (string) get_option( 'sap_remind_slot' ), 0, 10 ), 'short' ) . ' ساعت ' . sap_num( (int) substr( (string) get_option( 'sap_remind_slot' ), 11 ) ) : '—' ); ?></p>
 	<button type="button" class="sap-btn is-soft" data-sap-remind-now>ارسال یادآوری همین الان</button>
+</section>
+
+<section class="sap-panel sap-roles" id="roles">
+	<div class="sap-panel-head"><h2><?php echo sap_icon( 'users' ); // phpcs:ignore ?>نقش‌های پروژه<small>عنوان نقش هر عضو در هر پروژه (مثلاً نویسنده، کارشناس فنی). اضافه، ویرایش یا حذف کنید.</small></h2></div>
+	<form method="post" action="<?php echo $post; // phpcs:ignore ?>" class="sap-form">
+		<?php sap_form_fields( 'sap_roles_save' ); ?>
+		<div class="sap-roles-list">
+			<?php foreach ( sap_member_roles() as $rk => $rl ) : ?>
+				<div class="sap-role-row">
+					<input type="hidden" name="role_key[]" value="<?php echo esc_attr( $rk ); ?>">
+					<input type="text" name="role_label[]" value="<?php echo esc_attr( $rl ); ?>">
+					<label class="sap-check sap-small"><input type="checkbox" name="role_del[]" value="<?php echo esc_attr( $rk ); ?>"> حذف</label>
+				</div>
+			<?php endforeach; ?>
+			<div class="sap-role-row is-new">
+				<input type="hidden" name="role_key[]" value="">
+				<input type="text" name="role_label[]" placeholder="+ نقش جدید (مثلاً تولیدکننده ویدیو)">
+			</div>
+		</div>
+		<div class="sap-form-foot"><button class="sap-btn is-primary is-small" type="submit">ذخیره نقش‌ها</button></div>
+	</form>
 </section>

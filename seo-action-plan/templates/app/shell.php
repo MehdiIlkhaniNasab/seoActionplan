@@ -47,6 +47,10 @@ $link     = function ( $key, $url, $icon, $label, $badge = 0 ) use ( $nav ) {
 			<?php
 			if ( $manager ) {
 				$link( 'dashboard', sap_url(), 'grid', 'داشبورد' );
+				$link( 'desk', sap_url( 'desk' ), 'inbox', 'میز کار', sap_desk_count() );
+			}
+			if ( sap_is_pm() ) {
+				$link( 'pm', sap_url( 'pm' ), 'list', 'پروژه‌ها و ثبت کار' );
 			}
 			$link( 'my', sap_url( 'my' ), 'check', 'کارهای من', $my_open );
 			?>

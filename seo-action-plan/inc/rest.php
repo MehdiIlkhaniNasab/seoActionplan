@@ -108,6 +108,11 @@ add_action( 'rest_api_init', function () {
 			if ( ! sap_can() && ( $task['assignee'] !== get_current_user_id() || ! in_array( $status, array( 'doing', 'waiting', 'done' ), true ) ) ) {
 				return new WP_Error( 'sap_forbidden', 'اجازه این تغییر را ندارید.', array( 'status' => 403 ) );
 			}
+			// A member's «done» goes to the managers' desk for review.
+			if ( 'done' === $status && ! sap_can() ) {
+				$r = sap_task_submit( $task, (string) ( $req->get_param( 'result' ) ?: $task['result'] ), null !== $req->get_param( 'spent' ) ? (string) $req->get_param( 'spent' ) : null );
+				return is_wp_error( $r ) ? $r : array( 'ok' => true, 'status' => $r['status'], 'label' => sap_task_statuses()[ $r['status'] ], 'msg' => $r['msg'] );
+			}
 			$data = array( 'status' => $status );
 			// The report of the work: what was done (goes to the log and the monthly report) and hours spent.
 			if ( null !== $req->get_param( 'result' ) ) {

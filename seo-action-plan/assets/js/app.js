@@ -349,7 +349,8 @@
 			var card = f.closest('[data-sap-mytask]');
 			var btn = f.querySelector('button[type="submit"]');
 			btn.disabled = true;
-			post('task/' + card.getAttribute('data-sap-mytask') + '/status', { status: 'done', result: f.result.value, spent: f.spent.value }).then(function (res) {
+			var links = f.links ? f.links.value.split(/\n+/).map(function (l) { return l.trim(); }).filter(Boolean) : [];
+			post('task/' + card.getAttribute('data-sap-mytask') + '/submit', { result: f.result.value, spent: f.spent.value, links: links }).then(function (res) {
 				toast(res.msg);
 				fadeOut(card);
 				setTimeout(function () { card.remove(); apply(); }, 450);
@@ -2105,5 +2106,182 @@
 			});
 		}
 	})();
+
+	/* ---- Member task card: panels, AI help, questions, documents, long descriptions ---- */
+	(function () {
+		var esc = function (t) { var d = document.createElement('div'); d.textContent = t == null ? '' : String(t); return d.innerHTML; };
+		var history = {};
+		document.addEventListener('click', function (ev) {
+			var pb = ev.target.closest('[data-sap-my-panel]');
+			var more = ev.target.closest('[data-sap-desc-more]');
+			var rm = ev.target.closest('[data-sap-att-rm]');
+			if (more) {
+				var dsc = more.previousElementSibling;
+				if (dsc) { dsc.classList.remove('is-long'); }
+				more.remove();
+				return;
+			}
+			var card = ev.target.closest('[data-sap-mytask]');
+			if (pb && card) {
+				var which = pb.getAttribute('data-sap-my-panel');
+				card.querySelectorAll('[data-sap-panel]').forEach(function (p) { p.hidden = p.getAttribute('data-sap-panel') !== which ? true : !p.hidden; });
+				var inp = card.querySelector('[data-sap-panel="' + which + '"] input, [data-sap-panel="' + which + '"] textarea');
+				if (inp) { inp.focus(); }
+				return;
+			}
+			if (rm && card) {
+				rm.disabled = true;
+				post('task/' + card.getAttribute('data-sap-mytask') + '/attach', { do: 'remove', url: rm.getAttribute('data-sap-att-rm') }).then(function () { rm.parentElement.remove(); }).catch(function (e) { toast(e.message, true); rm.disabled = false; });
+			}
+		});
+		document.addEventListener('change', function (ev) {
+			var inp = ev.target.closest('[data-sap-attach]');
+			if (!inp) { return; }
+			var card = inp.closest('[data-sap-mytask]');
+			var list = card.querySelector('[data-sap-att-list]');
+			Array.prototype.forEach.call(inp.files, function (f) {
+				if (f.size > 8 * 1024 * 1024) { toast('«' + f.name + '» بیشتر از ۸ مگابایت است.', true); return; }
+				var chip = document.createElement('span');
+				chip.className = 'sap-att is-loading';
+				chip.textContent = f.name;
+				list.appendChild(chip);
+				var fd = new FormData();
+				fd.append('file', f);
+				api('task/' + card.getAttribute('data-sap-mytask') + '/attach', { method: 'POST', body: fd }).then(function (res) {
+					chip.className = 'sap-att' + ('image' === res.file.type ? ' is-img' : '');
+					chip.innerHTML = ('image' === res.file.type ? '<img src="' + esc(res.file.url) + '" alt="">' : esc(res.file.name)) + '<button type="button" data-sap-att-rm="' + esc(res.file.url) + '" aria-label="حذف">×</button>';
+				}).catch(function (e) { chip.remove(); toast(e.message, true); });
+			});
+			inp.value = '';
+		});
+		document.addEventListener('submit', function (ev) {
+			var hf = ev.target.closest('[data-sap-help-form]');
+			var af = ev.target.closest('[data-sap-ask-form]');
+			if (!hf && !af) { return; }
+			ev.preventDefault();
+			var card = ev.target.closest('[data-sap-mytask]');
+			var id = card.getAttribute('data-sap-mytask');
+			var btn = ev.target.querySelector('button');
+			var q = ev.target.q.value.trim();
+			if (!q) { return; }
+			btn.disabled = true;
+			if (af) {
+				post('task/' + id + '/ask', { question: q }).then(function (res) {
+					toast(res.msg);
+					af.q.value = '';
+					af.closest('[data-sap-panel]').hidden = true;
+					btn.disabled = false; btn.classList.remove('is-loading');
+				}).catch(function (e) { toast(e.message, true); btn.disabled = false; btn.classList.remove('is-loading'); });
+				return;
+			}
+			var log = card.querySelector('[data-sap-help-log]');
+			log.insertAdjacentHTML('beforeend', '<p class="sap-help-msg is-me">' + esc(q) + '</p><p class="sap-help-msg is-bot is-typing">در حال فکر کردن…</p>');
+			log.scrollTop = log.scrollHeight;
+			hf.q.value = '';
+			history[id] = history[id] || [];
+			post('task/' + id + '/help', { question: q, history: history[id] }).then(function (res) {
+				var t = log.querySelector('.is-typing');
+				t.classList.remove('is-typing');
+				t.innerHTML = esc(res.answer).replace(/\n/g, '<br>');
+				history[id].push({ role: 'user', text: q }, { role: 'bot', text: res.answer });
+				log.scrollTop = log.scrollHeight;
+				btn.disabled = false; btn.classList.remove('is-loading');
+			}).catch(function (e) { var t = log.querySelector('.is-typing'); if (t) { t.remove(); } toast(e.message, true); btn.disabled = false; btn.classList.remove('is-loading'); });
+		});
+	})();
+
+	/* ---- Desk: approve / feedback, answers, proposals; review on the plan card too ---- */
+	document.addEventListener('click', function (ev) {
+		var rv = ev.target.closest('[data-sap-review]');
+		var an = ev.target.closest('[data-sap-answer-send]');
+		var pr = ev.target.closest('[data-sap-proposal]');
+		if (!rv && !an && !pr) { return; }
+		ev.preventDefault();
+		var card = ev.target.closest('[data-sap-desk-card], .sap-task, .sap-tactions');
+		var gone = function (msg) {
+			toast(msg);
+			var box = ev.target.closest('[data-sap-desk-card]') || ev.target.closest('.sap-task');
+			if (box) { fadeOut(box); setTimeout(function () { box.remove(); }, 420); }
+		};
+		if (rv) {
+			var fb = card.querySelector('[data-sap-desk-feedback]');
+			if ('feedback' === rv.getAttribute('data-sap-review') && fb && fb.hidden) {
+				fb.hidden = false;
+				fb.querySelector('textarea').focus();
+				rv.textContent = 'ارسال بازخورد';
+				return;
+			}
+			rv.disabled = true;
+			post('task/' + rv.getAttribute('data-id') + '/review', { do: rv.getAttribute('data-sap-review'), note: fb ? fb.querySelector('textarea').value : '' }).then(function (res) { gone(res.msg); }).catch(function (e) { toast(e.message, true); rv.disabled = false; });
+		} else if (an) {
+			var ta = card.querySelector('[data-sap-answer]');
+			an.disabled = true;
+			post('question/' + an.getAttribute('data-sap-answer-send'), { answer: ta.value }).then(function (res) { gone(res.msg); }).catch(function (e) { toast(e.message, true); an.disabled = false; });
+		} else if (pr) {
+			var as = card.querySelector('[data-sap-prop-assignee]');
+			var du = card.querySelector('[data-sap-prop-due]');
+			if ('reject' === pr.getAttribute('data-sap-proposal') && !window.confirm('این کار پیشنهادی رد شود؟')) { return; }
+			pr.disabled = true;
+			post('proposal/' + pr.getAttribute('data-id'), { do: pr.getAttribute('data-sap-proposal'), assignee: as ? as.value : null, due_date: du ? du.value : '' }).then(function (res) { gone(res.msg); }).catch(function (e) { toast(e.message, true); pr.disabled = false; });
+		}
+	});
+
+	/* ---- AI brief: clarify a task for the person doing it (cheap model) ---- */
+	document.addEventListener('click', function (ev) {
+		var b = ev.target.closest('[data-sap-brief], [data-sap-brief-task]');
+		if (!b) { return; }
+		ev.preventDefault();
+		var form = b.closest('[data-sap-brief-form]');
+		var task = b.getAttribute('data-sap-brief-task');
+		var data = {};
+		if (task) {
+			var card = b.closest('.sap-task');
+			var ta = card.querySelector('[data-sap-task-notes-input]');
+			var ti = card.querySelector('input[name="title"]');
+			var ct = card.querySelector('select[name="context"]');
+			var ur = card.querySelector('input[name="url"]');
+			data = { task_id: task, project_id: b.getAttribute('data-project'), title: ti ? ti.value : '', notes: ta ? ta.value : '', context: ct ? ct.value : '', url: ur ? ur.value : '' };
+		} else if (form) {
+			var pj = form.querySelector('[name="project_id"], [data-sap-brief-project]');
+			var fv = function (n) { var el = form.querySelector('[name="' + n + '"]'); return el ? el.value : ''; };
+			data = { project_id: pj ? pj.value : 0, title: fv('title'), notes: form.querySelector('[data-sap-brief-notes]').value, context: fv('context'), url: fv('url') };
+		}
+		if (!data.title) { toast('اول عنوان کار را بنویسید.', true); return; }
+		b.disabled = true;
+		b.classList.add('is-loading');
+		post('task-brief', data).then(function (res) {
+			if (task) {
+				var card2 = b.closest('.sap-task');
+				var box = card2.querySelector('[data-sap-task-notes]');
+				if (box) { box.textContent = res.notes; box.style.whiteSpace = 'pre-line'; }
+				var ta2 = card2.querySelector('[data-sap-task-notes-input]');
+				if (ta2) { ta2.value = res.notes; }
+				toast('توضیحات کار شفاف و ذخیره شد.');
+			} else {
+				form.querySelector('[data-sap-brief-notes]').value = res.notes;
+				var oc = form.querySelector('[data-sap-brief-outcome]');
+				if (oc) { oc.value = res.outcome; }
+				toast('توضیحات آماده شد؛ بررسی و در صورت نیاز ویرایش کنید.');
+			}
+		}).catch(function (e) { toast(e.message, true); }).then(function () { b.disabled = false; b.classList.remove('is-loading'); });
+	});
+
+	/* ---- Task dialog: one open at a time, Esc / backdrop closes ---- */
+	document.addEventListener('toggle', function (ev) {
+		var d = ev.target;
+		if (!d.classList || !d.classList.contains('sap-task') || !d.closest('.sap-board, .sap-stack')) { return; }
+		if (d.open) {
+			document.querySelectorAll('.sap-board .sap-task[open], .sap-stack .sap-task[open]').forEach(function (o) { if (o !== d) { o.open = false; } });
+		}
+		document.body.classList.toggle('has-task-open', !!document.querySelector('.sap-board .sap-task[open], .sap-stack .sap-task[open]'));
+	}, true);
+	document.addEventListener('keydown', function (ev) {
+		if ('Escape' !== ev.key) { return; }
+		document.querySelectorAll('.sap-board .sap-task[open], .sap-stack .sap-task[open]').forEach(function (o) { o.open = false; });
+	});
+	document.addEventListener('click', function (ev) {
+		var o = document.querySelector('.sap-board .sap-task[open], .sap-stack .sap-task[open]');
+		if (o && !o.contains(ev.target) && !ev.target.closest('.sap-toast, dialog')) { o.open = false; }
+	});
 
 })();

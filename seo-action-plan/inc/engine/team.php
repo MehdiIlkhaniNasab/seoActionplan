@@ -14,6 +14,17 @@ defined( 'ABSPATH' ) || exit;
  * Roles in a project.
  */
 function sap_member_roles() {
+	$saved = get_option( 'sap_project_roles' );
+	if ( is_array( $saved ) && $saved ) {
+		return $saved;
+	}
+	return sap_member_roles_default();
+}
+
+/**
+ * Built-in project roles (until you edit the list in «تیم»).
+ */
+function sap_member_roles_default() {
 	return array(
 		'manager' => 'مدیر سئو',
 		'tech'    => 'کارشناس فنی / توسعه‌دهنده',
@@ -41,7 +52,8 @@ function sap_member( $user_id ) {
 		'notify_sms'   => '0' !== (string) get_user_meta( $u->ID, 'sap_notify_sms', true ),
 		'notify_email' => '0' !== (string) get_user_meta( $u->ID, 'sap_notify_email', true ),
 		'color'        => sap_member_color( $u->ID ),
-		'manager'      => user_can( $u, SAP_CAP ) || user_can( $u, 'manage_options' ),
+		'manager'      => 'full' === sap_user_role( $u->ID ),
+		'role'         => sap_user_role( $u->ID ),
 	);
 }
 
@@ -162,31 +174,48 @@ function sap_is_member_only( $user ) {
 }
 
 add_filter( 'login_redirect', function ( $to, $requested, $user ) {
-	return sap_is_member_only( $user ) && ( '' === (string) $requested || false !== strpos( (string) $requested, '/wp-admin' ) ) ? sap_url( sap_member_full( $user ) ? '' : 'my' ) : $to;
+	$role = $user instanceof WP_User ? sap_user_role( $user->ID ) : '';
+	if ( in_array( $role, array( 'pm', 'member' ), true ) && ( '' === (string) $requested || ( sap_is_member_only( $user ) && false !== strpos( (string) $requested, '/wp-admin' ) ) ) ) {
+		return sap_url( 'pm' === $role ? 'pm' : 'my' );
+	}
+	return sap_is_member_only( $user ) && ( '' === (string) $requested || false !== strpos( (string) $requested, '/wp-admin' ) ) ? sap_url( '' ) : $to;
 }, 20, 3 );
 
 /**
  * A team member the manager gave full access (projects, plans, settings) to.
  */
 function sap_member_full( $user ) {
-	$user = $user instanceof WP_User ? $user : get_userdata( is_object( $user ) ? (int) ( $user->ID ?? 0 ) : (int) $user );
-	return $user instanceof WP_User && ! user_can( $user, 'manage_options' ) && ! empty( $user->caps[ SAP_CAP ] );
+	$uid = $user instanceof WP_User ? $user->ID : ( is_object( $user ) ? (int) ( $user->ID ?? 0 ) : (int) $user );
+	return 'full' === sap_user_role( $uid ) && ! user_can( $uid, 'manage_options' );
 }
 
 /**
- * Grant or take back full access (only administrators — the SEO manager — may).
+ * Set a person's Sokan role (only full-access managers; never your own, so a site
+ * always keeps at least the person doing the change as full).
  */
-function sap_member_set_full( $user_id, $on ) {
+function sap_member_set_role( $user_id, $role ) {
 	$u = get_userdata( (int) $user_id );
-	if ( ! $u || user_can( $u, 'manage_options' ) || (int) $user_id === get_current_user_id() || ! current_user_can( 'manage_options' ) ) {
+	if ( ! $u || (int) $user_id === get_current_user_id() || ! sap_can() || ! isset( sap_roles_sokan()[ $role ] ) ) {
 		return false;
 	}
-	if ( $on ) {
+	update_user_meta( $u->ID, 'sap_role', $role );
+	// Keep the capability in step for code that checks it.
+	if ( 'full' === $role ) {
 		$u->add_cap( SAP_CAP );
 	} else {
 		$u->remove_cap( SAP_CAP );
 	}
+	if ( ! user_can( $u, SAP_CAP_WORK ) && ! user_can( $u, 'manage_options' ) ) {
+		$u->add_cap( SAP_CAP_WORK );
+	}
 	return true;
+}
+
+/**
+ * Backward compatible toggle.
+ */
+function sap_member_set_full( $user_id, $on ) {
+	return sap_member_set_role( $user_id, $on ? 'full' : 'member' );
 }
 
 add_action( 'admin_init', function () {
@@ -254,11 +283,29 @@ add_action( 'sap_task_saved', function ( $before, $after ) {
 	}
 	$me = get_current_user_id();
 	// Assigned (or re-assigned) to someone else: queued, so a burst of assignments becomes one message.
-	if ( $after['assignee'] && ( ! $before || (int) $before['assignee'] !== $after['assignee'] ) && $after['assignee'] !== $me && 'done' !== $after['status'] ) {
+	// A project manager's proposal is announced only once a full manager approves it.
+	$approved = $before && 'proposed' === $before['status'] && 'proposed' !== $after['status'];
+	if ( $after['assignee'] && ( ! $before || (int) $before['assignee'] !== $after['assignee'] || $approved ) && $after['assignee'] !== $me && ! in_array( $after['status'], array( 'done', 'proposed', 'dropped', 'review' ), true ) ) {
 		sap_assign_queue_add( $after['assignee'], $after['id'] );
 	}
+	// Approved after review: a short «تأیید شد» email (the motivating one went at submission).
+	if ( 'done' === $after['status'] && $before && 'review' === $before['status'] && $after['assignee'] ) {
+		$m = sap_member( $after['assignee'] );
+		if ( $m && $m['notify_email'] ) {
+			$p = sap_project( $after['project_id'] );
+			sap_notify_email( $m['email'], '✅ تأیید شد: «' . mb_substr( $after['title'], 0, 60 ) . '»', array(
+				'title' => 'کارت تأیید شد ✅',
+				'badge' => '✅ تأیید مدیر · ' . ( $p['name'] ?? '' ),
+				'tone'  => '#16A34A',
+				'intro' => sap_first_name( $m['name'] ) . ' عزیز، مدیر سئو گزارش کار «' . $after['title'] . '» را بررسی و تأیید کرد. این کار در لاگ اقدامات و گزارش ماهانه پروژه ثبت شد. عالی بود!',
+				'button' => array( 'کارهای بعدی من', sap_url( 'my' ) ),
+			) );
+		}
+		return;
+	}
 	// Done: thank the person and tell the manager.
-	if ( 'done' === $after['status'] && ( ! $before || 'done' !== $before['status'] ) && $after['assignee'] ) {
+	// Submitted for review (or done directly by a full manager): thank the person and tell the manager.
+	if ( in_array( $after['status'], array( 'done', 'review' ), true ) && ( ! $before || ! in_array( $before['status'], array( 'done', 'review' ), true ) ) && $after['assignee'] ) {
 		$m = sap_member( $after['assignee'] );
 		if ( $m ) {
 			// One motivating email per finished task; the thank-you SMS goes once a night (sap_done_digest).
@@ -268,12 +315,12 @@ add_action( 'sap_task_saved', function ( $before, $after ) {
 				$month_n = sap_member_done_count( $m['id'], $mf, $mt );
 				$p       = sap_project( $after['project_id'] );
 				$cheers  = array( 'عالی پیش می‌روی!', 'یک قدم دیگر به هدف نزدیک‌تر شدیم.', 'کار تمیز و دقیق، دمت گرم!', 'همین پیوستگی است که نتیجه می‌سازد.', 'با هر کار، سایت یک پله بالاتر می‌رود.' );
-				sap_notify_email( $m['email'], sprintf( '🌿 دمت گرم %s! «%s» انجام شد', sap_first_name( $m['name'] ), mb_substr( $after['title'], 0, 60 ) ), array(
+				sap_notify_email( $m['email'], sprintf( '🌿 دمت گرم %s! «%s» %s', sap_first_name( $m['name'] ), mb_substr( $after['title'], 0, 60 ), 'review' === $after['status'] ? 'ثبت شد' : 'انجام شد' ), array(
 					'title'     => 'خسته نباشید ' . sap_first_name( $m['name'] ) . ' 🌿',
 					'badge'     => '✅ کار انجام شد · ' . ( $p['name'] ?? '' ),
 					'tone'      => '#16A34A',
 					'preheader' => $cheers[ $today_n % count( $cheers ) ] . ' امروز ' . sap_num( $today_n ) . ' کار انجام دادی.',
-					'intro'     => $m['name'] . ' عزیز، ' . $cheers[ $today_n % count( $cheers ) ] . "\nکار «" . $after['title'] . '» انجام شد و در لاگ اقدامات و گزارش ماهانه پروژه ثبت شد. اثرش روی رتبه و ترافیک هم در سرچ کنسول سنجیده می‌شود.',
+					'intro'     => $m['name'] . ' عزیز، ' . $cheers[ $today_n % count( $cheers ) ] . "\nکار «" . $after['title'] . ( 'review' === $after['status'] ? '» ثبت شد و برای تأیید نهایی به مدیر سئو رفت؛ بعد از تأیید در لاگ اقدامات و گزارش ماهانه پروژه می‌آید.' : '» انجام شد و در لاگ اقدامات و گزارش ماهانه پروژه ثبت شد. اثرش روی رتبه و ترافیک هم در سرچ کنسول سنجیده می‌شود.' ),
 					'rows'      => array_filter( array(
 						'کارهای امروز'   => sap_num( $today_n ) . ' کار',
 						'کارهای این ماه' => sap_num( $month_n ) . ' کار',
@@ -523,7 +570,8 @@ function sap_team_remind( $morning = true ) {
 function sap_member_done_count( $user_id, $from, $to = '' ) {
 	global $wpdb;
 	$to = '' !== $to ? $to : $from;
-	return (int) $wpdb->get_var( $wpdb->prepare( 'SELECT COUNT(*) FROM ' . sap_table( 'tasks' ) . " WHERE assignee = %d AND status = 'done' AND done_at >= %s AND done_at <= %s", (int) $user_id, $from . ' 00:00:00', $to . ' 23:59:59' ) ); // phpcs:ignore
+	// Submitted for review counts the day it was submitted.
+	return (int) $wpdb->get_var( $wpdb->prepare( 'SELECT COUNT(*) FROM ' . sap_table( 'tasks' ) . " WHERE assignee = %d AND status IN ('done','review') AND COALESCE(submitted_at, done_at) >= %s AND COALESCE(submitted_at, done_at) <= %s", (int) $user_id, $from . ' 00:00:00', $to . ' 23:59:59' ) ); // phpcs:ignore
 }
 
 /**

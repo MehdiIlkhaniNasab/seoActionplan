@@ -127,12 +127,33 @@ function sap_install() {
 		ai_output longtext NULL,
 		outcome text NULL,
 		spent decimal(6,2) NOT NULL DEFAULT 0,
+		review_note text NULL,
+		attachments longtext NULL,
+		created_by bigint(20) unsigned NOT NULL DEFAULT 0,
+		submitted_at datetime NULL,
+		late_alert datetime NULL,
 		created_at datetime NOT NULL DEFAULT '0000-00-00 00:00:00',
 		updated_at datetime NOT NULL DEFAULT '0000-00-00 00:00:00',
 		done_at datetime NULL,
 		PRIMARY KEY  (id),
 		KEY project_period (project_id,period),
 		KEY assignee (assignee)
+	) $c;" );
+
+	dbDelta( 'CREATE TABLE ' . sap_table( 'questions' ) . " (
+		id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+		project_id bigint(20) unsigned NOT NULL DEFAULT 0,
+		task_id bigint(20) unsigned NOT NULL DEFAULT 0,
+		user_id bigint(20) unsigned NOT NULL DEFAULT 0,
+		question text NULL,
+		answer text NULL,
+		answered_by bigint(20) unsigned NOT NULL DEFAULT 0,
+		status varchar(20) NOT NULL DEFAULT 'open',
+		created_at datetime NOT NULL DEFAULT '0000-00-00 00:00:00',
+		answered_at datetime NULL,
+		PRIMARY KEY  (id),
+		KEY task_id (task_id),
+		KEY status (status)
 	) $c;" );
 
 	dbDelta( 'CREATE TABLE ' . sap_table( 'activity' ) . " (

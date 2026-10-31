@@ -17,8 +17,10 @@ function sap_task_statuses() {
 		'doing'   => 'در حال انجام',
 		'waiting' => 'در انتظار (Waiting For)',
 		'someday' => 'شاید بعداً',
+		'review'  => 'در انتظار تأیید مدیر',
 		'done'    => 'انجام شد',
 		'dropped' => 'حذف شد',
+		'proposed' => 'پیشنهاد (منتظر تأیید)',
 	);
 }
 
@@ -38,6 +40,12 @@ function sap_task_hydrate( $row ) {
 	$row['effort']     = (float) $row['effort'];
 	$row['score']      = (float) $row['score'];
 	$row['spent']      = (float) ( $row['spent'] ?? 0 );
+	$row['created_by'] = (int) ( $row['created_by'] ?? 0 );
+	$row['review_note'] = (string) ( $row['review_note'] ?? '' );
+	$row['submitted_at'] = (string) ( $row['submitted_at'] ?? '' );
+	$row['late_alert']   = (string) ( $row['late_alert'] ?? '' );
+	$att                 = json_decode( (string) ( $row['attachments'] ?? '' ), true );
+	$row['attachments']  = is_array( $att ) ? $att : array();
 	foreach ( array( 'notes', 'result', 'url', 'waiting_for', 'keyword', 'period', 'recurring', 'source', 'ai_ref', 'ai_output', 'outcome' ) as $k ) {
 		$row[ $k ] = (string) ( $row[ $k ] ?? '' );
 	}
@@ -109,10 +117,20 @@ function sap_task_save( $data, $id = 0 ) {
 		'ai_ref'      => 'sanitize_key',
 		'ai_output'   => 'sanitize_textarea_field',
 		'outcome'     => 'sanitize_textarea_field',
+		'review_note' => 'sanitize_textarea_field',
+		'created_by'  => 'absint',
 	);
 	foreach ( $map as $k => $fn ) {
 		if ( array_key_exists( $k, $data ) ) {
 			$fields[ $k ] = call_user_func( $fn, $data[ $k ] );
+		}
+	}
+	if ( array_key_exists( 'attachments', $data ) ) {
+		$fields['attachments'] = wp_json_encode( array_values( array_filter( (array) $data['attachments'], 'is_array' ) ), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES );
+	}
+	foreach ( array( 'submitted_at', 'late_alert' ) as $dk ) {
+		if ( array_key_exists( $dk, $data ) ) {
+			$fields[ $dk ] = $data[ $dk ] ?: null;
 		}
 	}
 	if ( array_key_exists( 'spent', $data ) ) {
@@ -149,6 +167,12 @@ function sap_task_save( $data, $id = 0 ) {
 		$wpdb->update( $table, $fields, array( 'id' => (int) $id ) );
 	} else {
 		$fields['created_at'] = sap_now();
+		if ( ! isset( $fields['created_by'] ) ) {
+			$fields['created_by'] = get_current_user_id();
+		}
+		if ( ! array_key_exists( 'period', $data ) ) {
+			$fields['period'] = sap_period_current(); // Visible in this month's plan.
+		}
 		$wpdb->insert( $table, $fields );
 		$id = (int) $wpdb->insert_id;
 	}
@@ -214,11 +238,21 @@ function sap_task_delete( $id ) {
 function sap_team_users() {
 	static $users = null;
 	if ( null === $users ) {
-		$users = get_users( array(
-			'capability__in' => array( SAP_CAP, SAP_CAP_WORK, 'manage_options' ),
-			'fields'         => array( 'ID', 'display_name' ),
-			'orderby'        => 'display_name',
-		) );
+		$by = array();
+		foreach ( get_users( array( 'capability__in' => array( SAP_CAP, SAP_CAP_WORK, 'manage_options' ), 'fields' => array( 'ID', 'display_name' ), 'orderby' => 'display_name' ) ) as $u ) {
+			$by[ (int) $u->ID ] = $u;
+		}
+		// People given a Sokan role while their WordPress role has no Sokan capability.
+		foreach ( get_users( array( 'meta_key' => 'sap_role', 'meta_compare' => 'EXISTS', 'fields' => array( 'ID', 'display_name' ) ) ) as $u ) {
+			$by[ (int) $u->ID ] = $u;
+		}
+		$by = array_filter( $by, function ( $u ) {
+			return '' !== sap_user_role( $u->ID );
+		} );
+		uasort( $by, function ( $a, $b ) {
+			return strcmp( $a->display_name, $b->display_name );
+		} );
+		$users = array_values( $by );
 	}
 	return $users;
 }

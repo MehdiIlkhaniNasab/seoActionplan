@@ -28,6 +28,7 @@ function sap_settings_defaults() {
 		'anthropic_key'          => '',
 		'ai_model'               => 'claude-sonnet-5-5', // Analysis.
 		'ai_model_assist'        => 'claude-haiku-5-5',  // «بنویس برام».
+		'ai_model_help'          => 'gemini-2.5-flash-lite', // Team help: task briefs and step-by-step guidance.
 		'ai_model_light'         => 'gpt-4.1-mini',      // Bulk / simple stages (keyword map, cannibalization, links, briefs).
 		'ai_budget'              => 10,  // Monthly AI budget in USD; AI stops when reached.
 		'ai_auto'                => 0,   // Run the AI analysis in the scheduled weekly sync too (costs API credit).

@@ -136,14 +136,18 @@ function sap_resolve_route( $route ) {
 	$first = $parts[0] ?? '';
 	$out   = array( 'route' => $route, 'nav' => $first ?: 'dashboard', 'project' => null );
 	// Team members only have their tasks and the guide.
-	if ( ! sap_can() && ! in_array( $first, array( 'my', 'guide' ), true ) ) {
-		$first = 'my';
+	if ( ! sap_can() && ! in_array( $first, sap_is_pm() ? array( 'my', 'guide', 'pm' ) : array( 'my', 'guide' ), true ) ) {
+		$first = sap_is_pm() && '' === $first ? 'pm' : 'my';
 	}
 	switch ( $first ) {
 		case 'new':
 			return array_merge( $out, array( 'view' => 'project-form', 'title' => 'پروژه جدید', 'vars' => array( 'project' => null ) ) );
 		case 'my':
 			return array_merge( $out, array( 'view' => 'my-tasks', 'title' => 'کارهای من', 'nav' => 'my', 'vars' => array() ) );
+		case 'desk':
+			return array_merge( $out, array( 'view' => 'desk', 'title' => 'میز کار', 'nav' => 'desk', 'vars' => array() ) );
+		case 'pm':
+			return array_merge( $out, array( 'view' => 'pm', 'title' => 'پروژه‌ها و ثبت کار', 'nav' => 'pm', 'vars' => array() ) );
 		case 'team':
 			return array_merge( $out, array( 'view' => 'team', 'title' => 'تیم و اعضا', 'nav' => 'team', 'vars' => array() ) );
 		case 'learning':

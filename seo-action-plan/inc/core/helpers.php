@@ -267,14 +267,71 @@ function sap_now() {
  * Can the current user manage the tool?
  */
 function sap_can() {
-	return current_user_can( SAP_CAP ) || current_user_can( 'manage_options' );
+	return 'full' === sap_user_role();
 }
 
 /**
- * Can the current user work on tasks (manager or team member)?
+ * Can the current user work on tasks (manager, project manager or team member)?
  */
 function sap_can_work() {
-	return sap_can() || current_user_can( SAP_CAP_WORK );
+	return '' !== sap_user_role();
+}
+
+/**
+ * Sokan roles: full = everything; pm = project manager (projects, members, proposes tasks
+ * that the full-access managers approve); member = only their own tasks.
+ */
+function sap_roles_sokan() {
+	return array(
+		'full'   => 'دسترسی کامل (مدیر سئو)',
+		'pm'     => 'مدیر پروژه (ثبت کار برای تأیید، دیدن پروژه‌ها و اعضا)',
+		'member' => 'عضو (فقط کارهای خودش)',
+	);
+}
+
+/**
+ * A person's Sokan role. Set per person in «تیم» and independent of the WordPress role,
+ * so someone who manages the site in wp-admin can still see only their own tasks here.
+ */
+function sap_user_role( $user_id = 0 ) {
+	$uid = (int) ( $user_id ?: get_current_user_id() );
+	if ( ! $uid ) {
+		return '';
+	}
+	$meta = (string) get_user_meta( $uid, 'sap_role', true );
+	if ( isset( sap_roles_sokan()[ $meta ] ) ) {
+		return $meta;
+	}
+	$u = get_userdata( $uid );
+	if ( ! $u ) {
+		return '';
+	}
+	if ( user_can( $u, SAP_CAP ) || user_can( $u, 'manage_options' ) ) {
+		return 'full';
+	}
+	return user_can( $u, SAP_CAP_WORK ) ? 'member' : '';
+}
+
+/**
+ * Is the current user a project manager?
+ */
+function sap_is_pm( $user_id = 0 ) {
+	return 'pm' === sap_user_role( $user_id );
+}
+
+/**
+ * Everyone with full access (who gets questions, reviews and escalations).
+ *
+ * @return WP_User[]
+ */
+function sap_full_users() {
+	$out = array();
+	foreach ( sap_team_users() as $u ) {
+		if ( 'full' === sap_user_role( $u->ID ) ) {
+			$out[] = get_userdata( $u->ID );
+		}
+	}
+	return array_filter( $out );
 }
 
 /**

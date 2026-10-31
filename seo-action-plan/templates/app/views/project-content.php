@@ -83,23 +83,6 @@ if ( ! $rev ) :
 		</section>
 	<?php endif; ?>
 
-	<section class="sap-panel">
-		<h3>صفحات کلیدی سایت</h3>
-		<div class="sap-content-pages">
-			<?php foreach ( array_slice( $map, 0, 40, true ) as $k => $m ) : ?>
-				<div class="sap-content-page">
-					<div>
-						<?php echo sap_page_link( $m['url'], $m['title'] ?: sap_page_title( $pid, $m['url'] ) ); // phpcs:ignore ?>
-						<small class="sap-muted"><?php echo esc_html( ( $m['primary_kw'] ? 'کلمه اصلی: ' . $m['primary_kw'] : '' ) . ( ! empty( $impr[ $k ] ) ? ' · ' . sap_num( $impr[ $k ] ) . ' نمایش' : '' ) ); ?></small>
-					</div>
-					<?php $start( $m['url'], 'تحلیل', '' ); ?>
-				</div>
-			<?php endforeach; ?>
-			<?php if ( ! $map ) : ?>
-				<p class="sap-muted">بعد از «تحلیل کامل»، صفحات کلیدی اینجا می‌آیند. فعلاً آدرس صفحه را در کادر بالا وارد کنید.</p>
-			<?php endif; ?>
-		</div>
-	</section>
 	<?php
 	return;
 endif;

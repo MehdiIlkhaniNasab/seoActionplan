@@ -101,6 +101,7 @@ $auth  = sap_google_auth_url();
 			<label>مدل «بنویس برام»<input type="text" name="ai_model_assist" dir="ltr" list="sap-ai-models" value="<?php echo esc_attr( $s['ai_model_assist'] ); ?>">
 				<small>خروجی آماده هر تسک (تایتل، متا، FAQ و…).</small>
 			</label>
+			<label>مدل راهنمای تیم (شفاف‌سازی کار و «از هوش مصنوعی بپرس»)<input type="text" name="ai_model_help" dir="ltr" list="sap-ai-models" value="<?php echo esc_attr( $s['ai_model_help'] ); ?>" placeholder="gemini-2.5-flash-lite"><small>پیش‌فرض Gemini 2.5 Flash-Lite (خیلی ارزان).</small></label>
 			<label>سقف بودجه ماهانه (دلار)<input type="number" name="ai_budget" min="0" step="0.5" value="<?php echo esc_attr( $s['ai_budget'] ); ?>">
 				<small>وقتی پر شود، هوش مصنوعی تا ماه بعد متوقف می‌شود. ۰ = بدون سقف.</small>
 			</label>

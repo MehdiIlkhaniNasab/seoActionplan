@@ -14,7 +14,7 @@ $get   = function ( $key ) use ( $pid ) {
 	return sap_dataset( $pid, $key );
 };
 $can   = $get( 'ai_cannibal' );
-$con   = $get( 'ai_content' );
+$con   = null; // Page-by-page content analysis was removed (0.20).
 $lnk   = $get( 'ai_links' );
 $tec   = $get( 'ai_technical' );
 $cwv   = $get( 'cwv' );
@@ -42,38 +42,10 @@ $areas = array( 'crawl' => 'خزش', 'index' => 'ایندکس', 'sitemap' => 'س
 endif;
 ?>
 <nav class="sap-insight-nav">
-	<a href="#ins-content">صفحات و محتوا</a>
 	<a href="#ins-links">لینک داخلی</a>
 	<a href="#ins-cannibal">کنیبالیزیشن</a>
 	<a href="#ins-tech">تکنیکال، اسکیما و سرعت</a>
 </nav>
-
-<section class="sap-panel" id="ins-content">
-	<div class="sap-panel-head"><h2><?php echo sap_icon( 'log' ); // phpcs:ignore ?>صفحات و محتوا</h2><small class="sap-muted"><?php echo esc_html( $when( $con ) ); ?></small></div>
-	<?php if ( $pages ) : ?>
-		<p class="sap-muted sap-small">محتوای <?php echo esc_html( sap_num( count( (array) ( $pages['payload']['pages'] ?? array() ) ) ) ); ?> صفحه کلیدی خوانده شده (متن، تیترها، اسکیما، لینک‌ها) — <?php echo esc_html( sap_jdate( $pages['fetched_at'] ) ); ?></p>
-	<?php endif; ?>
-	<?php foreach ( (array) ( $con['payload']['pages'] ?? array() ) as $p ) : ?>
-		<div class="sap-insight-card">
-			<h4><?php echo sap_page_ref( $project, $p['url'] ); // phpcs:ignore ?>
-				<a class="sap-btn is-small is-ai" href="<?php echo esc_url( sap_project_url( $project['id'], 'content', array( 'url' => sap_full_url( $project, $p['url'] ) ) ) ); ?>"><?php echo sap_icon( 'spark', 13 ); // phpcs:ignore ?>بازنویسی محتوا</a></h4>
-			<p><?php echo esc_html( $p['diagnosis'] ); ?></p>
-			<?php if ( $p['title'] || $p['meta'] ) : ?>
-				<div class="sap-ai-output"><div class="sap-ai-output-head"><span>تایتل و متای پیشنهادی</span><?php echo $copy; // phpcs:ignore ?></div><pre><?php echo esc_html( trim( ( $p['title'] ? 'تایتل: ' . $p['title'] : '' ) . "\n" . ( $p['meta'] ? 'متا: ' . $p['meta'] : '' ) ) ); ?></pre></div>
-			<?php endif; ?>
-			<?php if ( $p['missing_topics'] ) : ?>
-				<p class="sap-label">موضوعات و زیرعنوان‌های جاافتاده</p><ul><?php foreach ( $p['missing_topics'] as $m ) : ?><li><?php echo esc_html( $m ); ?></li><?php endforeach; ?></ul>
-			<?php endif; ?>
-			<?php if ( $p['faq'] ) : ?>
-				<div class="sap-ai-output"><div class="sap-ai-output-head"><span>سوالات متداول پیشنهادی</span><?php echo $copy; // phpcs:ignore ?></div><pre><?php echo esc_html( implode( "\n", $p['faq'] ) ); ?></pre></div>
-			<?php endif; ?>
-			<?php if ( $p['actions'] ) : ?>
-				<p class="sap-label">اقدامات</p><ul><?php foreach ( $p['actions'] as $a ) : ?><li><?php echo esc_html( $a ); ?></li><?php endforeach; ?></ul>
-			<?php endif; ?>
-		</div>
-	<?php endforeach; ?>
-	<?php if ( ! $con ) : ?><p class="sap-muted">هنوز انجام نشده.</p><?php endif; ?>
-</section>
 
 <section class="sap-panel" id="ins-links">
 	<div class="sap-panel-head"><h2><?php echo sap_icon( 'link' ); // phpcs:ignore ?>لینک‌سازی داخلی</h2><small class="sap-muted"><?php echo esc_html( $when( $lnk ) ); ?></small></div>

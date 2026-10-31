@@ -93,7 +93,10 @@ function sap_ai_estimate_run( $analysis, $light ) {
  * Model for a purpose: "analysis", "light" or "assist".
  */
 function sap_ai_model_for( $purpose ) {
-	if ( 'assist' === $purpose ) {
+	if ( 'help' === $purpose ) {
+		// Team help (task briefs, step-by-step guidance): the cheapest capable model.
+		$model = 'anthropic' === sap_setting( 'ai_provider', 'gateway' ) ? sap_setting( 'ai_model_assist', 'claude-haiku-5-5' ) : ( sap_setting( 'ai_model_help', '' ) ?: 'gemini-2.5-flash-lite' );
+	} elseif ( 'assist' === $purpose ) {
 		$model = sap_setting( 'ai_model_assist', 'claude-haiku-5-5' );
 	} elseif ( 'geo' === $purpose ) {
 		// AI-visibility tracking: a chosen public model (e.g. a ChatGPT / web-search model of the gateway).
