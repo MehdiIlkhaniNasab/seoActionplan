@@ -551,7 +551,7 @@ function sap_done_digest( $force = false ) {
 			continue;
 		}
 		$first = sap_first_name( $m['name'] );
-		$text  = sprintf( "سکان | %s عزیز، عالی بودی\nامروز %s کار را با موفقیت انجام دادی و همه در گزارش ثبت شد.\nدمت گرم، شب خوبی داشته باشی.", $first, sap_num( $c ) );
+		$text  = sprintf( "🌟 سکان | %s عزیز، عالی بودی\nامروز %s کار را با موفقیت انجام دادی و همه در گزارش ثبت شد.\nدمت گرم، شب خوبی داشته باشی 🌙", $first, sap_num( $c ) );
 		if ( true === sap_sms_send( $m['phone'], $text, 'done', array( $first, sap_num( $c ) ) ) ) {
 			++$n;
 		}
