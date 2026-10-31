@@ -70,6 +70,7 @@ function sap_settings_defaults() {
 		'alert_info'             => 'digest',
 		'reminder_hours'         => '8,14',
 		'reminder_sms'           => 1,
+		'done_sms_hour'          => 21, // Nightly thank-you SMS (0 = off).
 		'notify_batch_minutes'   => 3, // Quiet minutes before assignment notices go out (bursts → one message).
 		'reminder_email'         => 1,
 		// SERP data (top 10 of Google) for SERP analysis and the competitor radar.

@@ -261,16 +261,27 @@ add_action( 'sap_task_saved', function ( $before, $after ) {
 	if ( 'done' === $after['status'] && ( ! $before || 'done' !== $before['status'] ) && $after['assignee'] ) {
 		$m = sap_member( $after['assignee'] );
 		if ( $m ) {
+			// One motivating email per finished task; the thank-you SMS goes once a night (sap_done_digest).
 			if ( $m['notify_email'] ) {
-				sap_notify_email( $m['email'], '🌿 دمت گرم ' . $m['name'] . '! «' . mb_substr( $after['title'], 0, 60 ) . '» ثبت شد', array(
-					'title' => 'خسته نباشید ' . $m['name'] . ' 🌿',
-					'badge' => '✅ کار انجام شد',
-					'tone'  => '#16A34A',
-					'intro' => $m['name'] . ' عزیز، کار «' . $after['title'] . '» انجام شد و در لاگ اقدامات و گزارش ماهانه ثبت شد. اثرش در سرچ کنسول هم سنجیده می‌شود. ممنون از زحمتت!',
+				$today_n = sap_member_done_count( $m['id'], current_time( 'Y-m-d' ) );
+				list( $mf, $mt ) = sap_period_range( sap_period_current() );
+				$month_n = sap_member_done_count( $m['id'], $mf, $mt );
+				$p       = sap_project( $after['project_id'] );
+				$cheers  = array( 'عالی پیش می‌روی!', 'یک قدم دیگر به هدف نزدیک‌تر شدیم.', 'کار تمیز و دقیق، دمت گرم!', 'همین پیوستگی است که نتیجه می‌سازد.', 'با هر کار، سایت یک پله بالاتر می‌رود.' );
+				sap_notify_email( $m['email'], sprintf( '🌿 دمت گرم %s! «%s» انجام شد', sap_first_name( $m['name'] ), mb_substr( $after['title'], 0, 60 ) ), array(
+					'title'     => 'خسته نباشید ' . sap_first_name( $m['name'] ) . ' 🌿',
+					'badge'     => '✅ کار انجام شد · ' . ( $p['name'] ?? '' ),
+					'tone'      => '#16A34A',
+					'preheader' => $cheers[ $today_n % count( $cheers ) ] . ' امروز ' . sap_num( $today_n ) . ' کار انجام دادی.',
+					'intro'     => $m['name'] . ' عزیز، ' . $cheers[ $today_n % count( $cheers ) ] . "\nکار «" . $after['title'] . '» انجام شد و در لاگ اقدامات و گزارش ماهانه پروژه ثبت شد. اثرش روی رتبه و ترافیک هم در سرچ کنسول سنجیده می‌شود.',
+					'rows'      => array_filter( array(
+						'کارهای امروز'   => sap_num( $today_n ) . ' کار',
+						'کارهای این ماه' => sap_num( $month_n ) . ' کار',
+						'گزارش شما'      => '' !== (string) $after['result'] ? mb_substr( (string) $after['result'], 0, 300 ) : '',
+					) ),
+					'note'      => 'شب‌ها ساعت ' . sap_num( (int) sap_setting( 'done_sms_hour', 21 ) ) . ' خلاصه کارهای انجام‌شده همان روز با یک پیامک برایت ارسال می‌شود.',
+					'button'    => array( 'کارهای بعدی من', sap_url( 'my' ) ),
 				) );
-			}
-			if ( $m['notify_sms'] && '' !== $m['phone'] && sap_setting( 'reminder_sms', 1 ) ) {
-				sap_sms_send( $m['phone'], 'سکان | خسته نباشید ' . $m['name'] . '! «' . mb_substr( $after['title'], 0, 70 ) . '» انجام شد و ثبت شد. 🌿', 'done', array( sap_first_name( $m['name'] ) ) );
 			}
 			if ( ! $m['manager'] ) {
 				$p = sap_project( $after['project_id'] );
@@ -505,6 +516,55 @@ function sap_team_remind( $morning = true ) {
 	}
 	return $n;
 }
+
+/**
+ * Tasks a person finished between two dates (local Y-m-d, inclusive).
+ */
+function sap_member_done_count( $user_id, $from, $to = '' ) {
+	global $wpdb;
+	$to = '' !== $to ? $to : $from;
+	return (int) $wpdb->get_var( $wpdb->prepare( 'SELECT COUNT(*) FROM ' . sap_table( 'tasks' ) . " WHERE assignee = %d AND status = 'done' AND done_at >= %s AND done_at <= %s", (int) $user_id, $from . ' 00:00:00', $to . ' 23:59:59' ) ); // phpcs:ignore
+}
+
+/**
+ * Nightly thank-you SMS: one message to everyone who finished tasks today.
+ *
+ * @return int people messaged
+ */
+function sap_done_digest( $force = false ) {
+	$today = current_time( 'Y-m-d' );
+	if ( ! $force && get_option( 'sap_done_digest_day' ) === $today ) {
+		return 0;
+	}
+	update_option( 'sap_done_digest_day', $today, false );
+	if ( 'none' === sap_setting( 'sms_provider', 'none' ) ) {
+		return 0;
+	}
+	$n = 0;
+	foreach ( sap_team_users() as $u ) {
+		$m = sap_member( $u->ID );
+		if ( ! $m || ! $m['notify_sms'] || '' === $m['phone'] ) {
+			continue;
+		}
+		$c = sap_member_done_count( $u->ID, $today );
+		if ( ! $c ) {
+			continue;
+		}
+		$first = sap_first_name( $m['name'] );
+		$text  = sprintf( "سکان | %s عزیز، عالی بودی\nامروز %s کار را با موفقیت انجام دادی و همه در گزارش ثبت شد.\nدمت گرم، شب خوبی داشته باشی.", $first, sap_num( $c ) );
+		if ( true === sap_sms_send( $m['phone'], $text, 'done', array( $first, sap_num( $c ) ) ) ) {
+			++$n;
+		}
+	}
+	return $n;
+}
+
+add_action( 'sap_hourly', function () {
+	$h = (int) sap_setting( 'done_sms_hour', 21 );
+	if ( $h > 0 && (int) current_time( 'G' ) >= $h ) {
+		sap_done_digest();
+	}
+} );
 
 add_action( 'sap_hourly', function () {
 	$hours = array_map( 'intval', sap_list( (string) sap_setting( 'reminder_hours', '8,14' ) ) );

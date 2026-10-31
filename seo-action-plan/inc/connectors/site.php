@@ -135,6 +135,7 @@ function sap_site_pull_changes( $project ) {
 	$last    = (int) ( $project['options']['site_log_last'] ?? 0 );
 	$added   = 0;
 	$focuses = sap_focus_context( $project['id'] );
+	$checks  = 0;
 	for ( $page = 0; $page < 10; $page++ ) {
 		$res = sap_site_request( $project, 'GET', 'changes', array( 'after_id' => $last, 'limit' => 300 ) );
 		if ( is_wp_error( $res ) ) {
@@ -146,6 +147,11 @@ function sap_site_pull_changes( $project ) {
 				continue; // Applied from Sokan: already in the log with the approval.
 			}
 			do_action( 'sap_site_change', $project, $c ); // Alerts watch risky changes made outside Sokan.
+			if ( 'redirect' === ( $c['kind'] ?? '' ) ) {
+				sap_site_redirect_activity( $project, $c, $focuses, $checks );
+				++$added;
+				continue;
+			}
 			$name  = '' !== (string) $c['title'] ? '«' . $c['title'] . '»' : '';
 			$label = sap_site_field_label( (string) $c['field'] );
 			if ( 'status' === $c['field'] && 'publish' === $c['new'] ) {
@@ -181,6 +187,75 @@ function sap_site_pull_changes( $project ) {
 	}
 	sap_project_set_option( $project['id'], 'site_log_last', $last );
 	return array( 'added' => $added, 'last' => $last );
+}
+
+/**
+ * A redirect / 410 change on the site (Rank Math, Redirection, Yoast) as a log entry,
+ * with a live check of what the address answers now.
+ */
+function sap_site_redirect_activity( $project, $c, $focuses, &$checks ) {
+	$old  = json_decode( (string) $c['old'], true ) ?: array();
+	$new  = json_decode( (string) $c['new'], true ) ?: array();
+	$r    = $new ?: $old;
+	$src  = (string) ( $r['src'] ?? '' );
+	$pl   = array( 'rank_math' => 'رنک‌مث', 'redirection' => 'Redirection', 'yoast' => 'یوآست' )[ $r['p'] ?? '' ] ?? '';
+	$path = '' !== $src ? sap_short_url( $src, 60 ) : '—';
+	$desc = function ( $x ) {
+		if ( ! $x ) {
+			return '';
+		}
+		return in_array( (int) $x['c'], array( 410, 451 ), true ) ? (string) $x['c'] . ' (حذف دائمی)' : (string) $x['c'] . ' → ' . rawurldecode( (string) $x['to'] ) . ( empty( $x['on'] ) ? ' (غیرفعال)' : '' );
+	};
+	switch ( (string) $c['field'] ) {
+		case 'gone':
+			$title = sprintf( 'حذف دائمی (۴۱۰) آدرس %s', $path );
+			break;
+		case 'redirect_add':
+			$title = sprintf( 'ریدایرکت %s جدید: %s ← %s', (int) $r['c'], $path, sap_short_url( (string) $r['to'], 60 ) );
+			break;
+		case 'redirect_change':
+			$title = sprintf( 'تغییر ریدایرکت %s', $path );
+			break;
+		case 'redirect_off':
+			$title = sprintf( 'غیرفعال شدن ریدایرکت %s', $path );
+			break;
+		default:
+			$title = sprintf( 'حذف قانون ریدایرکت %s', $path );
+	}
+	// Live check (a few per pull): does the address now answer what the rule says?
+	$check = '';
+	if ( $new && ! empty( $new['on'] ) && preg_match( '#^https?://#', $src ) && $checks < 15 ) {
+		++$checks;
+		$res  = sap_http( $src, array( 'method' => 'GET', 'redirection' => 0, 'timeout' => 12, 'headers' => array( 'User-Agent' => 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)' ) ) );
+		$code = is_wp_error( $res ) ? 0 : (int) wp_remote_retrieve_response_code( $res );
+		$loc  = is_wp_error( $res ) ? '' : (string) wp_remote_retrieve_header( $res, 'location' );
+		$want = (int) $new['c'];
+		if ( ! $code ) {
+			$check = 'بررسی زنده: آدرس پاسخ نداد';
+		} elseif ( in_array( $want, array( 410, 451 ), true ) ) {
+			$check = $code === $want ? '✓ بررسی زنده: آدرس واقعاً ' . $code . ' برمی‌گرداند' : '✗ بررسی زنده: آدرس کد ' . $code . ' برمی‌گرداند، نه ' . $want . ' (کش سایت را پاک کنید)';
+		} elseif ( $code >= 300 && $code < 400 ) {
+			$t     = sap_http( WP_Http::make_absolute_url( $loc, $src ), array( 'method' => 'GET', 'redirection' => 0, 'timeout' => 12 ) );
+			$tc    = is_wp_error( $t ) ? 0 : (int) wp_remote_retrieve_response_code( $t );
+			$check = ( $code === $want ? '✓' : '!' ) . ' بررسی زنده: ' . $code . ' به ' . sap_short_url( $loc, 50 ) . ' — مقصد ' . ( $tc ? $tc : 'بی‌پاسخ' ) . ( $tc >= 300 && $tc < 400 ? ' (زنجیره ریدایرکت؛ مقصد را به آدرس نهایی عوض کنید)' : ( $tc >= 400 ? ' (مقصد خراب است!)' : '' ) ) . ( $code !== $want ? ' (نوع با قانون ' . $want . ' فرق دارد)' : '' );
+		} else {
+			$check = '✗ بررسی زنده: آدرس کد ' . $code . ' می‌دهد و ریدایرکت نمی‌شود (کش سایت یا تداخل افزونه)';
+		}
+	}
+	list( $fid ) = sap_focus_match( $focuses, $src );
+	sap_activity_upsert_ref( $project['id'], 'site:' . (int) $c['id'], array(
+		'focus_id'     => $fid,
+		'category'     => 'technical',
+		'action'       => 'site_' . sanitize_key( (string) $c['field'] ),
+		'title'        => $title . ( '' !== $pl ? ' (' . $pl . ')' : '' ),
+		'url'          => $src,
+		'before_value' => $desc( $old ),
+		'after_value'  => trim( $desc( $new ) . ( '' !== $check ? "\n" . $check : '' ) ),
+		'source'       => 'agent',
+		'user_id'      => 0,
+		'happened_at'  => (string) $c['date'],
+		'meta'         => array( 'site_user' => (string) $c['user'], 'field' => (string) $c['field'], 'kind' => 'redirect', 'object' => (int) $c['object'], 'check' => $check ),
+	) );
 }
 
 /* ---------------------------------------------------------------------------

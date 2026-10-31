@@ -260,7 +260,8 @@ function sap_blog_parse( $values ) {
 	$out   = array();
 	$m     = 0;
 	$cols  = array();
-	$names = array( 'main idea' => 'keyword', 'kp' => 'kp', 'title' => 'title', 'desc' => 'desc', 'content source' => 'source', 'status' => 'status', 'publish date' => 'publish', 'link' => 'link', 'تاریخ برنامه' => 'planned' );
+	$kind  = 'idea';
+	$names = array( 'main idea' => 'keyword', 'update page' => 'keyword', 'kp' => 'kp', 'title' => 'title', 'title (پیشنهادی)' => 'title', 'desc' => 'desc', 'هدف و بریف آپدیت' => 'desc', 'content source' => 'source', 'status' => 'status', 'publish date' => 'publish', 'done date' => 'publish', 'link' => 'link', 'تاریخ برنامه' => 'planned', 'id' => 'id' );
 	foreach ( (array) $values as $i => $row ) {
 		$a = trim( (string) ( $row[0] ?? '' ) );
 		if ( preg_match( '/^m\s*(\d+)$/i', $a, $mm ) ) {
@@ -270,11 +271,8 @@ function sap_blog_parse( $values ) {
 		$lower = array_map( function ( $v ) {
 			return strtolower( trim( (string) $v ) );
 		}, (array) $row );
-		if ( in_array( 'update page', $lower, true ) ) {
-			$cols = array(); // «Update Page» block: content updates written by Sokan, not articles.
-			continue;
-		}
-		if ( in_array( 'main idea', $lower, true ) ) {
+		if ( in_array( 'main idea', $lower, true ) || in_array( 'update page', $lower, true ) ) {
+			$kind = in_array( 'update page', $lower, true ) ? 'update' : 'idea';
 			$cols = array();
 			foreach ( $lower as $ci => $h ) {
 				if ( isset( $names[ $h ] ) ) {
@@ -302,7 +300,10 @@ function sap_blog_parse( $values ) {
 			}
 		}
 		$st    = strtoupper( $get( 'status' ) );
+		$id    = $get( 'id' );
 		$out[] = array(
+			'kind'    => $kind,
+			'id'      => preg_match( '/^[iu](\d+)$/i', $id, $im ) ? (int) $im[1] : 0,
 			'm'       => $m,
 			'row'     => $i + 1,
 			'keyword' => $kw,
@@ -315,6 +316,7 @@ function sap_blog_parse( $values ) {
 			'publish' => $get( 'publish' ),
 			'link'    => $get( 'link' ),
 			'planned' => $get( 'planned' ),
+			'has_id'  => isset( $cols['id'] ),
 		);
 	}
 	return $out;
@@ -412,16 +414,51 @@ function sap_calendar_import_sheet( $project, $items ) {
 	}
 	$pid    = $project['id'];
 	$by_kw  = array();
+	$by_id  = array();
 	foreach ( sap_ideas( $pid ) as $i ) {
 		$by_kw[ sap_kw_key( $i['keyword'] ) ] = $i;
+		$by_id[ (int) $i['id'] ]              = $i;
 	}
 	// M-label => period as last written by the tool; for a sheet the tool never
 	// wrote, the newest block is taken to be the current month.
 	$months = (array) ( $project['options']['calendar_labels'][ $project['sheet_id'] ] ?? array() );
 	$max_m  = max( array_column( $items, 'm' ) );
 	$new    = 0;
+	$seen   = array( 'idea' => array(), 'update' => array() );
 	foreach ( $items as $it ) {
-		$idea = $by_kw[ sap_kw_key( $it['keyword'] ) ] ?? null;
+		$period = $months[ 'M' . $it['m'] ] ?? sap_period_shift( sap_period_current(), $it['m'] - $max_m );
+		if ( 'update' === $it['kind'] ) {
+			// Content updates: the team edits title, brief and «done» in the sheet.
+			$u = $it['id'] ? sap_update( $it['id'] ) : null;
+			if ( ! $u || (int) $u['project_id'] !== (int) $pid ) {
+				continue;
+			}
+			$seen['update'][ (int) $u['id'] ] = true;
+			$b   = (array) $u['brief'];
+			$upd = array();
+			if ( '' !== $it['title'] && $it['title'] !== ( ( $b['title'] ?? '' ) ?: $u['title'] ) ) {
+				$b['title'] = $it['title'];
+				$upd['brief'] = $b;
+			}
+			if ( $it['desc'] !== trim( (string) ( $b['summary'] ?? '' ) ?: (string) $u['reason'] ) ) {
+				$b['summary'] = $it['desc'];
+				$upd['brief'] = $b;
+			}
+			if ( $it['status'] && 'done' !== $u['status'] ) {
+				$upd['status'] = 'done';
+			} elseif ( ! $it['status'] && 'done' === $u['status'] ) {
+				$upd['status'] = 'planned';
+			}
+			if ( $period !== $u['period'] ) {
+				$upd['period'] = $period;
+			}
+			if ( $upd ) {
+				sap_update_save( $upd, $u['id'] );
+			}
+			continue;
+		}
+		// Articles: matched by the ID column (keyword edits keep the same article), then by keyword.
+		$idea = ( $it['id'] && isset( $by_id[ $it['id'] ] ) ) ? $by_id[ $it['id'] ] : ( $by_kw[ sap_kw_key( $it['keyword'] ) ] ?? null );
 		$upd  = array();
 		if ( '' !== $it['link'] ) {
 			$upd['published_url'] = $it['link'];
@@ -429,18 +466,50 @@ function sap_calendar_import_sheet( $project, $items ) {
 		} elseif ( $it['status'] ) {
 			$upd['status'] = 'published';
 		}
-		if ( '' !== $it['source'] ) {
-			$upd['source_note'] = $it['source'];
-		}
 		if ( $idea ) {
+			$seen['idea'][ (int) $idea['id'] ] = true;
+			// What the team typed wins over the copy in Sokan.
+			if ( $it['keyword'] !== $idea['keyword'] ) {
+				$upd['keyword'] = $it['keyword'];
+			}
+			if ( '' !== $it['title'] && $it['title'] !== $idea['title'] ) {
+				$upd['title'] = $it['title'];
+			}
+			if ( $it['desc'] !== (string) $idea['brief'] ) {
+				$upd['brief'] = $it['desc'];
+			}
+			if ( $it['kp'] && (int) $it['kp'] !== (int) $idea['kp'] ) {
+				$upd['kp'] = $it['kp'];
+			}
+			if ( $it['source'] !== (string) $idea['source_note'] ) {
+				$upd['source_note'] = $it['source'];
+			}
+			$old_links = array_map( function ( $l ) {
+				return array( 'url' => (string) ( $l['url'] ?? '' ), 'anchor' => (string) ( $l['anchor'] ?? '' ) );
+			}, array_slice( (array) $idea['links'], 0, 5 ) );
+			if ( $it['links'] !== $old_links ) {
+				$upd['links'] = $it['links'];
+			}
+			$planned = sap_parse_date( $it['planned'] );
+			if ( '' !== $it['planned'] && $planned && $planned !== (string) $idea['planned_date'] ) {
+				$upd['planned_date'] = $planned;
+			} elseif ( '' === $it['planned'] && $idea['planned_date'] ) {
+				$upd['planned_date'] = null;
+			}
+			// Unticked in the sheet and no link: back to «in the calendar».
+			if ( ! $it['status'] && '' === $it['link'] && 'published' === $idea['status'] ) {
+				$upd['status']        = 'scheduled';
+				$upd['published_url'] = '';
+			}
+			if ( $period !== $idea['period'] && $it['has_id'] ) {
+				$upd['period'] = $period; // Moved to another month block.
+			}
 			if ( $upd ) {
 				sap_idea_save( $upd, $idea['id'] );
 			}
 			continue;
 		}
-		// A month the tool does not know: the newest block is the current month.
-		$period = $months[ 'M' . $it['m'] ] ?? sap_period_shift( sap_period_current(), $it['m'] - $max_m );
-		sap_idea_save( $upd + array(
+		$id = sap_idea_save( $upd + array(
 			'project_id'  => $pid,
 			'keyword'     => $it['keyword'],
 			'title'       => $it['title'],
@@ -455,7 +524,24 @@ function sap_calendar_import_sheet( $project, $items ) {
 			'slot'        => $it['row'],
 			'planned_date' => sap_parse_date( $it['planned'] ),
 		) );
+		if ( $id ) {
+			$seen['idea'][ (int) $id ] = true;
+		}
 		++$new;
+	}
+	// Rows the team deleted from the sheet leave the calendar (only articles Sokan wrote
+	// there last time, and only when the sheet carries the ID column — never on a bad read).
+	$written = (array) ( $project['options']['calendar_written'][ $project['sheet_id'] ] ?? array() );
+	$has_id = (bool) array_filter( $items, function ( $x ) {
+		return 'idea' === $x['kind'] && $x['has_id'];
+	} );
+	if ( $written && $has_id ) {
+		foreach ( (array) ( $written['idea'] ?? array() ) as $iid ) {
+			$idea = $by_id[ (int) $iid ] ?? null;
+			if ( $idea && ! isset( $seen['idea'][ (int) $iid ] ) && in_array( $idea['status'], array( 'scheduled', 'approved' ), true ) ) {
+				sap_idea_save( array( 'status' => 'rejected' ), $idea['id'] );
+			}
+		}
 	}
 	return $new;
 }
@@ -500,11 +586,13 @@ function sap_calendar_write_sheet( $project ) {
 		$fmt[] = array( 'updateDimensionProperties' => array( 'range' => array( 'sheetId' => $sid, 'dimension' => 'COLUMNS', 'startIndex' => $c, 'endIndex' => $c + 1 ), 'properties' => array( 'pixelSize' => 120 ), 'fields' => 'pixelSize' ) );
 		$fmt[] = array( 'updateDimensionProperties' => array( 'range' => array( 'sheetId' => $sid, 'dimension' => 'COLUMNS', 'startIndex' => $c + 1, 'endIndex' => $c + 2 ), 'properties' => array( 'pixelSize' => 160 ), 'fields' => 'pixelSize' ) );
 	}
-	$count = 0;
+	$count   = 0;
+	$written = array( 'idea' => array(), 'update' => array() );
+	$fmt[]   = array( 'updateDimensionProperties' => array( 'range' => array( 'sheetId' => $sid, 'dimension' => 'COLUMNS', 'startIndex' => 20, 'endIndex' => 21 ), 'properties' => array( 'pixelSize' => 46 ), 'fields' => 'pixelSize' ) );
 	foreach ( array_reverse( $months, true ) as $period => $label ) {
 		$r0       = count( $values );
 		$values[] = array_merge( array( $label, 'Writing Guide', '', '', '', '  Out Links' ), array_fill( 0, 9, '' ), array( 'Publish', '', '', '', sap_period_label( $period ) ) );
-		$values[] = array( '', 'Main Idea', 'KP', 'Title', 'Desc', 'L1', 'K1', 'L2', 'K2', 'L3', 'K3', 'L4', 'K4', 'L5', 'K5', 'Content Source', 'Status', 'Publish Date', 'Link', 'تاریخ برنامه' );
+		$values[] = array( '', 'Main Idea', 'KP', 'Title', 'Desc', 'L1', 'K1', 'L2', 'K2', 'L3', 'K3', 'L4', 'K4', 'L5', 'K5', 'Content Source', 'Status', 'Publish Date', 'Link', 'تاریخ برنامه', 'ID' );
 		$items    = sap_calendar_items( $project['id'], $period );
 		foreach ( $items as $n => $it ) {
 			$row = array( $n + 1, $it['keyword'], $it['kp'] ?: '', $it['title'], $it['brief'] );
@@ -517,7 +605,9 @@ function sap_calendar_write_sheet( $project ) {
 			$row[]    = 'published' === $it['status'] && $it['updated_at'] ? sap_jdate( substr( $it['updated_at'], 0, 10 ), 'day' ) : '';
 			$row[]    = $it['published_url'];
 			$row[]    = $it['planned_date'] ? sap_jdate( $it['planned_date'], 'day' ) : '';
+			$row[]    = 'i' . (int) $it['id']; // Keeps the row tied to its article when you edit the keyword.
 			$values[] = $row;
+			$written['idea'][] = (int) $it['id'];
 			++$count;
 		}
 		$r1 = count( $values );
@@ -526,7 +616,7 @@ function sap_calendar_write_sheet( $project ) {
 		$u0  = null;
 		if ( $ups ) {
 			$u0       = count( $values );
-			$values[] = array( '', 'Update Page', 'KP', 'Title (پیشنهادی)', 'هدف و بریف آپدیت', 'L1', 'K1', 'L2', 'K2', 'L3', 'K3', 'L4', 'K4', 'L5', 'K5', 'نوع صفحه', 'Status', 'Done Date', 'Link', 'تاریخ برنامه' );
+			$values[] = array( '', 'Update Page', 'KP', 'Title (پیشنهادی)', 'هدف و بریف آپدیت', 'L1', 'K1', 'L2', 'K2', 'L3', 'K3', 'L4', 'K4', 'L5', 'K5', 'نوع صفحه', 'Status', 'Done Date', 'Link', 'تاریخ برنامه', 'ID' );
 			$ctypes   = sap_content_types();
 			foreach ( $ups as $n => $u ) {
 				$b   = (array) $u['brief'];
@@ -541,7 +631,9 @@ function sap_calendar_write_sheet( $project ) {
 				$row[]    = $u['done_at'] ? sap_jdate( substr( $u['done_at'], 0, 10 ), 'day' ) : '';
 				$row[]    = rawurldecode( $u['url'] );
 				$row[]    = sap_update_statuses()[ $u['status'] ] ?? $u['status'];
+				$row[]    = 'u' . (int) $u['id'];
 				$values[] = $row;
+				$written['update'][] = (int) $u['id'];
 			}
 		}
 		$r2 = count( $values );
@@ -573,6 +665,9 @@ function sap_calendar_write_sheet( $project ) {
 	$labels           = (array) ( $project['options']['calendar_labels'] ?? array() );
 	$labels[ $sheet ] = array_flip( $months );
 	sap_project_set_option( $project['id'], 'calendar_labels', $labels );
+	$wr           = (array) ( $project['options']['calendar_written'] ?? array() );
+	$wr[ $sheet ] = $written;
+	sap_project_set_option( $project['id'], 'calendar_written', $wr );
 	$res = sap_gs_batch( $sheet, $fmt );
 	if ( is_wp_error( $res ) ) {
 		return $res;
@@ -817,6 +912,39 @@ function sap_updates_write_sheet( $project ) {
 	}
 	$types  = sap_content_types();
 	$status = sap_update_statuses();
+	// Read back what the team edited in this tab (page address = row identity): keyword,
+	// goal/brief, suggested title and status win over the copy in Sokan.
+	$old = sap_sheet_values( $sheet, SAP_TAB_UPDATES );
+	if ( ! is_wp_error( $old ) && count( (array) $old ) > 1 && 'آدرس' === trim( (string) ( $old[0][2] ?? '' ) ) ) {
+		$by = array();
+		foreach ( sap_updates( $project['id'] ) as $u ) {
+			$by[ sap_norm_url( $u['url'] ) . '|' . sap_period_label( $u['period'] ) ] = $u;
+		}
+		$st_back = array_flip( $status );
+		foreach ( array_slice( (array) $old, 1 ) as $r ) {
+			$u = $by[ sap_norm_url( trim( (string) ( $r[2] ?? '' ) ) ) . '|' . trim( (string) ( $r[0] ?? '' ) ) ] ?? null;
+			if ( ! $u ) {
+				continue;
+			}
+			$b   = (array) $u['brief'];
+			$upd = array();
+			foreach ( array( 4 => 'keyword', 6 => 'summary', 7 => 'title' ) as $ci => $bk ) {
+				$v   = trim( (string) ( $r[ $ci ] ?? '' ) );
+				$cur = 'summary' === $bk ? trim( (string) ( $b['summary'] ?? $u['reason'] ) ) : trim( (string) ( $b[ $bk ] ?? ( 'keyword' === $bk ? $u['keyword'] : '' ) ) );
+				if ( $v !== $cur && ( '' !== $v || 'summary' === $bk ) ) {
+					$b[ $bk ]     = $v;
+					$upd['brief'] = $b;
+				}
+			}
+			$sv = $st_back[ trim( (string) ( $r[11] ?? '' ) ) ] ?? '';
+			if ( '' !== $sv && $sv !== $u['status'] ) {
+				$upd['status'] = $sv;
+			}
+			if ( $upd ) {
+				sap_update_save( $upd, $u['id'] );
+			}
+		}
+	}
 	$values = array( array( 'ماه', 'صفحه', 'آدرس', 'نوع', 'کلمه اصلی', 'کلمات فرعی', 'دلیل / هدف آپدیت', 'تایتل پیشنهادی', 'بخش‌های جدید', 'ویژگی‌ها', 'FAQ', 'وضعیت', 'تاریخ انجام' ) );
 	foreach ( sap_updates( $project['id'] ) as $u ) {
 		$b        = $u['brief'];

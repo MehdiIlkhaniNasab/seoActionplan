@@ -229,6 +229,7 @@ $auth  = sap_google_auth_url();
 			<div class="sap-check-col"><?php sap_switch( 'reminder_sms', $s['reminder_sms'], 'یادآوری پیامکی به اعضا' ); ?></div>
 			<div class="sap-check-col"><?php sap_switch( 'reminder_email', $s['reminder_email'], 'خلاصه صبحگاهی کارها با ایمیل' ); ?></div>
 		</div>
+		<label class="sap-batch-field">پیامک تشکر شبانه، ساعت<input type="number" name="done_sms_hour" min="0" max="23" dir="ltr" value="<?php echo esc_attr( (int) $s['done_sms_hour'] ); ?>" style="width:90px"><small>بعد از انجام هر کار فقط یک ایمیل انگیزشی می‌رود؛ این ساعت هر شب به هر کس که آن روز کاری انجام داده یک پیامک تشکر با تعداد کارهایش ارسال می‌شود (پترن «تشکر شبانه»). ۰ = خاموش.</small></label>
 		<label class="sap-batch-field">اطلاع‌رسانی واگذاری کار، چند دقیقه بعد از آخرین واگذاری<input type="number" name="notify_batch_minutes" min="0" max="30" dir="ltr" value="<?php echo esc_attr( (int) $s['notify_batch_minutes'] ); ?>" style="width:90px"><small>اگر پشت سر هم چند کار به یک نفر بسپارید، بعد از این چند دقیقه سکوت فقط یک ایمیل فهرست‌دار و یک پیامک خلاصه برایش می‌رود (حداکثر ۳۰ دقیقه بعد از اولین کار). ۰ = هر کار فوری و جدا. در صفحه «تیم» دکمه «ارسال همین حالا» هم هست.</small></label>
 		<div class="sap-actions sap-notify-tests">
 			<?php foreach ( array( 'email' => 'ایمیل', 'sms' => 'پیامک', 'tg' => 'تلگرام', 'bale' => 'بله' ) as $ck => $cl ) : ?>

@@ -114,6 +114,7 @@ add_action( 'admin_post_sap_save_settings', function () {
 	$changes['reminder_sms']   = sap_post( 'reminder_sms' ) ? 1 : 0;
 	$changes['reminder_email'] = sap_post( 'reminder_email' ) ? 1 : 0;
 	$changes['notify_batch_minutes'] = max( 0, min( 30, (int) sap_post( 'notify_batch_minutes', 3 ) ) );
+	$changes['done_sms_hour']        = max( 0, min( 23, (int) sap_post( 'done_sms_hour', 21 ) ) );
 	$pat = array();
 	foreach ( array_keys( sap_sms_events() ) as $ev ) {
 		$id = absint( sap_norm_text( (string) ( ( (array) sap_post( 'sms_patterns', array() ) )[ $ev ] ?? '' ) ) );
