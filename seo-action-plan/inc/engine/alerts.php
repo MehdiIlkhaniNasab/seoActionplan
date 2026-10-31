@@ -642,6 +642,7 @@ function sap_alerts_notify( $project, $alerts ) {
 			}, array_slice( $list, 0, 6 ) ) ) . "\n\n" . esc_url( $link );
 		}
 		sap_notify_manager( array( $ch ), array(
+			'count'   => count( $list ),
 			'subject' => $head,
 			'text'    => $text ?: $head,
 			'sms'     => $text,

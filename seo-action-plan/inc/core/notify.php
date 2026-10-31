@@ -363,13 +363,13 @@ function sap_sms_logged( $phone, $text, $ok, $err, $rec = '', $mode = 'text' ) {
 function sap_sms_events() {
 	$panel = preg_replace( '#^https?://#', '', untrailingslashit( function_exists( 'sap_url' ) ? sap_url( 'my' ) : home_url() ) );
 	return array(
-		'task'   => array( 'واگذاری یک کار', array( 'name' => 'نام عضو', 'task' => 'عنوان کار', 'project' => 'پروژه', 'due' => 'سررسید' ), "سکان | {name} عزیز، یک کار جدید برای شما ثبت شد.\nعنوان کار: {task}\nپروژه: {project}\nسررسید: {due}\nپنل کارها: " . $panel ),
-		'tasks'  => array( 'واگذاری چند کار پشت سر هم (یک پیامک خلاصه)', array( 'name' => 'نام عضو', 'count' => 'تعداد کار', 'project' => 'پروژه', 'first' => 'عنوان اولین کار' ), "سکان | {name} عزیز، تعداد {count} کار جدید برای شما ثبت شد.\nپروژه: {project}\nاز جمله: {first}\nپنل کارها: " . $panel ),
-		'done'   => array( 'تشکر بعد از انجام کار', array( 'name' => 'نام عضو', 'task' => 'عنوان کار' ), "سکان | خسته نباشید {name} ، کار {task} انجام شد و در گزارش ثبت شد." ),
-		'remind' => array( 'یادآوری کارهای باز', array( 'name' => 'نام عضو', 'open' => 'تعداد کار باز', 'late' => 'تعداد عقب از موعد' ), "سکان | یادآوری برای {name} :\nتعداد کارهای باز: {open}\nعقب از موعد: {late}\nپنل کارها: " . $panel ),
-		'invite' => array( 'دعوت عضو جدید', array( 'name' => 'نام عضو', 'user' => 'نام کاربری' ), "سکان | {name} عزیز، به تیم سئو اضافه شدید.\nنام کاربری: {user}\nلینک تعیین رمز به ایمیل شما ارسال شد.\nپنل کارها: " . $panel ),
-		'alert'  => array( 'هشدار و پیام به مدیر سئو', array( 'alert' => 'خلاصه هشدار' ), "سکان | هشدار برای مدیر سئو: {alert}\nجزئیات در پنل سکان: " . $panel ),
-		'test'   => array( 'پیام آزمایشی', array( 'date' => 'تاریخ' ), "سکان | پیام آزمایشی ارسال با پترن در تاریخ {date} انجام شد." ),
+		'task'   => array( 'واگذاری یک کار', array( 'name' => 'نام کوچک عضو', 'due' => 'تاریخ سررسید (مثل ۱۴ آبان)' ), "سکان | {name} عزیز، سلام\nیک کار تازه به شما سپرده شد.\nتاریخ سررسید: {due}\nجزئیات کار در پنل شما آماده است:\n" . $panel ),
+		'tasks'  => array( 'واگذاری چند کار پشت سر هم (یک پیامک خلاصه)', array( 'name' => 'نام کوچک عضو', 'count' => 'تعداد کارها (عدد)' ), "سکان | {name} عزیز، سلام\nتعداد {count} کار تازه به شما سپرده شد.\nجزئیات کارها در پنل شما آماده است:\n" . $panel ),
+		'done'   => array( 'تشکر بعد از انجام کار', array( 'name' => 'نام کوچک عضو' ), "سکان | {name} عزیز، خسته نباشید\nکار شما انجام شد و در گزارش ماهانه ثبت شد.\nممنون از دقت و همراهی شما." ),
+		'remind' => array( 'یادآوری کارهای باز', array( 'name' => 'نام کوچک عضو', 'open' => 'تعداد کارهای باز (عدد)', 'late' => 'تعداد کارهای عقب از موعد (عدد)' ), "سکان | {name} عزیز، روز بخیر\nکارهای باز شما: {open}\nعقب از موعد: {late}\nبرای دیدن جزئیات وارد پنل شوید:\n" . $panel ),
+		'invite' => array( 'دعوت عضو جدید', array( 'name' => 'نام کوچک عضو', 'user' => 'نام کاربری ورود' ), "سکان | {name} عزیز، به تیم سئو خوش آمدید\nنام کاربری شما: {user}\nلینک تعیین رمز به ایمیلتان ارسال شد.\n" . $panel ),
+		'alert'  => array( 'پیام به مدیر سئو', array( 'count' => 'تعداد موارد جدید (عدد)' ), "سکان | مدیر سئو عزیز\nتعداد {count} مورد جدید در پروژه‌ها نیاز به بررسی دارد.\nجزئیات در پنل سکان:\n" . preg_replace( '#/my$#', '', $panel ) ),
+		'test'   => array( 'پیام آزمایشی', array( 'date' => 'تاریخ امروز' ), "سکان | پیام آزمایشی\nارسال با الگو در تاریخ {date} با موفقیت انجام شد." ),
 	);
 }
 
@@ -623,7 +623,7 @@ function sap_notify_manager( $channels, $msg ) {
 			$out[ $ch ] = sap_notify_email( sap_manager_email(), $msg['subject'], $msg['email'] ?? array( 'intro' => $msg['text'] ) ) ?: new WP_Error( 'sap_mail', 'wp_mail' );
 		} elseif ( 'sms' === $ch ) {
 			$sms        = $msg['sms'] ?? $msg['text'];
-			$out[ $ch ] = sap_sms_send( sap_setting( 'notify_manager_phone' ), $sms, 'alert', array( mb_substr( preg_replace( '/\s+/u', ' ', wp_strip_all_tags( (string) ( $msg['subject'] ?? $sms ) ) ), 0, 60 ) ) );
+			$out[ $ch ] = sap_sms_send( sap_setting( 'notify_manager_phone' ), $sms, 'alert', array( sap_num( max( 1, (int) ( $msg['count'] ?? 1 ) ) ) ) );
 		} else {
 			$out[ $ch ] = sap_bot_send( $ch, $msg['bot'] ?? esc_html( $msg['text'] ) );
 		}
@@ -656,4 +656,12 @@ function sap_notify_test( $channel ) {
 		default:
 			return sap_bot_send( $channel, $text );
 	}
+}
+
+/**
+ * First name for short messages («مهدی ایلخانی‌نسب» → «مهدی»).
+ */
+function sap_first_name( $name ) {
+	$parts = preg_split( '/\s+/u', trim( (string) $name ) );
+	return (string) ( $parts[0] ?? '' );
 }

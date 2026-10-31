@@ -145,7 +145,7 @@ function sap_member_invite( $user_id, $with_password_link = true ) {
 	) );
 	$sms = null;
 	if ( '' !== $m['phone'] && 'none' !== sap_setting( 'sms_provider', 'none' ) ) {
-		$sms = true === sap_sms_send( $m['phone'], sprintf( "%s عزیز، به تیم سئو اضافه شدید.\nپنل کارها: %s\nنام کاربری: %s", $m['name'], $panel, $u->user_login ), 'invite', array( $m['name'], $u->user_login ) );
+		$sms = true === sap_sms_send( $m['phone'], sprintf( "%s عزیز، به تیم سئو اضافه شدید.\nپنل کارها: %s\nنام کاربری: %s", $m['name'], $panel, $u->user_login ), 'invite', array( sap_first_name( $m['name'] ), $u->user_login ) );
 	}
 	return array( 'email' => $mail, 'sms' => $sms, 'link' => $link );
 }
@@ -270,7 +270,7 @@ add_action( 'sap_task_saved', function ( $before, $after ) {
 				) );
 			}
 			if ( $m['notify_sms'] && '' !== $m['phone'] && sap_setting( 'reminder_sms', 1 ) ) {
-				sap_sms_send( $m['phone'], 'سکان | خسته نباشید ' . $m['name'] . '! «' . mb_substr( $after['title'], 0, 70 ) . '» انجام شد و ثبت شد. 🌿', 'done', array( $m['name'], mb_substr( $after['title'], 0, 60 ) ) );
+				sap_sms_send( $m['phone'], 'سکان | خسته نباشید ' . $m['name'] . '! «' . mb_substr( $after['title'], 0, 70 ) . '» انجام شد و ثبت شد. 🌿', 'done', array( sap_first_name( $m['name'] ) ) );
 			}
 			if ( ! $m['manager'] ) {
 				$p = sap_project( $after['project_id'] );
@@ -397,8 +397,9 @@ function sap_assign_notify( $user_id, $tasks ) {
 	}
 	if ( $m['notify_sms'] && '' !== $m['phone'] ) {
 		if ( $one ) {
-			$due = $first['due_date'] ? sap_jdate( $first['due_date'], 'short' ) : 'این ماه';
-			sap_sms_send( $m['phone'], sprintf( "سکان | کار جدید (%s):\n%s\nسررسید: %s", $p['name'] ?? '', mb_substr( $first['title'], 0, 90 ), $due ), 'task', array( $m['name'], mb_substr( $first['title'], 0, 60 ), $p['name'] ?? '', $due ) );
+			// Always a date (the support of the SMS line approves «تاریخ سررسید» only with a date): end of the plan month when none is set.
+			$due = sap_jdate( $first['due_date'] ?: sap_period_range( $first['period'] ?: sap_period_current() )[1], 'short' );
+			sap_sms_send( $m['phone'], sprintf( "سکان | کار جدید (%s):\n%s\nسررسید: %s", $p['name'] ?? '', mb_substr( $first['title'], 0, 90 ), $due ), 'task', array( sap_first_name( $m['name'] ), $due ) );
 		} else {
 			$lines = array();
 			foreach ( array_slice( $tasks, 0, 3 ) as $i => $t ) {
@@ -408,7 +409,7 @@ function sap_assign_notify( $user_id, $tasks ) {
 				$lines[] = '… و ' . sap_num( count( $tasks ) - 3 ) . ' کار دیگر';
 			}
 			$text  = sprintf( "سکان | %s عزیز، %s کار جدید برای شما (%s):\n%s", $m['name'], sap_num( count( $tasks ) ), $pn, implode( "\n", $lines ) );
-			sap_sms_send( $m['phone'], $text, 'tasks', array( $m['name'], sap_num( count( $tasks ) ), $pn, mb_substr( $first['title'], 0, 50 ) ) );
+			sap_sms_send( $m['phone'], $text, 'tasks', array( sap_first_name( $m['name'] ), sap_num( count( $tasks ) ) ) );
 		}
 	}
 	return true;
@@ -485,7 +486,7 @@ function sap_team_remind( $morning = true ) {
 				$p       = sap_project( $t['project_id'] );
 				$lines[] = sap_num( $i + 1 ) . ') ' . mb_substr( $t['title'], 0, 55 ) . ' [' . ( $p['name'] ?? '' ) . ']';
 			}
-			sap_sms_send( $m['phone'], sprintf( "سکان | %s %s\n%s کار باز%s:\n%s", $morning ? 'صبح بخیر' : 'یادآوری', $m['name'], sap_num( count( $tasks ) ), $overdue ? '، ' . sap_num( $overdue ) . ' عقب از موعد' : '', implode( "\n", $lines ) ), 'remind', array( $m['name'], sap_num( count( $tasks ) ), sap_num( $overdue ) ) );
+			sap_sms_send( $m['phone'], sprintf( "سکان | %s %s\n%s کار باز%s:\n%s", $morning ? 'صبح بخیر' : 'یادآوری', $m['name'], sap_num( count( $tasks ) ), $overdue ? '، ' . sap_num( $overdue ) . ' عقب از موعد' : '', implode( "\n", $lines ) ), 'remind', array( sap_first_name( $m['name'] ), sap_num( count( $tasks ) ), sap_num( $overdue ) ) );
 		}
 		if ( $morning && sap_setting( 'reminder_email', 1 ) && $m['notify_email'] ) {
 			sap_notify_email( $m['email'], sprintf( '☀️ صبح بخیر %s — %s کار امروز%s', $m['name'], sap_num( count( $tasks ) ), $overdue ? '، ' . sap_num( $overdue ) . ' عقب از موعد' : '' ), array(
