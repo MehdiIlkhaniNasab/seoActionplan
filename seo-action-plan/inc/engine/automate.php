@@ -603,7 +603,8 @@ function sap_schema_nature( $obj ) {
 
 /**
  * Question → answer pairs written in the content: question headings (ending
- * with ؟/? or starting with a question word) and <details><summary>.
+ * with ؟/? or starting with a question word) and <details><summary>. When the
+ * page has an accordion, only its questions count.
  *
  * @return array[] {q, a}
  */
@@ -615,7 +616,9 @@ function sap_schema_faq_from_html( $html ) {
 			$out[] = array( 'q' => trim( wp_strip_all_tags( $x[1] ) ), 'a' => trim( preg_replace( '/\s+/u', ' ', wp_strip_all_tags( $x[2] ) ) ) );
 		}
 	}
-	$parts = preg_split( '#(<h[2-4]\b[^>]*>.*?</h[2-4]>)#is', $html, -1, PREG_SPLIT_DELIM_CAPTURE );
+	// A real FAQ accordion is the FAQ: section headings that happen to be questions are
+	// not added (Google wants the schema to match the visible question/answer list).
+	$parts = $out ? array() : preg_split( '#(<h[2-4]\b[^>]*>.*?</h[2-4]>)#is', $html, -1, PREG_SPLIT_DELIM_CAPTURE );
 	$qw    = '/^(چرا|چگونه|چطور|آیا|چه|چی|کدام|چقدر|چند|کی|کجا|how|what|why|which|when|where|can|is|do)\b/iu';
 	for ( $i = 1; $i < count( $parts ); $i += 2 ) {
 		$q = trim( html_entity_decode( wp_strip_all_tags( $parts[ $i ] ), ENT_QUOTES, 'UTF-8' ) );
@@ -994,7 +997,9 @@ function sap_alt_plan( $project, $url, $all = false ) {
 	}
 	// The heading each content image sits under.
 	$html  = (string) $obj['content'];
-	$parts = preg_split( '#(<h[2-4]\b[^>]*>.*?</h[2-4]>)#is', $html, -1, PREG_SPLIT_DELIM_CAPTURE );
+	// A real FAQ accordion is the FAQ: section headings that happen to be questions are
+	// not added (Google wants the schema to match the visible question/answer list).
+	$parts = $out ? array() : preg_split( '#(<h[2-4]\b[^>]*>.*?</h[2-4]>)#is', $html, -1, PREG_SPLIT_DELIM_CAPTURE );
 	$under = array();
 	$head  = '';
 	foreach ( $parts as $p ) {
