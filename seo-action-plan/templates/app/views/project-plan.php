@@ -192,7 +192,8 @@ endif;
 	<?php endif; ?>
 </section>
 
-<details class="sap-panel sap-capture">
+<?php $new_due = isset( $_GET['new_due'] ) ? (string) sap_parse_date( sanitize_text_field( wp_unslash( $_GET['new_due'] ) ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification ?>
+<details class="sap-panel sap-capture" id="capture" <?php echo '' !== $new_due ? 'open' : ''; ?>>
 	<summary><?php echo sap_icon( 'plus' ); // phpcs:ignore ?>ثبت کار جدید (Capture)</summary>
 	<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" class="sap-form" data-sap-brief-form>
 		<?php sap_form_fields( 'sap_task_save', array( 'project_id' => $pid, '_return' => $here ) ); ?>
@@ -204,11 +205,12 @@ endif;
 			<label>Focus<select name="focus_id"><option value="0">—</option><?php foreach ( $focuses as $f ) : ?><option value="<?php echo esc_attr( $f['id'] ); ?>"><?php echo esc_html( $f['name'] ); ?></option><?php endforeach; ?></select></label>
 			<label>زمان تخمینی (ساعت)<input type="number" name="effort" min="0.25" step="0.25" value="1"></label>
 			<label>مسئول<select name="assignee"><option value="0">—</option><?php foreach ( sap_team_users() as $u ) : ?><option value="<?php echo esc_attr( $u->ID ); ?>"><?php echo esc_html( $u->display_name ); ?></option><?php endforeach; ?></select></label>
-			<label>ددلاین<input type="date" name="due_date"></label>
+			<label>ددلاین<input type="date" name="due_date" value="<?php echo esc_attr( $new_due ); ?>"></label>
 			<label>آدرس صفحه<input type="url" name="url" dir="ltr"></label>
 			<input type="hidden" name="period" value="<?php echo esc_attr( $period ); ?>">
 		</div>
 		<label>توضیحات<textarea name="notes" rows="4" data-sap-brief-notes placeholder="کوتاه بنویسید؛ «شفاف‌سازی» هدف، مراحل، خروجی و متن گزارش را کامل می‌کند."></textarea></label>
+		<?php sap_view( 'checklist-field', array( 'items' => array() ) ); ?>
 		<input type="hidden" name="outcome" data-sap-brief-outcome>
 		<div class="sap-brief-bar">
 			<button type="button" class="sap-btn is-soft is-small" data-sap-brief <?php disabled( ! sap_ai_connected() ); ?>><?php echo sap_icon( 'spark', 14 ); // phpcs:ignore ?>شفاف‌سازی با هوش مصنوعی</button>
@@ -232,7 +234,7 @@ endif;
 	</span>
 </div>
 
-<div class="sap-board">
+<div class="sap-board-wrap"><div class="sap-board">
 	<?php
 	foreach ( $cols as $status => $items ) :
 		if ( 'inbox' === $status && ! $items ) {
@@ -251,7 +253,7 @@ endif;
 			?>
 		</section>
 	<?php endforeach; ?>
-</div>
+</div></div>
 
 <?php if ( $someday ) : ?>
 	<details class="sap-panel">

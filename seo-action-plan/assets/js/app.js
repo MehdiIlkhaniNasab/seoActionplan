@@ -2170,6 +2170,7 @@
 					toast(res.msg);
 					af.q.value = '';
 					af.closest('[data-sap-panel]').hidden = true;
+					setTimeout(function () { location.reload(); }, 900);
 					btn.disabled = false; btn.classList.remove('is-loading');
 				}).catch(function (e) { toast(e.message, true); btn.disabled = false; btn.classList.remove('is-loading'); });
 				return;
@@ -2235,7 +2236,7 @@
 		var task = b.getAttribute('data-sap-brief-task');
 		var data = {};
 		if (task) {
-			var card = b.closest('.sap-task');
+			var card = b.closest('.sap-task, .sap-drawer-body');
 			var ta = card.querySelector('[data-sap-task-notes-input]');
 			var ti = card.querySelector('input[name="title"]');
 			var ct = card.querySelector('select[name="context"]');
@@ -2251,17 +2252,25 @@
 		b.classList.add('is-loading');
 		post('task-brief', data).then(function (res) {
 			if (task) {
-				var card2 = b.closest('.sap-task');
+				var card2 = b.closest('.sap-task, .sap-drawer-body');
 				var box = card2.querySelector('[data-sap-task-notes]');
 				if (box) { box.textContent = res.notes; box.style.whiteSpace = 'pre-line'; }
 				var ta2 = card2.querySelector('[data-sap-task-notes-input]');
 				if (ta2) { ta2.value = res.notes; }
-				toast('توضیحات کار شفاف و ذخیره شد.');
+				var tf = card2.querySelector('.sap-tedit form');
+				if (res.checklist_saved) {
+					toast('توضیحات شفاف شد و چک‌لیست ' + res.checklist.length.toLocaleString('fa-IR') + ' موردی هم ساخته شد.');
+					setTimeout(function () { location.reload(); }, 900);
+				} else {
+					if (tf && window.sapChecklistFill) { window.sapChecklistFill(tf, res.checklist); }
+					toast('توضیحات کار شفاف و ذخیره شد.');
+				}
 			} else {
 				form.querySelector('[data-sap-brief-notes]').value = res.notes;
 				var oc = form.querySelector('[data-sap-brief-outcome]');
 				if (oc) { oc.value = res.outcome; }
-				toast('توضیحات آماده شد؛ بررسی و در صورت نیاز ویرایش کنید.');
+				var filled = window.sapChecklistFill && window.sapChecklistFill(form, res.checklist);
+				toast(filled ? 'توضیحات آماده شد و چون کار چند مورد جدا دارد، چک‌لیست هم ساخته شد (' + res.checklist.length.toLocaleString('fa-IR') + ' مورد).' : 'توضیحات آماده شد؛ بررسی و در صورت نیاز ویرایش کنید.');
 			}
 		}).catch(function (e) { toast(e.message, true); }).then(function () { b.disabled = false; b.classList.remove('is-loading'); });
 	});
@@ -2281,7 +2290,267 @@
 	});
 	document.addEventListener('click', function (ev) {
 		var o = document.querySelector('.sap-board .sap-task[open], .sap-stack .sap-task[open]');
-		if (o && !o.contains(ev.target) && !ev.target.closest('.sap-toast, dialog')) { o.open = false; }
+		if (o && !o.contains(ev.target) && !ev.target.closest('.sap-toast, dialog, .sap-jdp')) { o.open = false; }
 	});
 
+
+	/* ---- Sidebar: collapse to an icon rail, remembered ---- */
+	document.addEventListener('click', function (ev) {
+		var b = ev.target.closest('[data-sap-side-toggle]');
+		if (!b) { return; }
+		var off = document.body.classList.toggle('side-collapsed');
+		try { localStorage.setItem('sapSide', off ? '0' : '1'); } catch (e) {}
+	});
+
+	/* ---- Jalali date picker: every date field shows and takes Persian dates ---- */
+	(function () {
+		var MONTHS = ['فروردین', 'اردیبهشت', 'خرداد', 'تیر', 'مرداد', 'شهریور', 'مهر', 'آبان', 'آذر', 'دی', 'بهمن', 'اسفند'];
+		var WD = ['ش', 'ی', 'د', 'س', 'چ', 'پ', 'ج'];
+		var fa = function (n) { return String(n).replace(/\d/g, function (d) { return '۰۱۲۳۴۵۶۷۸۹'[d]; }); };
+		var div = function (a, b) { return Math.floor(a / b); };
+		function g2j(gy, gm, gd) {
+			var gdm = [0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334];
+			var gy2 = gm > 2 ? gy + 1 : gy;
+			var days = 355666 + 365 * gy + div(gy2 + 3, 4) - div(gy2 + 99, 100) + div(gy2 + 399, 400) + gd + gdm[gm - 1];
+			var jy = -1595 + 33 * div(days, 12053);
+			days %= 12053;
+			jy += 4 * div(days, 1461);
+			days %= 1461;
+			if (days > 365) { jy += div(days - 1, 365); days = (days - 1) % 365; }
+			var jm = days < 186 ? 1 + div(days, 31) : 7 + div(days - 186, 30);
+			var jd = 1 + (days < 186 ? days % 31 : (days - 186) % 30);
+			return [jy, jm, jd];
+		}
+		function j2g(jy, jm, jd) {
+			jy += 1595;
+			var days = -355668 + 365 * jy + div(jy, 33) * 8 + div((jy % 33) + 3, 4) + jd + (jm < 7 ? (jm - 1) * 31 : (jm - 7) * 30 + 186);
+			var gy = 400 * div(days, 146097);
+			days %= 146097;
+			if (days > 36524) { gy += 100 * div(--days, 36524); days %= 36524; if (days >= 365) { days++; } }
+			gy += 4 * div(days, 1461);
+			days %= 1461;
+			if (days > 365) { gy += div(days - 1, 365); days = (days - 1) % 365; }
+			var gd = days + 1;
+			var sal = [0, 31, (gy % 4 === 0 && gy % 100 !== 0) || gy % 400 === 0 ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+			var gm = 0;
+			for (gm = 1; gm <= 12 && gd > sal[gm]; gm++) { gd -= sal[gm]; }
+			return [gy, gm, gd];
+		}
+		var pad = function (n) { return (n < 10 ? '0' : '') + n; };
+		var iso = function (g) { return g[0] + '-' + pad(g[1]) + '-' + pad(g[2]); };
+		var jlen = function (jy, jm) { return jm <= 6 ? 31 : (jm <= 11 ? 30 : (iso(j2g(jy + 1, 1, 1)) === iso(j2g(jy, 12, 30)) ? 29 : 30)); };
+		var label = function (v) {
+			if (!/^\d{4}-\d{2}-\d{2}$/.test(v || '')) { return ''; }
+			var p = v.split('-').map(Number), j = g2j(p[0], p[1], p[2]);
+			return fa(j[2]) + ' ' + MONTHS[j[1] - 1] + ' ' + fa(j[0]);
+		};
+		var pop, cur;
+		function close() { if (pop) { pop.remove(); pop = null; cur = null; } }
+		function render(view) {
+			var jy = view[0], jm = view[1];
+			var first = j2g(jy, jm, 1);
+			var wd = (new Date(Date.UTC(first[0], first[1] - 1, first[2])).getUTCDay() + 1) % 7; // Saturday = 0
+			var t = new Date(), today = iso([t.getFullYear(), t.getMonth() + 1, t.getDate()]);
+			var val = cur.hidden.value;
+			var h = '<div class="sap-jdp-head"><button type="button" data-jdp="prev" aria-label="ماه قبل">›</button><b>' + MONTHS[jm - 1] + ' ' + fa(jy) + '</b><button type="button" data-jdp="next" aria-label="ماه بعد">‹</button></div><div class="sap-jdp-grid">';
+			WD.forEach(function (w, i) { h += '<span class="sap-jdp-wd' + (i === 6 ? ' is-fri' : '') + '">' + w + '</span>'; });
+			for (var i = 0; i < wd; i++) { h += '<span></span>'; }
+			for (var d = 1; d <= jlen(jy, jm); d++) {
+				var g = iso(j2g(jy, jm, d));
+				var col = (wd + d - 1) % 7;
+				h += '<button type="button" data-jdp-day="' + g + '" class="' + (g === val ? 'is-sel ' : '') + (g === today ? 'is-today ' : '') + (col === 6 ? 'is-fri' : '') + '">' + fa(d) + '</button>';
+			}
+			h += '</div><div class="sap-jdp-foot"><button type="button" data-jdp="today">امروز</button><button type="button" data-jdp="tomorrow">فردا</button><button type="button" data-jdp="clear">پاک کردن</button></div>';
+			pop.innerHTML = h;
+			pop._view = view;
+		}
+		function setVal(field, v) {
+			field.hidden.value = v;
+			field.text.value = label(v);
+			field.hidden.dispatchEvent(new Event('change', { bubbles: true }));
+		}
+		function open(field) {
+			close();
+			cur = field;
+			pop = document.createElement('div');
+			pop.className = 'sap-jdp';
+			document.body.appendChild(pop);
+			var v = field.hidden.value, t = new Date();
+			var base = /^\d{4}-\d{2}-\d{2}$/.test(v) ? v.split('-').map(Number) : [t.getFullYear(), t.getMonth() + 1, t.getDate()];
+			var j = g2j(base[0], base[1], base[2]);
+			render([j[0], j[1]]);
+			var r = field.text.getBoundingClientRect();
+			var top = r.bottom + window.scrollY + 6, left = r.right + window.scrollX - pop.offsetWidth;
+			if (left < 8) { left = 8; }
+			if (r.bottom + pop.offsetHeight + 12 > window.innerHeight && r.top > pop.offsetHeight + 12) { top = r.top + window.scrollY - pop.offsetHeight - 6; }
+			pop.style.top = top + 'px';
+			pop.style.left = left + 'px';
+		}
+		function enhance(inp) {
+			if (inp._jdp || inp.hasAttribute('data-sap-gregorian')) { return; }
+			var text = document.createElement('input');
+			text.type = 'text';
+			text.readOnly = true;
+			text.className = 'sap-jdate ' + (inp.className || '');
+			text.placeholder = inp.getAttribute('placeholder') || 'انتخاب تاریخ';
+			if (inp.title) { text.title = inp.title; }
+			text.value = label(inp.value);
+			inp.type = 'hidden';
+			inp.parentNode.insertBefore(text, inp);
+			var field = { hidden: inp, text: text };
+			inp._jdp = field;
+			text.addEventListener('click', function () { open(field); });
+			text.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(field); } if (e.key === 'Backspace' || e.key === 'Delete') { setVal(field, ''); } });
+		}
+		var scan = function (root) { (root || document).querySelectorAll('input[type="date"]').forEach(enhance); };
+		scan();
+		new MutationObserver(function (ms) { ms.forEach(function (m) { m.addedNodes.forEach(function (n) { if (n.nodeType === 1) { if (n.matches && n.matches('input[type="date"]')) { enhance(n); } else { scan(n); } } }); }); }).observe(document.body, { childList: true, subtree: true });
+		document.addEventListener('click', function (ev) {
+			if (!pop) { return; }
+			var day = ev.target.closest('[data-jdp-day]');
+			var act = ev.target.closest('[data-jdp]');
+			if (day) { setVal(cur, day.getAttribute('data-jdp-day')); close(); return; }
+			if (act) {
+				var a = act.getAttribute('data-jdp'), v = pop._view;
+				if (a === 'prev') { render(v[1] === 1 ? [v[0] - 1, 12] : [v[0], v[1] - 1]); }
+				if (a === 'next') { render(v[1] === 12 ? [v[0] + 1, 1] : [v[0], v[1] + 1]); }
+				if (a === 'today' || a === 'tomorrow') { var t = new Date(); if (a === 'tomorrow') { t.setDate(t.getDate() + 1); } setVal(cur, iso([t.getFullYear(), t.getMonth() + 1, t.getDate()])); close(); }
+				if (a === 'clear') { setVal(cur, ''); close(); }
+				return;
+			}
+			if (!pop.contains(ev.target) && (!cur || ev.target !== cur.text)) { close(); }
+		});
+		document.addEventListener('keydown', function (ev) { if (ev.key === 'Escape') { close(); } });
+		window.addEventListener('resize', close);
+	})();
+
+	/* ---- Checklist tasks: tick items, live progress, report after the last one ---- */
+	document.addEventListener('change', function (ev) {
+		var cb = ev.target.closest('[data-sap-check]');
+		if (!cb) { return; }
+		var box = cb.closest('[data-sap-checklist]');
+		var id = box.getAttribute('data-sap-checklist');
+		var li = cb.closest('li');
+		cb.disabled = true;
+		li.classList.toggle('is-done', cb.checked);
+		post('task/' + id + '/check', { i: Number(cb.getAttribute('data-sap-check')), done: cb.checked }).then(function (res) {
+			cb.disabled = false;
+			var fa = function (n) { return String(n).replace(/\d/g, function (d) { return '۰۱۲۳۴۵۶۷۸۹'[d]; }); };
+			box.querySelector('[data-sap-check-count]').textContent = fa(res.done) + ' از ' + fa(res.total);
+			box.querySelector('[data-sap-check-bar]').style.width = res.pct + '%';
+			box.querySelector('[data-sap-check-pct]').textContent = fa(res.pct) + '٪';
+			box.classList.toggle('is-complete', !!res.all);
+			var card = box.closest('[data-sap-mytask]');
+			if (card) {
+				var f = card.querySelector('[data-sap-my-report]');
+				if (f && f.result && (!f.result.value.trim() || /^[✔✖] /.test(f.result.value.trim()))) { f.result.value = res.report; }
+				if (res.all && f) {
+					f.hidden = false;
+					toast('همه موارد انجام شد! 🎉 حالا گزارش کار را ثبت کن.');
+					setTimeout(function () { f.scrollIntoView({ behavior: 'smooth', block: 'center' }); f.result.focus(); }, 250);
+				}
+			} else if (res.all) {
+				toast('همه موارد چک‌لیست تیک خورد.');
+			}
+		}).catch(function (e) { cb.disabled = false; cb.checked = !cb.checked; li.classList.toggle('is-done', cb.checked); toast(e.message, true); });
+	});
+
+	/* ---- Checklist field in task forms: switch, count, AI fill ---- */
+	(function () {
+		var count = function (fl) {
+			var ta = fl.querySelector('[data-sap-check-text]');
+			var n = ta.value.split(/\n+/).filter(function (l) { return l.trim(); }).length;
+			fl.querySelector('[data-sap-check-n]').textContent = n ? n.toLocaleString('fa-IR') + ' مورد' : '';
+		};
+		var setOn = function (fl, on) {
+			fl.classList.toggle('is-on', on);
+			fl.querySelector('[data-sap-check-toggle]').checked = on;
+			fl.querySelector('.sap-check-items').hidden = !on;
+			fl.querySelector('[data-sap-check-text]').disabled = !on;
+		};
+		document.querySelectorAll('[data-sap-check-field]').forEach(count);
+		document.addEventListener('change', function (ev) {
+			var tg = ev.target.closest('[data-sap-check-toggle]');
+			if (!tg) { return; }
+			var fl = tg.closest('[data-sap-check-field]');
+			setOn(fl, tg.checked);
+			if (tg.checked) { fl.querySelector('[data-sap-check-text]').focus(); }
+		});
+		document.addEventListener('input', function (ev) {
+			var ta = ev.target.closest('[data-sap-check-text]');
+			if (ta) { count(ta.closest('[data-sap-check-field]')); }
+		});
+		document.addEventListener('click', function (ev) {
+			var b = ev.target.closest('[data-sap-check-ai]');
+			if (!b) { return; }
+			ev.preventDefault();
+			var form = b.closest('form');
+			var ti = form.querySelector('[name="title"]');
+			var no = form.querySelector('[name="notes"]');
+			if (!ti || !ti.value.trim()) { toast('اول عنوان کار را بنویسید.', true); return; }
+			b.disabled = true;
+			b.classList.add('is-loading');
+			post('task-checklist', { title: ti.value, notes: no ? no.value : '' }).then(function (res) {
+				var fl = b.closest('[data-sap-check-field]');
+				if (res.items.length) { fl.querySelector('[data-sap-check-text]').value = res.items.join('\n'); count(fl); }
+				toast(res.msg, !res.items.length);
+			}).catch(function (e) { toast(e.message, true); }).then(function () { b.disabled = false; b.classList.remove('is-loading'); });
+		});
+		window.sapChecklistFill = function (form, items) {
+			var fl = form && form.querySelector('[data-sap-check-field]');
+			if (!fl || !items || !items.length) { return false; }
+			var ta = fl.querySelector('[data-sap-check-text]');
+			if (ta.value.trim()) { return false; }
+			setOn(fl, true);
+			ta.value = items.join('\n');
+			count(fl);
+			return true;
+		};
+	})();
+
+	/* ---- Conversations (questions / requests): manager answers, member replies ---- */
+	document.addEventListener('submit', function (ev) {
+		var f = ev.target.closest('[data-sap-thread-form]');
+		var rq = ev.target.closest('[data-sap-request-form]');
+		if (!f && !rq) { return; }
+		ev.preventDefault();
+		var btn = ev.target.querySelector('button[type="submit"]');
+		var text = ev.target.text.value.trim();
+		if (!text) { return; }
+		btn.disabled = true;
+		var p;
+		if (rq) {
+			p = post('request', { title: rq.title.value, text: text });
+		} else {
+			var id = f.closest('[data-sap-thread]').getAttribute('data-sap-thread');
+			p = 'answer' === f.getAttribute('data-sap-thread-form') ? post('question/' + id, { answer: text }) : post('thread/' + id + '/reply', { text: text });
+		}
+		p.then(function (res) {
+			toast(res.msg);
+			setTimeout(function () { location.reload(); }, 650);
+		}).catch(function (e) { toast(e.message, true); btn.disabled = false; btn.classList.remove('is-loading'); });
+	});
+
+	/* ---- Project manager: filter the tracked tasks ---- */
+	document.addEventListener('click', function (ev) {
+		var b = ev.target.closest('[data-sap-pm-tab]');
+		if (!b) { return; }
+		var k = b.getAttribute('data-sap-pm-tab');
+		var box = document.querySelector('[data-sap-pm-track]');
+		if (!box) { return; }
+		box.querySelectorAll('.sap-seg-mini [data-sap-pm-tab]').forEach(function (x) { x.classList.toggle('is-active', x.getAttribute('data-sap-pm-tab') === k); });
+		box.querySelectorAll('.sap-pm-row').forEach(function (r) { r.hidden = k !== 'all' && r.getAttribute('data-bucket') !== k; });
+	});
+	if (/^#t-\d+$/.test(location.hash)) {
+		var tr = document.querySelector(location.hash + '.sap-pm-row');
+		if (tr) { tr.open = true; }
+	}
+
+	/* ---- Calendar: tick all / none people ---- */
+	document.addEventListener('click', function (ev) {
+		var b = ev.target.closest('[data-sap-cal-all]');
+		if (!b) { return; }
+		var on = b.getAttribute('data-sap-cal-all') === '1';
+		b.closest('.sap-cal-people-list').querySelectorAll('input[type="checkbox"]').forEach(function (c) { c.checked = on; });
+	});
 })();

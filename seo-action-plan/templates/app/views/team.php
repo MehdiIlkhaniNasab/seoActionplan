@@ -172,3 +172,34 @@ $sms_ok   = 'none' !== sap_setting( 'sms_provider', 'none' );
 		<div class="sap-form-foot"><button class="sap-btn is-primary is-small" type="submit">ذخیره نقش‌ها</button></div>
 	</form>
 </section>
+
+<section class="sap-panel sap-roles" id="contexts">
+	<div class="sap-panel-head"><h2><?php echo sap_icon( 'tag' ); // phpcs:ignore ?>حوزه‌های کار<small>گزینه‌های «حوزه / نوع کار» هنگام ثبت کار. اضافه، ویرایش یا حذف کنید؛ کارهای قبلی برچسبشان را نگه می‌دارند.</small></h2></div>
+	<form method="post" action="<?php echo $post; // phpcs:ignore ?>" class="sap-form">
+		<?php sap_form_fields( 'sap_contexts_save' ); ?>
+		<div class="sap-roles-list">
+			<?php foreach ( sap_contexts() as $ck => $cl ) : ?>
+				<div class="sap-role-row">
+					<input type="hidden" name="ctx_key[]" value="<?php echo esc_attr( $ck ); ?>">
+					<input type="text" name="ctx_label[]" value="<?php echo esc_attr( $cl ); ?>">
+					<label class="sap-check sap-small"><input type="checkbox" name="ctx_del[]" value="<?php echo esc_attr( $ck ); ?>"> حذف</label>
+				</div>
+			<?php endforeach; ?>
+			<?php for ( $ci = 0; $ci < 3; $ci++ ) : ?>
+				<div class="sap-role-row is-new">
+					<input type="hidden" name="ctx_key[]" value="">
+					<input type="text" name="ctx_label[]" placeholder="+ حوزه جدید (مثلاً تولید ویدیو، سئو محلی)">
+				</div>
+			<?php endfor; ?>
+			<?php $off = array_filter( sap_contexts_all(), function ( $r ) { return ! $r['on']; } ); ?>
+			<?php foreach ( $off as $ck => $row ) : ?>
+				<div class="sap-role-row is-off">
+					<input type="hidden" name="ctx_key[]" value="<?php echo esc_attr( $ck ); ?>">
+					<input type="text" name="ctx_label[]" value="<?php echo esc_attr( $row['label'] ); ?>" readonly>
+					<label class="sap-check sap-small"><input type="checkbox" name="ctx_del[]" value="<?php echo esc_attr( $ck ); ?>" checked> حذف‌شده (برای برگرداندن تیک را بردارید)</label>
+				</div>
+			<?php endforeach; ?>
+		</div>
+		<div class="sap-form-foot"><button class="sap-btn is-primary is-small" type="submit">ذخیره حوزه‌ها</button></div>
+	</form>
+</section>

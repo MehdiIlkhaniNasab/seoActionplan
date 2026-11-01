@@ -21,6 +21,7 @@ $overdue = $t['due_date'] && $t['due_date'] < $today && ! $closed;
 $due_cls = $overdue ? 'is-late' : ( $t['due_date'] === $today ? 'is-today' : '' );
 $post    = esc_url( admin_url( 'admin-post.php' ) );
 $ret     = $here . '#task-' . $t['id'];
+$prog    = $t['checklist'] ? sap_checklist_progress( $t ) : null;
 $flow    = array( 'next' => 'اقدام بعدی', 'doing' => 'در حال انجام', 'waiting' => 'در انتظار', 'done' => 'انجام شد' );
 ?>
 <details class="sap-task is-<?php echo esc_attr( $t['status'] ); ?>" id="task-<?php echo esc_attr( $t['id'] ); ?>" <?php echo ( (int) ( $open_id ?? 0 ) === $t['id'] ) ? 'open' : ''; ?>>
@@ -37,6 +38,7 @@ $flow    = array( 'next' => 'اقدام بعدی', 'doing' => 'در حال ان�
 			<?php if ( 'review' === $t['status'] ) : ?><span class="sap-chip is-info">منتظر تأیید</span><?php endif; ?>
 			<?php if ( '' !== $t['review_note'] && 'doing' === $t['status'] ) : ?><span class="sap-chip is-warn">برگشت با بازخورد</span><?php endif; ?>
 			<?php if ( $t['recurring'] ) : ?><span class="sap-chip is-rec">دوره‌ای</span><?php endif; ?>
+			<?php if ( $prog ) : ?><span class="sap-mini-prog<?php echo $prog['done'] === $prog['total'] ? ' is-full' : ''; ?>" title="پیشرفت چک‌لیست"><i style="width:<?php echo esc_attr( $prog['pct'] ); ?>%"></i><em><?php echo esc_html( sap_num( $prog['done'] ) . '/' . sap_num( $prog['total'] ) ); ?></em></span><?php endif; ?>
 			<?php if ( $t['assignee'] ) : ?><?php echo sap_avatar( $t['assignee'], 22 ); // phpcs:ignore ?><?php endif; ?>
 		</span>
 	</summary>
@@ -63,6 +65,18 @@ $flow    = array( 'next' => 'اقدام بعدی', 'doing' => 'در حال ان�
 			<div class="sap-notes" data-sap-task-notes><?php echo '' !== trim( $t['notes'] ) ? sap_rich_text( $t['notes'], sap_task_site_base( $t ) ) : '<em class="sap-muted">توضیحی ندارد.</em>'; // phpcs:ignore ?></div>
 			<?php if ( '' !== $t['outcome'] ) : ?><p class="sap-task-outcome"><b>خروجی مطلوب:</b> <?php echo esc_html( $t['outcome'] ); ?></p><?php endif; ?>
 		</div>
+
+		<?php if ( $prog ) : ?>
+			<div class="sap-checklist<?php echo $prog['done'] === $prog['total'] ? ' is-complete' : ''; ?>" data-sap-checklist="<?php echo esc_attr( $t['id'] ); ?>">
+				<div class="sap-checklist-head"><b>✅ چک‌لیست</b><span data-sap-check-count><?php echo esc_html( sap_num( $prog['done'] ) . ' از ' . sap_num( $prog['total'] ) ); ?></span></div>
+				<div class="sap-checklist-bar"><i data-sap-check-bar style="width:<?php echo esc_attr( $prog['pct'] ); ?>%"></i><em data-sap-check-pct><?php echo esc_html( sap_num( $prog['pct'] ) ); ?>٪</em></div>
+				<ul>
+					<?php foreach ( $t['checklist'] as $ci => $it ) : ?>
+						<li class="<?php echo $it['d'] ? 'is-done' : ''; ?>"><label><input type="checkbox" data-sap-check="<?php echo esc_attr( $ci ); ?>" <?php checked( $it['d'] ); ?> <?php disabled( $closed || 'review' === $t['status'] ); ?>><span><?php echo esc_html( $it['t'] ); ?></span></label><?php if ( $it['d'] && $it['by'] ) : ?><small class="sap-muted"><?php echo esc_html( sap_first_name( sap_user_name( $it['by'] ) ) . ( $it['at'] ? ' · ' . sap_jdate( substr( $it['at'], 0, 10 ), 'day' ) : '' ) ); ?></small><?php endif; ?></li>
+					<?php endforeach; ?>
+				</ul>
+			</div>
+		<?php endif; ?>
 
 		<?php if ( '' !== $t['result'] || $t['attachments'] ) : ?>
 			<div class="sap-treport">
@@ -118,6 +132,7 @@ $flow    = array( 'next' => 'اقدام بعدی', 'doing' => 'در حال ان�
 					</div>
 					<label>آدرس صفحه<input type="url" name="url" dir="ltr" value="<?php echo esc_attr( $t['url'] ); ?>"></label>
 					<label>توضیحات<textarea name="notes" rows="6" data-sap-task-notes-input><?php echo esc_textarea( $t['notes'] ); ?></textarea></label>
+					<?php sap_view( 'checklist-field', array( 'items' => $t['checklist'] ) ); ?>
 					<details class="sap-more">
 						<summary>بیشتر <small>ماه، Focus، ساعت، خروجی مطلوب، گزارش</small></summary>
 						<div class="sap-grid-3">

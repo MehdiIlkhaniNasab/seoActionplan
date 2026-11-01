@@ -136,7 +136,7 @@ function sap_resolve_route( $route ) {
 	$first = $parts[0] ?? '';
 	$out   = array( 'route' => $route, 'nav' => $first ?: 'dashboard', 'project' => null );
 	// Team members only have their tasks and the guide.
-	if ( ! sap_can() && ! in_array( $first, sap_is_pm() ? array( 'my', 'guide', 'pm' ) : array( 'my', 'guide' ), true ) ) {
+	if ( ! sap_can() && ! in_array( $first, sap_is_pm() ? array( 'my', 'guide', 'pm', 'inbox', 'requests' ) : array( 'my', 'guide', 'inbox', 'requests' ), true ) ) {
 		$first = sap_is_pm() && '' === $first ? 'pm' : 'my';
 	}
 	switch ( $first ) {
@@ -146,6 +146,12 @@ function sap_resolve_route( $route ) {
 			return array_merge( $out, array( 'view' => 'my-tasks', 'title' => 'کارهای من', 'nav' => 'my', 'vars' => array() ) );
 		case 'desk':
 			return array_merge( $out, array( 'view' => 'desk', 'title' => 'میز کار', 'nav' => 'desk', 'vars' => array() ) );
+		case 'inbox':
+			return array_merge( $out, array( 'view' => 'inbox', 'title' => 'اعلان‌ها', 'nav' => 'inbox', 'vars' => array() ) );
+		case 'requests':
+			return array_merge( $out, array( 'view' => 'requests', 'title' => 'درخواست‌ها', 'nav' => 'requests', 'vars' => array() ) );
+		case 'calendar':
+			return array_merge( $out, array( 'view' => 'calendar', 'title' => 'تقویم کارها', 'nav' => 'calendar', 'vars' => array() ) );
 		case 'pm':
 			return array_merge( $out, array( 'view' => 'pm', 'title' => 'پروژه‌ها و ثبت کار', 'nav' => 'pm', 'vars' => array() ) );
 		case 'team':

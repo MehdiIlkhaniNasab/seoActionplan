@@ -181,10 +181,26 @@ $guide = function ( $notes ) {
 							<?php if ( '' !== $t['url'] ) : ?><p><span>صفحه</span><?php echo sap_url_tag( $t['url'], 60 ); // phpcs:ignore ?></p><?php endif; ?>
 						</div>
 					<?php endif; ?>
+					<?php if ( $t['checklist'] ) : ?>
+						<?php $pg = sap_checklist_progress( $t ); ?>
+						<div class="sap-checklist<?php echo $pg['done'] === $pg['total'] ? ' is-complete' : ''; ?>" data-sap-checklist="<?php echo esc_attr( $t['id'] ); ?>">
+							<div class="sap-checklist-head">
+								<b>✅ چک‌لیست کار</b>
+								<span data-sap-check-count><?php echo esc_html( sap_num( $pg['done'] ) . ' از ' . sap_num( $pg['total'] ) ); ?></span>
+							</div>
+							<div class="sap-checklist-bar"><i data-sap-check-bar style="width:<?php echo esc_attr( $pg['pct'] ); ?>%"></i><em data-sap-check-pct><?php echo esc_html( sap_num( $pg['pct'] ) ); ?>٪</em></div>
+							<ul>
+								<?php foreach ( $t['checklist'] as $ci => $it ) : ?>
+									<li class="<?php echo $it['d'] ? 'is-done' : ''; ?>"><label><input type="checkbox" data-sap-check="<?php echo esc_attr( $ci ); ?>" <?php checked( $it['d'] ); ?>><span><?php echo esc_html( $it['t'] ); ?></span></label></li>
+								<?php endforeach; ?>
+							</ul>
+						</div>
+					<?php endif; ?>
 					<?php if ( $qs ) : ?>
 						<div class="sap-mytask-qs">
+							<b class="sap-mytask-qs-h">💬 گفتگو با مدیر</b>
 							<?php foreach ( $qs as $q ) : ?>
-								<div class="sap-q"><p><b>❓ سوال شما:</b> <?php echo esc_html( $q['question'] ); ?></p><?php echo 'answered' === $q['status'] ? '<p class="sap-q-a"><b>💬 پاسخ ' . esc_html( sap_user_name( (int) $q['answered_by'] ) ) . ':</b> ' . esc_html( $q['answer'] ) . '</p>' : '<p class="sap-muted sap-small">منتظر پاسخ مدیر…</p>'; ?></div>
+								<?php sap_view( 'thread', array( 'q' => $q, 'side' => 'member' ) ); ?>
 							<?php endforeach; ?>
 						</div>
 					<?php endif; ?>
@@ -201,7 +217,7 @@ $guide = function ( $notes ) {
 						<?php if ( $gd ) : ?>
 							<div class="sap-report-guide"><b>📝 در گزارش دقیقاً این‌ها را بنویس:</b><ul><?php foreach ( $gd as $g ) : ?><li><?php echo esc_html( $g ); ?></li><?php endforeach; ?></ul></div>
 						<?php endif; ?>
-						<label>گزارش کار — دقیقاً چه کاری انجام شد؟<textarea name="result" rows="4" required placeholder="مثلاً: تایتل صفحه /x/ از «…» به «…» تغییر کرد؛ ۴ سوال FAQ اضافه شد؛ لینک داخلی از مقاله Y با انکر Z گذاشته شد."><?php echo esc_textarea( $t['result'] ); ?></textarea></label>
+						<label>گزارش کار — دقیقاً چه کاری انجام شد؟<textarea name="result" rows="4" required placeholder="مثلاً: تایتل صفحه /x/ از «…» به «…» تغییر کرد؛ ۴ سوال FAQ اضافه شد؛ لینک داخلی از مقاله Y با انکر Z گذاشته شد."><?php echo esc_textarea( '' !== $t['result'] ? $t['result'] : ( $t['checklist'] && sap_checklist_progress( $t )['done'] ? sap_checklist_report( $t ) : '' ) ); ?></textarea></label>
 						<label>لینک‌ها و مستندات (هر خط یک لینک)<textarea name="links" rows="2" dir="ltr" placeholder="https://"><?php echo esc_textarea( implode( "\n", array_map( function ( $a ) { return $a['url']; }, array_filter( $t['attachments'], function ( $a ) { return 'link' === ( $a['type'] ?? '' ); } ) ) ) ); ?></textarea></label>
 						<div class="sap-report-files">
 							<label class="sap-btn is-ghost is-small sap-file-btn"><?php echo sap_icon( 'image', 14 ); // phpcs:ignore ?>افزودن تصویر یا PDF<input type="file" accept="image/*,application/pdf" multiple data-sap-attach hidden></label>

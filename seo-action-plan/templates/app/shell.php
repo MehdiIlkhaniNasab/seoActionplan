@@ -15,12 +15,14 @@ defined( 'ABSPATH' ) || exit;
 $user     = wp_get_current_user();
 $manager  = sap_can();
 $projects = $manager ? sap_projects() : array();
+$unread   = sap_notice_unread( $user->ID );
 $my_open  = count( sap_tasks( array( 'assignee' => $user->ID, 'status' => array( 'inbox', 'next', 'doing', 'waiting' ) ) ) );
 $cur_pid  = $project ? $project['id'] : 0;
 $link     = function ( $key, $url, $icon, $label, $badge = 0 ) use ( $nav ) {
 	printf(
-		'<a class="%s" href="%s">%s<span>%s</span>%s</a>',
+		'<a class="%s" href="%s" title="%s">%s<span>%s</span>%s</a>',
 		$key === $nav ? 'is-active' : '',
+		esc_attr( $label ),
 		esc_url( $url ),
 		sap_icon( $icon, 18 ), // phpcs:ignore
 		esc_html( $label ),
@@ -37,8 +39,10 @@ $link     = function ( $key, $url, $icon, $label, $badge = 0 ) use ( $nav ) {
 	<?php sap_app_assets(); ?>
 </head>
 <body class="sap-app view-<?php echo esc_attr( $view ); ?>">
+<script>try{if(localStorage.getItem('sapSide')==='0'){document.body.classList.add('side-collapsed');}}catch(e){}</script>
 <div class="sap-shell">
 	<aside class="sap-side" id="sap-side">
+		<button type="button" class="sap-side-toggle" data-sap-side-toggle aria-label="بستن / باز کردن منو" title="بستن / باز کردن منو"><?php echo sap_icon( 'chevron', 16 ); // phpcs:ignore ?></button>
 		<a class="sap-brand" href="<?php echo esc_url( sap_url() ); ?>">
 			<span class="sap-brand-mark"><?php echo sap_icon( 'helm', 24 ); // phpcs:ignore ?></span>
 			<span><b>سُکان</b><small>هدایت هوشمند سئو · رونق</small></span>
@@ -48,11 +52,16 @@ $link     = function ( $key, $url, $icon, $label, $badge = 0 ) use ( $nav ) {
 			if ( $manager ) {
 				$link( 'dashboard', sap_url(), 'grid', 'داشبورد' );
 				$link( 'desk', sap_url( 'desk' ), 'inbox', 'میز کار', sap_desk_count() );
+				$link( 'calendar', sap_url( 'calendar' ), 'calendar', 'تقویم کارها' );
 			}
 			if ( sap_is_pm() ) {
-				$link( 'pm', sap_url( 'pm' ), 'list', 'پروژه‌ها و ثبت کار' );
+				$link( 'pm', sap_url( 'pm' ), 'list', 'میز کار مدیر پروژه' );
 			}
 			$link( 'my', sap_url( 'my' ), 'check', 'کارهای من', $my_open );
+			$link( 'inbox', sap_url( 'inbox' ), 'bell', 'اعلان‌ها', $unread );
+			if ( ! $manager ) {
+				$link( 'requests', sap_url( 'requests' ), 'log', 'درخواست‌ها' );
+			}
 			?>
 			<?php if ( $manager ) : ?>
 				<p class="sap-nav-h">پروژه‌ها</p>

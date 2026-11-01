@@ -32,9 +32,15 @@ function sap_desk_items() {
 	usort( $review, function ( $a, $b ) {
 		return strcmp( (string) $a['submitted_at'], (string) $b['submitted_at'] );
 	} );
+	$open = (array) $wpdb->get_results( 'SELECT * FROM ' . sap_table( 'questions' ) . " WHERE status = 'open' ORDER BY COALESCE(updated_at, created_at) ASC LIMIT 300", ARRAY_A ); // phpcs:ignore
 	return array(
 		'review'    => $review,
-		'questions' => (array) $wpdb->get_results( "SELECT * FROM " . sap_table( 'questions' ) . " WHERE status = 'open' ORDER BY id ASC LIMIT 200", ARRAY_A ), // phpcs:ignore
+		'questions' => array_values( array_filter( $open, function ( $q ) {
+			return 'request' !== ( $q['kind'] ?? 'task' );
+		} ) ),
+		'requests'  => array_values( array_filter( $open, function ( $q ) {
+			return 'request' === ( $q['kind'] ?? 'task' );
+		} ) ),
 		'proposed'  => sap_tasks( array( 'status' => 'proposed' ) ),
 		'late'      => $late,
 	);
@@ -47,7 +53,7 @@ function sap_desk_count() {
 	static $n = null;
 	if ( null === $n ) {
 		$d = sap_desk_items();
-		$n = count( $d['review'] ) + count( $d['questions'] ) + count( $d['proposed'] ) + count( $d['late'] );
+		$n = count( $d['review'] ) + count( $d['questions'] ) + count( $d['requests'] ) + count( $d['proposed'] ) + count( $d['late'] );
 	}
 	return $n;
 }
@@ -126,6 +132,9 @@ function sap_task_review( $task, $do, $note = '' ) {
 	}
 	sap_task_save( array( 'status' => 'doing', 'review_note' => $note, 'submitted_at' => null ), $task['id'] );
 	sap_comment_add( $task['project_id'], 'task', $task['id'], '🔁 بازخورد مدیر: ' . $note );
+	if ( $task['assignee'] ) {
+		sap_notice_add( $task['assignee'], array( 'icon' => '🔁', 'title' => 'کار «' . $task['title'] . '» نیاز به اصلاح دارد', 'text' => $note, 'url' => sap_url( 'my' ) . '#task-' . $task['id'] ) );
+	}
 	if ( $m && $m['notify_email'] ) {
 		sap_notify_email( $m['email'], '🔁 ' . sap_first_name( $m['name'] ) . ' عزیز، کار «' . mb_substr( $task['title'], 0, 60 ) . '» نیاز به اصلاح دارد', array(
 			'title'     => 'یک قدم تا تأیید نهایی',
@@ -150,13 +159,17 @@ function sap_question_add( $task, $text ) {
 	if ( '' === $text ) {
 		return new WP_Error( 'sap_q', 'سوال خالی است.' );
 	}
+	$now = sap_now();
 	$wpdb->insert( sap_table( 'questions' ), array(
 		'project_id' => (int) $task['project_id'],
 		'task_id'    => (int) $task['id'],
 		'user_id'    => get_current_user_id(),
+		'kind'       => 'task',
 		'question'   => $text,
+		'thread'     => wp_json_encode( array( array( 'u' => get_current_user_id(), 'a' => 0, 'text' => $text, 'at' => $now ) ), JSON_UNESCAPED_UNICODE ),
 		'status'     => 'open',
-		'created_at' => sap_now(),
+		'created_at' => $now,
+		'updated_at' => $now,
 	) );
 	$id = (int) $wpdb->insert_id;
 	$me = sap_member( get_current_user_id() );
@@ -180,16 +193,37 @@ function sap_question_answer( $id, $answer ) {
 	if ( ! $q || '' === $answer ) {
 		return new WP_Error( 'sap_q', 'پاسخ خالی است.' );
 	}
-	$wpdb->update( sap_table( 'questions' ), array( 'answer' => $answer, 'answered_by' => get_current_user_id(), 'status' => 'answered', 'answered_at' => sap_now() ), array( 'id' => (int) $id ) );
-	$t = sap_task( (int) $q['task_id'] );
+	$asked = sap_thread( $q );
+	$asked = array_values( array_filter( $asked, function ( $x ) {
+		return empty( $x['a'] );
+	} ) );
+	$last_q = $asked ? (string) end( $asked )['text'] : (string) $q['question'];
+	sap_thread_push( $q, $answer, true );
+	$t = $q['task_id'] ? sap_task( (int) $q['task_id'] ) : null;
 	$m = sap_member( (int) $q['user_id'] );
-	if ( $m && $m['notify_email'] && $t ) {
+	$is_req = 'request' === ( $q['kind'] ?? 'task' );
+	sap_notice_add( (int) $q['user_id'], array(
+		'icon'  => '💬',
+		'title' => $is_req ? 'پاسخ درخواست «' . $q['title'] . '»' : 'پاسخ سوال شما درباره «' . ( $t['title'] ?? '' ) . '»',
+		'text'  => $answer,
+		'url'   => $is_req ? sap_url( 'requests' ) . '#r-' . $q['id'] : sap_url( 'my' ) . '#task-' . ( $t['id'] ?? 0 ),
+	) );
+	if ( $m && $m['notify_email'] && $is_req ) {
+		sap_notify_email( $m['email'], '💬 پاسخ درخواست شما: «' . mb_substr( $q['title'], 0, 50 ) . '»', array(
+			'title'  => 'درخواست شما پاسخ داده شد',
+			'badge'  => '💬 پاسخ مدیر',
+			'tone'   => '#0F766E',
+			'intro'  => $m['name'] . ' عزیز، پاسخ درخواستتان:',
+			'rows'   => array( 'درخواست' => $last_q, 'پاسخ' => $answer ),
+			'button' => array( 'دیدن گفتگو', sap_url( 'requests' ) . '#r-' . $q['id'] ),
+		) );
+	} elseif ( $m && $m['notify_email'] && $t ) {
 		sap_notify_email( $m['email'], '💬 پاسخ سوال شما درباره «' . mb_substr( $t['title'], 0, 50 ) . '»', array(
 			'title'  => 'سوال شما پاسخ داده شد',
 			'badge'  => '💬 پاسخ مدیر',
 			'tone'   => '#7C3AED',
 			'intro'  => $m['name'] . ' عزیز، پاسخ سوالتان درباره کار «' . $t['title'] . '»:',
-			'rows'   => array( 'سوال شما' => $q['question'], 'پاسخ' => $answer ),
+			'rows'   => array( 'سوال شما' => $last_q, 'پاسخ' => $answer ),
 			'button' => array( 'ادامه کار', sap_url( 'my' ) . '#task-' . $t['id'] ),
 		) );
 	}
@@ -269,6 +303,7 @@ function sap_pm_propose( $data ) {
 		'due_date'   => $data['due_date'] ?? '',
 		'url'        => $data['url'] ?? '',
 		'effort'     => $data['effort'] ?? 1,
+		'checklist'  => (string) ( $data['checklist'] ?? '' ),
 		'status'     => sap_can() ? 'next' : 'proposed',
 		'period'     => sap_period_current(),
 		'source'     => 'pm',
@@ -302,8 +337,9 @@ function sap_ai_task_brief( $f ) {
 	$schema = array(
 		'type'                 => 'object',
 		'additionalProperties' => false,
-		'required'             => array( 'goal', 'steps', 'output', 'report', 'tips' ),
+		'required'             => array( 'goal', 'steps', 'output', 'report', 'tips', 'checklist' ),
 		'properties'           => array(
+			'checklist' => array( 'type' => 'array', 'items' => array( 'type' => 'string' ) ),
 			'goal'   => array( 'type' => 'string' ),
 			'steps'  => array( 'type' => 'array', 'items' => array( 'type' => 'string' ) ),
 			'output' => array( 'type' => 'string' ),
@@ -319,7 +355,7 @@ function sap_ai_task_brief( $f ) {
 		'type'        => sap_context_label( (string) ( $f['context'] ?? '' ) ),
 		'page'        => (string) ( $f['url'] ?? '' ),
 		'description' => mb_substr( (string) ( $f['notes'] ?? '' ), 0, 3000 ),
-	), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES ) . "\n\nبنویس: goal = هدف کار در یک جمله؛ steps = ۳ تا ۸ قدم دقیق و پشت سر هم؛ output = خروجی نهایی که باید تحویل شود؛ report = ۳ تا ۶ مورد که عضو باید دقیقاً در «گزارش کار» بنویسد (مثلاً آدرس صفحه، تایتل قبل و بعد، تعداد موارد، لینک فایل)، به شکل قالب پرکردنی؛ tips = حداکثر ۳ نکته یا اشتباه رایج.";
+	), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES ) . "\n\nبنویس: goal = هدف کار در یک جمله؛ steps = ۳ تا ۸ قدم دقیق و پشت سر هم؛ output = خروجی نهایی که باید تحویل شود؛ report = ۳ تا ۶ مورد که عضو باید دقیقاً در «گزارش کار» بنویسد (مثلاً آدرس صفحه، تایتل قبل و بعد، تعداد موارد، لینک فایل)، به شکل قالب پرکردنی؛ tips = حداکثر ۳ نکته یا اشتباه رایج؛ checklist = فقط اگر کار از چند واحد جدا و قابل شمارش تشکیل شده (مثلاً ۹ محصول برای آپلود، ۵ مقاله، ۲۰ صفحه)، برای هر واحد یک آیتم کوتاه (نام واحد اگر مشخص است، وگرنه «محصول ۱»…)؛ در غیر این صورت آرایه خالی.";
 	$r = sap_ai_request( $system, $user, $schema, array( 'purpose' => 'help', 'max_tokens' => 1800 ) );
 	if ( is_wp_error( $r ) ) {
 		return $r;
@@ -340,7 +376,10 @@ function sap_ai_task_brief( $f ) {
 	foreach ( (array) $r['report'] as $rp ) {
 		$lines[] = '- ' . trim( (string) $rp );
 	}
-	return array( 'notes' => implode( "\n", $lines ), 'outcome' => trim( (string) $r['output'] ) );
+	$check = array_slice( array_values( array_filter( array_map( function ( $x ) {
+		return trim( sanitize_text_field( (string) $x ) );
+	}, (array) ( $r['checklist'] ?? array() ) ), 'strlen' ) ), 0, 60 );
+	return array( 'notes' => implode( "\n", $lines ), 'outcome' => trim( (string) $r['output'] ), 'checklist' => $check );
 }
 
 /**
@@ -558,10 +597,16 @@ add_action( 'rest_api_init', function () {
 			}
 			// Saved straight into the task when asked from a task card.
 			$tid = absint( $req->get_param( 'task_id' ) );
-			if ( $tid && sap_can() && sap_task( $tid ) ) {
-				sap_task_save( array( 'notes' => $r['notes'], 'outcome' => $r['outcome'] ), $tid );
+			$saved_check = false;
+			if ( $tid && sap_can() && ( $old = sap_task( $tid ) ) ) {
+				$save = array( 'notes' => $r['notes'], 'outcome' => $r['outcome'] );
+				if ( $r['checklist'] && ! $old['checklist'] ) {
+					$save['checklist'] = implode( "\n", $r['checklist'] );
+					$saved_check       = true;
+				}
+				sap_task_save( $save, $tid );
 			}
-			return array( 'ok' => true, 'notes' => $r['notes'], 'outcome' => $r['outcome'] );
+			return array( 'ok' => true, 'notes' => $r['notes'], 'outcome' => $r['outcome'], 'checklist' => $r['checklist'], 'checklist_saved' => $saved_check );
 		},
 	) );
 } );
@@ -583,6 +628,19 @@ add_action( 'admin_post_sap_pm_task', function () {
 		'due_date'   => sap_post( 'due_date' ),
 		'url'        => sap_post( 'url' ),
 		'effort'     => sap_post( 'effort' ),
+		'checklist'  => sap_checklist_posted(),
 	) );
 	sap_back( sap_url( 'pm' ), is_wp_error( $r ) ? $r->get_error_message() : ( sap_can() ? 'کار ثبت و واگذار شد.' : 'کار ثبت شد و بعد از تأیید مدیر سئو به مسئول واگذار می‌شود.' ), ! is_wp_error( $r ) );
 } );
+
+/**
+ * Checklist text from a task form: the «کار چک‌لیستی» switch decides; null when the form has no checklist field.
+ */
+function sap_checklist_posted() {
+	// phpcs:disable WordPress.Security.NonceVerification
+	if ( ! isset( $_POST['checklist_sent'] ) ) {
+		return null;
+	}
+	return ! empty( $_POST['has_checklist'] ) ? sanitize_textarea_field( wp_unslash( (string) ( $_POST['checklist'] ?? '' ) ) ) : '';
+	// phpcs:enable
+}

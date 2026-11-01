@@ -46,6 +46,8 @@ function sap_task_hydrate( $row ) {
 	$row['late_alert']   = (string) ( $row['late_alert'] ?? '' );
 	$att                 = json_decode( (string) ( $row['attachments'] ?? '' ), true );
 	$row['attachments']  = is_array( $att ) ? $att : array();
+	$chk                 = json_decode( (string) ( $row['checklist'] ?? '' ), true );
+	$row['checklist']    = is_array( $chk ) ? sap_checklist_clean( $chk ) : array();
 	foreach ( array( 'notes', 'result', 'url', 'waiting_for', 'keyword', 'period', 'recurring', 'source', 'ai_ref', 'ai_output', 'outcome' ) as $k ) {
 		$row[ $k ] = (string) ( $row[ $k ] ?? '' );
 	}
@@ -128,6 +130,10 @@ function sap_task_save( $data, $id = 0 ) {
 	if ( array_key_exists( 'attachments', $data ) ) {
 		$fields['attachments'] = wp_json_encode( array_values( array_filter( (array) $data['attachments'], 'is_array' ) ), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES );
 	}
+	if ( array_key_exists( 'checklist', $data ) ) {
+		$items                = is_array( $data['checklist'] ) ? sap_checklist_clean( $data['checklist'] ) : sap_checklist_from_text( (string) $data['checklist'], $before['checklist'] ?? array() );
+		$fields['checklist']  = $items ? wp_json_encode( $items, JSON_UNESCAPED_UNICODE ) : null;
+	}
 	foreach ( array( 'submitted_at', 'late_alert' ) as $dk ) {
 		if ( array_key_exists( $dk, $data ) ) {
 			$fields[ $dk ] = $data[ $dk ] ?: null;
@@ -137,7 +143,7 @@ function sap_task_save( $data, $id = 0 ) {
 		$fields['spent'] = max( 0, round( (float) sap_norm_text( (string) $data['spent'] ), 2 ) );
 	}
 	if ( array_key_exists( 'context', $data ) ) {
-		$fields['context'] = array_key_exists( $data['context'], sap_contexts() ) ? $data['context'] : 'management';
+		$fields['context'] = array_key_exists( (string) $data['context'], sap_contexts_all() ) ? (string) $data['context'] : 'management';
 	}
 	if ( array_key_exists( 'status', $data ) ) {
 		$fields['status'] = array_key_exists( $data['status'], sap_task_statuses() ) ? $data['status'] : 'inbox';

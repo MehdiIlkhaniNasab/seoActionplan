@@ -20,7 +20,8 @@ $ptag  = function ( $id ) use ( $proj ) {
 	$p = $proj( $id );
 	return '<span class="sap-ptag" style="--c:' . esc_attr( sap_member_color( $id + 3 ) ) . '">' . esc_html( $p['name'] ?? '' ) . '</span>';
 };
-$total = count( $d['review'] ) + count( $d['questions'] ) + count( $d['proposed'] ) + count( $d['late'] );
+$total = count( $d['review'] ) + count( $d['questions'] ) + count( $d['requests'] ) + count( $d['proposed'] ) + count( $d['late'] );
+$answered = sap_threads_answered();
 $att   = function ( $list ) {
 	if ( ! $list ) {
 		return '';
@@ -40,13 +41,15 @@ $att   = function ( $list ) {
 	<div>
 		<p class="sap-eyebrow">سُکان</p>
 		<h1>میز کار</h1>
-		<p class="sap-muted">هر چیزی که منتظر تصمیم شماست: گزارش‌هایی که باید تأیید شوند، سوال‌های تیم، کارهای پیشنهادی مدیران پروژه و کارهایی که بیش از ۷ روز از سررسیدشان گذشته.</p>
+		<p class="sap-muted">هر چیزی که منتظر تصمیم شماست: گزارش‌هایی که باید تأیید شوند، سوال‌ها و درخواست‌های تیم، کارهای پیشنهادی مدیران پروژه و کارهایی که بیش از ۷ روز از سررسیدشان گذشته.</p>
 	</div>
+	<a class="sap-btn is-soft" href="<?php echo esc_url( sap_url( 'calendar' ) ); ?>"><?php echo sap_icon( 'calendar', 16 ); // phpcs:ignore ?>تقویم کارهای ماه</a>
 </header>
 
 <div class="sap-desk-stats">
 	<a href="#review" class="<?php echo $d['review'] ? 'is-on' : ''; ?>"><b><?php echo esc_html( sap_num( count( $d['review'] ) ) ); ?></b><span>در انتظار تأیید</span></a>
 	<a href="#questions" class="<?php echo $d['questions'] ? 'is-on' : ''; ?>"><b><?php echo esc_html( sap_num( count( $d['questions'] ) ) ); ?></b><span>سوال تیم</span></a>
+	<a href="#requests" class="<?php echo $d['requests'] ? 'is-on' : ''; ?>"><b><?php echo esc_html( sap_num( count( $d['requests'] ) ) ); ?></b><span>درخواست</span></a>
 	<a href="#proposed" class="<?php echo $d['proposed'] ? 'is-on' : ''; ?>"><b><?php echo esc_html( sap_num( count( $d['proposed'] ) ) ); ?></b><span>کار پیشنهادی</span></a>
 	<a href="#late" class="<?php echo $d['late'] ? 'is-bad' : ''; ?>"><b><?php echo esc_html( sap_num( count( $d['late'] ) ) ); ?></b><span>عقب‌افتاده (۷+ روز)</span></a>
 </div>
@@ -100,12 +103,28 @@ $att   = function ( $list ) {
 					<header>
 						<?php echo sap_person( $q['user_id'], 26 ); // phpcs:ignore ?>
 						<?php echo $t ? $ptag( $t['project_id'] ) : ''; // phpcs:ignore ?>
-						<small class="sap-muted"><?php echo esc_html( sap_jdate( substr( $q['created_at'], 0, 10 ), 'short' ) . ' ' . sap_fa( substr( $q['created_at'], 11, 5 ) ) ); ?></small>
+						<?php if ( count( sap_thread( $q ) ) > 1 ) : ?><span class="sap-chip is-info">ادامه گفتگو</span><?php endif; ?>
 					</header>
 					<?php if ( $t ) : ?><p class="sap-small sap-muted">درباره: <a href="<?php echo esc_url( sap_project_url( $t['project_id'], 'plan', array( 'task' => $t['id'] ) ) ); ?>"><?php echo esc_html( $t['title'] ); ?></a></p><?php endif; ?>
-					<blockquote class="sap-desk-q"><?php echo sap_rich_text( $q['question'] ); // phpcs:ignore ?></blockquote>
-					<textarea rows="3" data-sap-answer placeholder="پاسخ شما (با ایمیل برایش می‌رود و زیر همان کار نمایش داده می‌شود)"></textarea>
-					<footer><button type="button" class="sap-btn is-primary is-small" data-sap-answer-send="<?php echo esc_attr( $q['id'] ); ?>">ارسال پاسخ</button></footer>
+					<?php sap_view( 'thread', array( 'q' => $q, 'side' => 'manager' ) ); ?>
+				</article>
+			<?php endforeach; ?>
+		</div>
+	</section>
+<?php endif; ?>
+
+<?php if ( $d['requests'] ) : ?>
+	<section class="sap-desk-sec" id="requests">
+		<h2>📨 درخواست‌های تیم <small><?php echo esc_html( sap_num( count( $d['requests'] ) ) ); ?> · فقط مدیران می‌بینند</small></h2>
+		<div class="sap-desk-list">
+			<?php foreach ( $d['requests'] as $q ) : ?>
+				<article class="sap-desk-card is-req" id="r-<?php echo esc_attr( $q['id'] ); ?>" data-sap-desk-card>
+					<header>
+						<?php echo sap_person( $q['user_id'], 26 ); // phpcs:ignore ?>
+						<?php if ( count( sap_thread( $q ) ) > 1 ) : ?><span class="sap-chip is-info">ادامه گفتگو</span><?php endif; ?>
+					</header>
+					<h3><?php echo esc_html( $q['title'] ); ?></h3>
+					<?php sap_view( 'thread', array( 'q' => $q, 'side' => 'manager' ) ); ?>
 				</article>
 			<?php endforeach; ?>
 		</div>
@@ -152,4 +171,24 @@ $att   = function ( $list ) {
 			<?php endforeach; ?>
 		</div>
 	</section>
+<?php endif; ?>
+
+<?php if ( $answered ) : ?>
+	<details class="sap-desk-sec sap-answered" id="answered">
+		<summary><h2>✅ پاسخ داده شده‌ها <small><?php echo esc_html( sap_num( count( $answered ) ) ); ?> گفتگو در ۴۵ روز اخیر · اگر فرد دوباره بنویسد، به بالا برمی‌گردد</small></h2></summary>
+		<div class="sap-desk-list">
+			<?php foreach ( $answered as $q ) : ?>
+				<?php $t = $q['task_id'] ? sap_task( (int) $q['task_id'] ) : null; ?>
+				<details class="sap-answered-item">
+					<summary>
+						<?php echo sap_person( $q['user_id'], 22 ); // phpcs:ignore ?>
+						<span class="sap-chip <?php echo 'request' === $q['kind'] ? 'is-soft' : 'is-info'; ?>"><?php echo 'request' === $q['kind'] ? 'درخواست' : 'سوال'; ?></span>
+						<b><?php echo esc_html( 'request' === $q['kind'] ? $q['title'] : ( $t['title'] ?? 'کار حذف‌شده' ) ); ?></b>
+						<small class="sap-muted"><?php echo esc_html( sap_jdate( substr( (string) ( $q['answered_at'] ?: $q['created_at'] ), 0, 10 ), 'day' ) ); ?></small>
+					</summary>
+					<?php sap_view( 'thread', array( 'q' => $q, 'side' => 'manager' ) ); ?>
+				</details>
+			<?php endforeach; ?>
+		</div>
+	</details>
 <?php endif; ?>

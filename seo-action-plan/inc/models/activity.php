@@ -34,7 +34,7 @@ function sap_activity_add( $project_id, $data ) {
 		'project_id'   => (int) $project_id,
 		'focus_id'     => absint( $data['focus_id'] ?? 0 ),
 		'task_id'      => absint( $data['task_id'] ?? 0 ),
-		'category'     => array_key_exists( $cat, sap_contexts() ) ? $cat : 'management',
+		'category'     => array_key_exists( $cat, sap_contexts_all() ) ? $cat : 'management',
 		'action'       => sanitize_key( $data['action'] ?? 'manual' ),
 		'title'        => mb_substr( sanitize_text_field( $data['title'] ?? '' ), 0, 250 ),
 		'url'          => esc_url_raw( $data['url'] ?? '' ),

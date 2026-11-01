@@ -471,6 +471,9 @@ add_action( 'admin_post_sap_task_save', function () {
 			$data[ $k ] = sap_post( $k );
 		}
 	}
+	if ( sap_can() && null !== sap_checklist_posted() ) {
+		$data['checklist'] = sap_checklist_posted();
+	}
 	if ( ! $id ) {
 		$data['project_id'] = $pid;
 		if ( '' === trim( (string) ( $data['title'] ?? '' ) ) ) {

@@ -129,6 +129,7 @@ function sap_install() {
 		spent decimal(6,2) NOT NULL DEFAULT 0,
 		review_note text NULL,
 		attachments longtext NULL,
+		checklist longtext NULL,
 		created_by bigint(20) unsigned NOT NULL DEFAULT 0,
 		submitted_at datetime NULL,
 		late_alert datetime NULL,
@@ -145,14 +146,19 @@ function sap_install() {
 		project_id bigint(20) unsigned NOT NULL DEFAULT 0,
 		task_id bigint(20) unsigned NOT NULL DEFAULT 0,
 		user_id bigint(20) unsigned NOT NULL DEFAULT 0,
+		kind varchar(20) NOT NULL DEFAULT 'task',
+		title varchar(255) NOT NULL DEFAULT '',
 		question text NULL,
 		answer text NULL,
+		thread longtext NULL,
 		answered_by bigint(20) unsigned NOT NULL DEFAULT 0,
 		status varchar(20) NOT NULL DEFAULT 'open',
 		created_at datetime NOT NULL DEFAULT '0000-00-00 00:00:00',
 		answered_at datetime NULL,
+		updated_at datetime NULL,
 		PRIMARY KEY  (id),
 		KEY task_id (task_id),
+		KEY user_id (user_id),
 		KEY status (status)
 	) $c;" );
 

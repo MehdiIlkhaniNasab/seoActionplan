@@ -341,6 +341,9 @@ function sap_icon( $name, $size = 18 ) {
 	$paths = array(
 		'grid'     => '<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>',
 		'plus'     => '<path d="M12 5v14M5 12h14"/>',
+		'calendar' => '<rect x="3" y="4.5" width="18" height="16.5" rx="2"/><path d="M3 9.5h18M8 2.5v4M16 2.5v4M7.5 13.5h2M11 13.5h2M14.5 13.5h2M7.5 17h2M11 17h2"/>',
+		'chevron'  => '<path d="m9 6 6 6-6 6"/>',
+		'send'     => '<path d="M22 2 11 13"/><path d="m22 2-7 20-4-9-9-4z"/>',
 		'check'    => '<path d="M20 6 9 17l-5-5"/>',
 		'x'        => '<path d="M18 6 6 18M6 6l12 12"/>',
 		'alert'    => '<path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/>',
@@ -386,25 +389,21 @@ function sap_icon( $name, $size = 18 ) {
  * Work areas (GTD contexts). Shared by findings, tasks, activity log and the report export.
  */
 function sap_contexts() {
-	return array(
-		'research'       => 'کیورد ریسرچ و تحقیق',
-		'content_new'    => 'تولید محتوا',
-		'content_update' => 'بهینه‌سازی و آپدیت محتوا',
-		'onpage'         => 'سئو داخلی (تایتل، متا، اسکیما)',
-		'internal_links' => 'لینک‌سازی داخلی',
-		'technical'      => 'سئو تکنیکال',
-		'offpage'        => 'آف‌پیج و لینک‌سازی',
-		'cro'            => 'CRO و نرخ تبدیل',
-		'management'     => 'مدیریت و گزارش',
-	);
+	$out = array();
+	foreach ( sap_contexts_all() as $k => $row ) {
+		if ( $row['on'] ) {
+			$out[ $k ] = $row['label'];
+		}
+	}
+	return $out;
 }
 
 /**
  * Label of a work area.
  */
 function sap_context_label( $key ) {
-	$c = sap_contexts();
-	return $c[ $key ] ?? 'سایر';
+	$c = sap_contexts_all();
+	return $c[ $key ]['label'] ?? 'سایر';
 }
 
 /**
