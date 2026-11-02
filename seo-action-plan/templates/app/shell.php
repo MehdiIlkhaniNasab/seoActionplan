@@ -22,8 +22,8 @@ $link     = function ( $key, $url, $icon, $label, $badge = 0 ) use ( $nav ) {
 	printf(
 		'<a class="%s" href="%s" title="%s">%s<span>%s</span>%s</a>',
 		$key === $nav ? 'is-active' : '',
-		esc_attr( $label ),
 		esc_url( $url ),
+		esc_attr( $label ),
 		sap_icon( $icon, 18 ), // phpcs:ignore
 		esc_html( $label ),
 		$badge ? '<em>' . esc_html( sap_num( $badge ) ) . '</em>' : ''
