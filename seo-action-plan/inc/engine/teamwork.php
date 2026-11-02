@@ -217,6 +217,122 @@ function sap_ai_task_checklist( $f ) {
 }
 
 /* ---------------------------------------------------------------------------
+ * Progress reports (more than one report per task)
+ * ------------------------------------------------------------------------- */
+
+/**
+ * Days a task counts as «long running» on the desk.
+ */
+function sap_long_days() {
+	return max( 2, (int) sap_setting( 'long_task_days', 5 ) );
+}
+
+/**
+ * When work on a task started (first «start», tick or progress report).
+ */
+function sap_task_started( $t ) {
+	if ( '' !== $t['started_at'] ) {
+		return $t['started_at'];
+	}
+	if ( $t['progress'] ) {
+		return (string) $t['progress'][0]['at'];
+	}
+	return in_array( $t['status'], array( 'doing', 'waiting' ), true ) ? (string) $t['created_at'] : '';
+}
+
+/**
+ * Whole days since work started (0 = today, null = not started).
+ */
+function sap_task_open_days( $t ) {
+	$s = sap_task_started( $t );
+	return '' === $s ? null : max( 0, sap_days_late( substr( $s, 0, 10 ) ) );
+}
+
+/**
+ * Add a progress report: what was done today and, when stuck, why.
+ * «Stuck» puts the task in «در انتظار» with the reason; the next normal report brings it back.
+ *
+ * @param string $state progress | blocked.
+ * @return array|WP_Error
+ */
+function sap_task_progress_add( $task, $text, $state = 'progress', $why = '' ) {
+	$text = trim( sanitize_textarea_field( (string) $text ) );
+	$why  = trim( sanitize_text_field( (string) $why ) );
+	if ( '' === $text ) {
+		return new WP_Error( 'sap_prog', 'بنویسید امروز چه کاری روی این کار انجام شد.' );
+	}
+	if ( in_array( $task['status'], array( 'done', 'dropped', 'review' ), true ) ) {
+		return new WP_Error( 'sap_prog', 'این کار بسته شده یا منتظر تأیید است.' );
+	}
+	$state = 'blocked' === $state ? 'blocked' : 'progress';
+	if ( 'blocked' === $state && '' === $why ) {
+		return new WP_Error( 'sap_prog', 'علت گیر کردن یا منتظر چه چیزی هستید را بنویسید.' );
+	}
+	$list   = $task['progress'];
+	$list[] = array( 'u' => get_current_user_id(), 'at' => sap_now(), 'text' => mb_substr( $text, 0, 3000 ), 'state' => $state, 'why' => mb_substr( $why, 0, 300 ) );
+	$data   = array( 'progress' => array_slice( $list, -200 ) );
+	if ( 'blocked' === $state ) {
+		$data['status']      = 'waiting';
+		$data['waiting_for'] = $why;
+	} elseif ( in_array( $task['status'], array( 'inbox', 'next', 'waiting', 'someday' ), true ) ) {
+		$data['status']      = 'doing';
+		$data['waiting_for'] = '';
+	}
+	sap_task_save( $data, $task['id'] );
+	$t = sap_task( $task['id'] );
+	if ( 'blocked' === $state ) {
+		$who  = sap_user_name( get_current_user_id() );
+		$days = sap_task_open_days( $t );
+		$n    = array( 'icon' => '⚠️', 'title' => $who . ' در کار «' . $t['title'] . '» گیر کرده', 'text' => 'علت: ' . $why . ( $days ? ' · ' . sap_num( $days ) . ' روز از شروع' : '' ), 'url' => sap_url( 'desk' ) . '#long' );
+		foreach ( sap_full_users() as $u ) {
+			if ( (int) $u->ID !== get_current_user_id() ) {
+				sap_notice_add( $u->ID, $n );
+			}
+		}
+		if ( $t['created_by'] && 'pm' === sap_user_role( $t['created_by'] ) && $t['created_by'] !== get_current_user_id() ) {
+			sap_notice_add( $t['created_by'], array_merge( $n, array( 'url' => sap_url( 'pm' ) . '#t-' . $t['id'] ) ) );
+		}
+	}
+	return array( 'msg' => 'blocked' === $state ? 'گزارش ثبت شد و کار به «در انتظار» رفت؛ مدیر در جریان قرار گرفت.' : 'گزارش امروز ثبت شد. 👏', 'count' => count( $t['progress'] ), 'status' => $t['status'] );
+}
+
+/**
+ * Open tasks running for N+ days since work started (desk «کارهای طول‌کشیده»).
+ */
+function sap_long_tasks() {
+	$min = sap_long_days();
+	$out = array();
+	foreach ( sap_tasks( array( 'status' => array( 'doing', 'waiting' ) ) ) as $t ) {
+		$d = sap_task_open_days( $t );
+		if ( null !== $d && $d >= $min ) {
+			$t['open_days'] = $d;
+			$out[]          = $t;
+		}
+	}
+	usort( $out, function ( $a, $b ) {
+		return $b['open_days'] <=> $a['open_days'];
+	} );
+	return $out;
+}
+
+/**
+ * Summary of a task's reports: count, last report, days since the last one, stuck now?
+ */
+function sap_progress_summary( $t ) {
+	$list = $t['progress'];
+	$last = $list ? end( $list ) : null;
+	return array(
+		'count'   => count( $list ),
+		'last'    => $last,
+		'quiet'   => $last ? sap_days_late( substr( $last['at'], 0, 10 ) ) : null,
+		'blocked' => 'waiting' === $t['status'] && $last && 'blocked' === $last['state'],
+		'stuck_n' => count( array_filter( $list, function ( $p ) {
+			return 'blocked' === ( $p['state'] ?? '' );
+		} ) ),
+	);
+}
+
+/* ---------------------------------------------------------------------------
  * In-app notifications
  * ------------------------------------------------------------------------- */
 
@@ -495,6 +611,18 @@ add_action( 'rest_api_init', function () {
 				return $t;
 			}
 			$r = sap_checklist_tick( $t, (int) $req->get_param( 'i' ), rest_sanitize_boolean( $req->get_param( 'done' ) ) );
+			return is_wp_error( $r ) ? $r : array_merge( array( 'ok' => true ), $r );
+		},
+	) );
+	register_rest_route( $ns, '/task/(?P<id>\d+)/progress', array(
+		'methods'             => 'POST',
+		'permission_callback' => 'sap_can_work',
+		'callback'            => function ( WP_REST_Request $req ) {
+			$t = sap_task_for_user( $req['id'] );
+			if ( is_wp_error( $t ) ) {
+				return $t;
+			}
+			$r = sap_task_progress_add( $t, (string) $req->get_param( 'text' ), sanitize_key( (string) $req->get_param( 'state' ) ), (string) $req->get_param( 'why' ) );
 			return is_wp_error( $r ) ? $r : array_merge( array( 'ok' => true ), $r );
 		},
 	) );

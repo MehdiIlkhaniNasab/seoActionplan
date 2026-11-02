@@ -121,12 +121,16 @@ foreach ( $mine as $t ) {
 					<summary>
 						<span class="sap-chip <?php echo esc_attr( $sl[1] ); ?>"><?php echo esc_html( $sl[0] ); ?></span>
 						<b><?php echo esc_html( $t['title'] ); ?></b>
+						<?php $ps = sap_progress_summary( $t ); ?>
+						<?php if ( $ps['blocked'] ) : ?><span class="sap-chip is-bad" title="<?php echo esc_attr( $t['waiting_for'] ); ?>">⚠️ گیر کرده</span><?php endif; ?>
+						<?php if ( $ps['count'] ) : ?><span class="sap-chip is-soft">🗒️ <?php echo esc_html( sap_num( $ps['count'] ) ); ?> گزارش</span><?php endif; ?>
 						<span class="sap-ptag" style="--c:<?php echo esc_attr( sap_member_color( $t['project_id'] + 3 ) ); ?>"><?php echo esc_html( $pj['name'] ?? '' ); ?></span>
 						<?php if ( $prog ) : ?><span class="sap-mini-prog<?php echo $prog['done'] === $prog['total'] ? ' is-full' : ''; ?>"><i style="width:<?php echo esc_attr( $prog['pct'] ); ?>%"></i><em><?php echo esc_html( sap_num( $prog['done'] ) . '/' . sap_num( $prog['total'] ) ); ?></em></span><?php endif; ?>
 						<?php echo $t['assignee'] ? sap_person( $t['assignee'], 20 ) : '<em class="sap-muted sap-small">بدون مسئول</em>'; // phpcs:ignore ?>
 						<small class="sap-muted"><?php echo esc_html( $t['due_date'] ? 'ددلاین ' . sap_jdate( $t['due_date'], 'day' ) : 'بدون ددلاین' ); ?></small>
 					</summary>
 					<div class="sap-pm-row-body">
+						<?php sap_view( 'progress-log', array( 't' => $t, 'form' => false ) ); ?>
 						<?php if ( $prog ) : ?>
 							<ul class="sap-pm-check"><?php foreach ( $t['checklist'] as $it ) : ?><li class="<?php echo $it['d'] ? 'is-done' : ''; ?>"><?php echo $it['d'] ? '✔' : '○'; ?> <?php echo esc_html( $it['t'] ); ?></li><?php endforeach; ?></ul>
 						<?php endif; ?>

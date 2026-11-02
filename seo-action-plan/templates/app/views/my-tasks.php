@@ -163,6 +163,7 @@ $guide = function ( $notes ) {
 						<span class="sap-ptag" style="--c:<?php echo esc_attr( sap_member_color( $t['project_id'] + 3 ) ); ?>"><?php echo esc_html( $p['name'] ?? '' ); ?></span>
 						<span class="sap-chip is-soft"><?php echo esc_html( sap_context_label( $t['context'] ) ); ?></span>
 						<?php if ( 'doing' === $t['status'] ) : ?><span class="sap-chip is-info">در حال انجام</span><?php endif; ?>
+						<?php if ( 'waiting' === $t['status'] && '' !== $t['waiting_for'] ) : ?><span class="sap-chip is-bad">⚠️ منتظر: <?php echo esc_html( mb_strimwidth( $t['waiting_for'], 0, 50, '…' ) ); ?></span><?php endif; ?>
 						<span class="sap-mytask-due <?php echo $late ? 'is-late' : ( $t['due_date'] === $today ? 'is-today' : '' ); ?>"><?php echo sap_icon( 'clock', 13 ); // phpcs:ignore ?><?php echo esc_html( $t['due_date'] ? ( $late ? 'عقب افتاده · ' : 'ددلاین ' ) . sap_jdate( $t['due_date'] ) : 'بدون ددلاین' ); ?></span>
 					</div>
 					<h3><?php echo esc_html( $t['title'] ); ?></h3>
@@ -196,6 +197,7 @@ $guide = function ( $notes ) {
 							</ul>
 						</div>
 					<?php endif; ?>
+					<?php sap_view( 'progress-log', array( 't' => $t, 'form' => true ) ); ?>
 					<?php if ( $qs ) : ?>
 						<div class="sap-mytask-qs">
 							<b class="sap-mytask-qs-h">💬 گفتگو با مدیر</b>
@@ -207,7 +209,7 @@ $guide = function ( $notes ) {
 
 					<div class="sap-mytask-acts">
 						<?php if ( 'doing' !== $t['status'] ) : ?><button type="button" class="sap-btn is-small is-soft" data-sap-my-status="doing"><?php echo sap_icon( 'bolt', 13 ); // phpcs:ignore ?>شروع کار</button><?php endif; ?>
-						<button type="button" class="sap-btn is-small is-primary" data-sap-my-done><?php echo sap_icon( 'check', 13 ); // phpcs:ignore ?>انجام شد و ثبت گزارش</button>
+						<button type="button" class="sap-btn is-small is-primary" data-sap-my-done title="وقتی کار کامل تمام شد؛ برای گزارش روزانه از بخش «گزارش‌های روزانه» استفاده کن"><?php echo sap_icon( 'check', 13 ); // phpcs:ignore ?>کار تمام شد · گزارش نهایی</button>
 						<span class="sap-mytask-acts-sep"></span>
 						<button type="button" class="sap-btn is-small is-ghost" data-sap-my-panel="ai" <?php disabled( ! sap_ai_connected() ); ?>>🤖 از هوش مصنوعی بپرس</button>
 						<button type="button" class="sap-btn is-small is-ghost" data-sap-my-panel="ask">❓ سوال از مدیر</button>

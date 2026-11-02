@@ -2553,4 +2553,36 @@
 		var on = b.getAttribute('data-sap-cal-all') === '1';
 		b.closest('.sap-cal-people-list').querySelectorAll('input[type="checkbox"]').forEach(function (c) { c.checked = on; });
 	});
+
+	/* ---- Daily progress reports on a task ---- */
+	document.addEventListener('change', function (ev) {
+		var r = ev.target.closest('.sap-plog-state input');
+		if (!r) { return; }
+		var f = r.closest('[data-sap-plog-form]');
+		var why = f.querySelector('[data-sap-plog-why]');
+		var bl = f.querySelector('input[name="state"]:checked').value === 'blocked';
+		why.hidden = !bl;
+		why.required = bl;
+		f.classList.toggle('is-blocked', bl);
+		if (bl) { why.focus(); }
+	});
+	document.addEventListener('click', function (ev) {
+		var b = ev.target.closest('[data-sap-plog-more]');
+		if (!b) { return; }
+		var l = b.previousElementSibling;
+		if (l) { l.classList.remove('is-collapsed'); }
+		b.remove();
+	});
+	document.addEventListener('submit', function (ev) {
+		var f = ev.target.closest('[data-sap-plog-form]');
+		if (!f) { return; }
+		ev.preventDefault();
+		var id = f.closest('[data-sap-plog]').getAttribute('data-sap-plog');
+		var btn = f.querySelector('button[type="submit"]');
+		btn.disabled = true;
+		post('task/' + id + '/progress', { text: f.text.value, state: f.querySelector('input[name="state"]:checked').value, why: f.why.value }).then(function (res) {
+			toast(res.msg);
+			setTimeout(function () { location.reload(); }, 700);
+		}).catch(function (e) { toast(e.message, true); btn.disabled = false; btn.classList.remove('is-loading'); });
+	});
 })();

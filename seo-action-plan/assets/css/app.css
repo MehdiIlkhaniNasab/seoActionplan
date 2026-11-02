@@ -2287,3 +2287,48 @@ body.has-task-open { overflow: hidden; }
 .sap-checklist-bar em { left: -46px; top: -4px; width: 40px; text-align: left; }
 .sap-answered > summary h2 { font-size: 16px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .sap-answered > summary h2 small { font-size: 12px; font-weight: 400; color: var(--muted); }
+
+/* ---------- Daily progress reports ---------- */
+.sap-plog { border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; margin: 12px 0; background: #fff; }
+.sap-plog.is-blocked { border-color: #F5C2C2; background: #FFFBFB; }
+.sap-plog-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; font-size: 13.5px; }
+.sap-plog-meta { display: inline-flex; gap: 6px; flex-wrap: wrap; }
+.sap-plog-form { margin: 10px 0 4px; display: flex; flex-direction: column; gap: 8px; }
+.sap-plog-form textarea { width: 100%; min-height: 54px; resize: vertical; }
+.sap-plog-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.sap-plog-row input[name="why"] { flex: 1; min-width: 200px; border-color: #F5C2C2; }
+.sap-plog-row .sap-btn { margin-inline-start: auto; }
+.sap-plog-state label { display: inline-flex; cursor: pointer; margin: 0; }
+.sap-plog-state input { position: absolute; opacity: 0; pointer-events: none; }
+.sap-plog-state span { padding: 4px 12px; border-radius: 9px; font-size: 12.5px; color: var(--ink-2); transition: background .15s, color .15s; }
+.sap-plog-state input:checked + span { background: #fff; color: var(--ink); box-shadow: 0 1px 3px rgba(15,27,51,.12); font-weight: 700; }
+.sap-plog-form.is-blocked .sap-plog-state input:checked + span { color: var(--bad); }
+.sap-plog-state input:focus-visible + span { box-shadow: var(--ring); }
+.sap-plog-list { list-style: none; margin: 10px 0 0; padding: 0; position: relative; }
+.sap-plog-list::before { content: ''; position: absolute; top: 6px; bottom: 6px; right: 6px; width: 2px; background: var(--line); border-radius: 2px; }
+.sap-plog-list li { position: relative; display: flex; gap: 12px; padding: 4px 0 10px; }
+.sap-plog-dot { width: 14px; height: 14px; border-radius: 50%; background: #fff; border: 3px solid var(--ok); flex: none; margin-top: 5px; position: relative; z-index: 1; }
+.sap-plog-list li.is-blocked .sap-plog-dot { border-color: var(--bad); }
+.sap-plog-list li > div { flex: 1; min-width: 0; }
+.sap-plog-when { font-size: 11.5px; color: var(--muted); }
+.sap-plog-list p { margin: 2px 0 0; font-size: 13.5px; line-height: 1.9; }
+.sap-plog-why { color: var(--bad); font-size: 12.5px !important; font-weight: 600; }
+.sap-plog-list.is-collapsed li:nth-child(n+4) { display: none; }
+/* Desk: long-running tasks */
+.sap-long-list { display: flex; flex-direction: column; gap: 8px; }
+.sap-long { background: #fff; border: 1px solid var(--line); border-radius: 14px; border-inline-start: 4px solid var(--warn); box-shadow: var(--shadow); }
+.sap-long.is-blocked { border-inline-start-color: var(--bad); }
+.sap-long > summary { display: flex; align-items: center; gap: 14px; padding: 12px 14px; cursor: pointer; list-style: none; }
+.sap-long > summary::-webkit-details-marker { display: none; }
+.sap-long-days { display: flex; flex-direction: column; align-items: center; min-width: 54px; padding: 6px 8px; border-radius: 12px; background: #FFF7ED; color: #C2410C; font-size: 11px; line-height: 1.3; }
+.sap-long.is-blocked .sap-long-days { background: #FEF2F2; color: var(--bad); }
+.sap-long-days b { font-size: 22px; line-height: 1.1; }
+.sap-long-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.sap-long-main > b { font-size: 14px; }
+.sap-long-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.sap-long-why { font-size: 12.5px; color: var(--bad); font-weight: 600; }
+.sap-long-last { font-size: 12.5px; color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sap-long > .sap-plog { margin: 0 14px 14px; }
+.sap-desk-stats a.is-warn b { color: var(--warn); }
+.sap-cal-flag, .sap-cal-logs { font-style: normal; font-size: 10.5px; white-space: nowrap; }
+.sap-cal-logs { color: var(--muted); }

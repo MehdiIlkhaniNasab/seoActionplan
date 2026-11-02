@@ -130,6 +130,8 @@ function sap_install() {
 		review_note text NULL,
 		attachments longtext NULL,
 		checklist longtext NULL,
+		progress longtext NULL,
+		started_at datetime NULL,
 		created_by bigint(20) unsigned NOT NULL DEFAULT 0,
 		submitted_at datetime NULL,
 		late_alert datetime NULL,

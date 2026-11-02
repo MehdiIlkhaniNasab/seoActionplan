@@ -22,6 +22,8 @@ $due_cls = $overdue ? 'is-late' : ( $t['due_date'] === $today ? 'is-today' : '' 
 $post    = esc_url( admin_url( 'admin-post.php' ) );
 $ret     = $here . '#task-' . $t['id'];
 $prog    = $t['checklist'] ? sap_checklist_progress( $t ) : null;
+$psum    = sap_progress_summary( $t );
+$odays   = $closed || 'review' === $t['status'] ? null : sap_task_open_days( $t );
 $flow    = array( 'next' => 'اقدام بعدی', 'doing' => 'در حال انجام', 'waiting' => 'در انتظار', 'done' => 'انجام شد' );
 ?>
 <details class="sap-task is-<?php echo esc_attr( $t['status'] ); ?>" id="task-<?php echo esc_attr( $t['id'] ); ?>" <?php echo ( (int) ( $open_id ?? 0 ) === $t['id'] ) ? 'open' : ''; ?>>
@@ -38,6 +40,9 @@ $flow    = array( 'next' => 'اقدام بعدی', 'doing' => 'در حال ان�
 			<?php if ( 'review' === $t['status'] ) : ?><span class="sap-chip is-info">منتظر تأیید</span><?php endif; ?>
 			<?php if ( '' !== $t['review_note'] && 'doing' === $t['status'] ) : ?><span class="sap-chip is-warn">برگشت با بازخورد</span><?php endif; ?>
 			<?php if ( $t['recurring'] ) : ?><span class="sap-chip is-rec">دوره‌ای</span><?php endif; ?>
+			<?php if ( $psum['blocked'] ) : ?><span class="sap-chip is-bad" title="<?php echo esc_attr( $t['waiting_for'] ); ?>">⚠️ گیر کرده</span><?php endif; ?>
+			<?php if ( null !== $odays && $odays >= sap_long_days() ) : ?><span class="sap-chip is-warn" title="روز از شروع کار"><?php echo esc_html( sap_num( $odays ) ); ?> روز باز</span><?php endif; ?>
+			<?php if ( $psum['count'] ) : ?><span class="sap-chip is-soft" title="گزارش روزانه">🗒️ <?php echo esc_html( sap_num( $psum['count'] ) ); ?></span><?php endif; ?>
 			<?php if ( $prog ) : ?><span class="sap-mini-prog<?php echo $prog['done'] === $prog['total'] ? ' is-full' : ''; ?>" title="پیشرفت چک‌لیست"><i style="width:<?php echo esc_attr( $prog['pct'] ); ?>%"></i><em><?php echo esc_html( sap_num( $prog['done'] ) . '/' . sap_num( $prog['total'] ) ); ?></em></span><?php endif; ?>
 			<?php if ( $t['assignee'] ) : ?><?php echo sap_avatar( $t['assignee'], 22 ); // phpcs:ignore ?><?php endif; ?>
 		</span>
@@ -77,6 +82,8 @@ $flow    = array( 'next' => 'اقدام بعدی', 'doing' => 'در حال ان�
 				</ul>
 			</div>
 		<?php endif; ?>
+
+		<?php sap_view( 'progress-log', array( 't' => $t, 'form' => true ) ); ?>
 
 		<?php if ( '' !== $t['result'] || $t['attachments'] ) : ?>
 			<div class="sap-treport">

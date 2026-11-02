@@ -122,6 +122,9 @@ $is_on      = function ( $uid ) use ( $filter ) {
 					<a class="sap-cal-task <?php echo esc_attr( $st ); ?>" href="<?php echo esc_url( sap_project_url( $t['project_id'], 'plan', array( 'task' => $t['id'] ) ) ); ?>" title="<?php echo esc_attr( ( $pmap[ $t['project_id'] ]['name'] ?? '' ) . ' · ' . ( sap_task_statuses()[ $t['status'] ] ?? '' ) ); ?>">
 						<?php if ( ! $pid ) : ?><i class="sap-dot" style="background:<?php echo esc_attr( sap_member_color( $t['project_id'] + 3 ) ); ?>"></i><?php endif; ?>
 						<span class="sap-cal-title"><?php echo esc_html( $t['title'] ); ?></span>
+						<?php $ps = sap_progress_summary( $t ); ?>
+						<?php if ( $ps['blocked'] ) : ?><em class="sap-cal-flag" title="<?php echo esc_attr( 'گیر کرده: ' . $t['waiting_for'] ); ?>">⚠️</em><?php endif; ?>
+						<?php if ( $ps['count'] ) : ?><em class="sap-cal-logs" title="گزارش روزانه">🗒️<?php echo esc_html( sap_num( $ps['count'] ) ); ?></em><?php endif; ?>
 						<?php if ( $prog ) : ?><em class="sap-cal-prog"><?php echo esc_html( sap_num( $prog['done'] ) . '/' . sap_num( $prog['total'] ) ); ?></em><?php endif; ?>
 						<span class="sap-cal-who"><?php echo $t['assignee'] ? sap_avatar( $t['assignee'], 18 ) . esc_html( sap_first_name( sap_user_name( $t['assignee'] ) ) ) : '<span class="sap-cal-noone">؟</span>بدون مسئول'; // phpcs:ignore ?></span>
 					</a>

@@ -48,6 +48,9 @@ function sap_task_hydrate( $row ) {
 	$row['attachments']  = is_array( $att ) ? $att : array();
 	$chk                 = json_decode( (string) ( $row['checklist'] ?? '' ), true );
 	$row['checklist']    = is_array( $chk ) ? sap_checklist_clean( $chk ) : array();
+	$prg                 = json_decode( (string) ( $row['progress'] ?? '' ), true );
+	$row['progress']     = is_array( $prg ) ? $prg : array();
+	$row['started_at']   = (string) ( $row['started_at'] ?? '' );
 	foreach ( array( 'notes', 'result', 'url', 'waiting_for', 'keyword', 'period', 'recurring', 'source', 'ai_ref', 'ai_output', 'outcome' ) as $k ) {
 		$row[ $k ] = (string) ( $row[ $k ] ?? '' );
 	}
@@ -134,7 +137,10 @@ function sap_task_save( $data, $id = 0 ) {
 		$items                = is_array( $data['checklist'] ) ? sap_checklist_clean( $data['checklist'] ) : sap_checklist_from_text( (string) $data['checklist'], $before['checklist'] ?? array() );
 		$fields['checklist']  = $items ? wp_json_encode( $items, JSON_UNESCAPED_UNICODE ) : null;
 	}
-	foreach ( array( 'submitted_at', 'late_alert' ) as $dk ) {
+	if ( array_key_exists( 'progress', $data ) ) {
+		$fields['progress'] = $data['progress'] ? wp_json_encode( array_values( (array) $data['progress'] ), JSON_UNESCAPED_UNICODE ) : null;
+	}
+	foreach ( array( 'submitted_at', 'late_alert', 'started_at' ) as $dk ) {
 		if ( array_key_exists( $dk, $data ) ) {
 			$fields[ $dk ] = $data[ $dk ] ?: null;
 		}
@@ -161,6 +167,10 @@ function sap_task_save( $data, $id = 0 ) {
 		$fields['score'] = (float) $data['score'];
 	}
 	$fields['updated_at'] = sap_now();
+	// Work started: the clock of «how many days has this been open».
+	if ( isset( $fields['status'] ) && in_array( $fields['status'], array( 'doing', 'waiting', 'review', 'done' ), true ) && ( ! $before || '' === $before['started_at'] ) && ! isset( $fields['started_at'] ) ) {
+		$fields['started_at'] = sap_now();
+	}
 	if ( isset( $fields['status'] ) ) {
 		$was_done = $before && 'done' === $before['status'];
 		if ( 'done' === $fields['status'] && ! $was_done ) {

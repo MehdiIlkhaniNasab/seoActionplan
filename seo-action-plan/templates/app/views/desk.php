@@ -22,6 +22,7 @@ $ptag  = function ( $id ) use ( $proj ) {
 };
 $total = count( $d['review'] ) + count( $d['questions'] ) + count( $d['requests'] ) + count( $d['proposed'] ) + count( $d['late'] );
 $answered = sap_threads_answered();
+$long     = sap_long_tasks();
 $att   = function ( $list ) {
 	if ( ! $list ) {
 		return '';
@@ -51,10 +52,11 @@ $att   = function ( $list ) {
 	<a href="#questions" class="<?php echo $d['questions'] ? 'is-on' : ''; ?>"><b><?php echo esc_html( sap_num( count( $d['questions'] ) ) ); ?></b><span>سوال تیم</span></a>
 	<a href="#requests" class="<?php echo $d['requests'] ? 'is-on' : ''; ?>"><b><?php echo esc_html( sap_num( count( $d['requests'] ) ) ); ?></b><span>درخواست</span></a>
 	<a href="#proposed" class="<?php echo $d['proposed'] ? 'is-on' : ''; ?>"><b><?php echo esc_html( sap_num( count( $d['proposed'] ) ) ); ?></b><span>کار پیشنهادی</span></a>
+	<a href="#long" class="<?php echo $long ? 'is-warn' : ''; ?>"><b><?php echo esc_html( sap_num( count( $long ) ) ); ?></b><span>طول‌کشیده (<?php echo esc_html( sap_num( sap_long_days() ) ); ?>+ روز)</span></a>
 	<a href="#late" class="<?php echo $d['late'] ? 'is-bad' : ''; ?>"><b><?php echo esc_html( sap_num( count( $d['late'] ) ) ); ?></b><span>عقب‌افتاده (۷+ روز)</span></a>
 </div>
 
-<?php if ( ! $total ) : ?>
+<?php if ( ! $total && ! $long ) : ?>
 	<div class="sap-empty sap-empty-good"><?php echo sap_icon( 'check', 32 ); // phpcs:ignore ?><p>میز کار خالی است؛ همه‌چیز مرتب است. 🌿</p></div>
 <?php endif; ?>
 
@@ -77,6 +79,7 @@ $att   = function ( $list ) {
 						<?php if ( $t['spent'] ) : ?><small class="sap-muted"><?php echo esc_html( sap_num( $t['spent'], 1 ) ); ?> ساعت کار</small><?php endif; ?>
 					</div>
 					<?php echo $att( $t['attachments'] ); // phpcs:ignore ?>
+					<?php if ( $t['progress'] ) : ?><details class="sap-desk-brief"><summary>🗒️ <?php echo esc_html( sap_num( count( $t['progress'] ) ) ); ?> گزارش روزانه در طول کار</summary><?php sap_view( 'progress-log', array( 't' => $t, 'form' => false ) ); ?></details><?php endif; ?>
 					<?php if ( '' !== $t['url'] ) : ?><p class="sap-small">صفحه: <?php echo sap_url_tag( $t['url'], 60 ); // phpcs:ignore ?></p><?php endif; ?>
 					<details class="sap-desk-brief"><summary>شرح کار</summary><div class="sap-notes"><?php echo sap_rich_text( $t['notes'], sap_task_site_base( $t ) ); // phpcs:ignore ?></div></details>
 					<form class="sap-desk-fb" data-sap-desk-feedback hidden>
@@ -88,6 +91,32 @@ $att   = function ( $list ) {
 						<a class="sap-btn is-ghost is-small" href="<?php echo esc_url( sap_project_url( $t['project_id'], 'plan', array( 'task' => $t['id'] ) ) ); ?>">باز کردن کار</a>
 					</footer>
 				</article>
+			<?php endforeach; ?>
+		</div>
+	</section>
+<?php endif; ?>
+
+<?php if ( $long ) : ?>
+	<section class="sap-desk-sec" id="long">
+		<h2>⏳ کارهای طول‌کشیده <small><?php echo esc_html( sap_num( count( $long ) ) ); ?> کار بیش از <?php echo esc_html( sap_num( sap_long_days() ) ); ?> روز از شروعش باز مانده · اقدامات انجام‌شده و علت نرسیدن به مرحله نهایی</small></h2>
+		<div class="sap-long-list">
+			<?php foreach ( $long as $t ) : ?>
+				<?php
+				$ps   = sap_progress_summary( $t );
+				$kind = $ps['blocked'] ? array( 'is-bad', '⚠️ گیر کرده' ) : ( $ps['count'] ? ( $ps['quiet'] >= 2 ? array( 'is-warn', 'بدون گزارش در ' . sap_num( $ps['quiet'] ) . ' روز اخیر' ) : array( 'is-info', 'در حال پیگیری' ) ) : array( 'is-warn', 'بدون هیچ گزارشی' ) );
+				?>
+				<details class="sap-long<?php echo $ps['blocked'] ? ' is-blocked' : ''; ?>">
+					<summary>
+						<span class="sap-long-days"><b><?php echo esc_html( sap_num( $t['open_days'] ) ); ?></b>روز</span>
+						<div class="sap-long-main">
+							<b><?php echo esc_html( $t['title'] ); ?></b>
+							<span class="sap-long-meta"><?php echo $t['assignee'] ? sap_person( $t['assignee'], 18 ) : ''; // phpcs:ignore ?><?php echo $ptag( $t['project_id'] ); // phpcs:ignore ?><span class="sap-chip <?php echo esc_attr( $kind[0] ); ?>"><?php echo esc_html( $kind[1] ); ?></span><span class="sap-chip is-soft">🗒️ <?php echo esc_html( sap_num( $ps['count'] ) ); ?> گزارش</span><?php if ( $ps['stuck_n'] ) : ?><span class="sap-chip is-soft"><?php echo esc_html( sap_num( $ps['stuck_n'] ) ); ?> بار گیر کرده</span><?php endif; ?></span>
+							<?php if ( $ps['blocked'] ) : ?><span class="sap-long-why">علت: <?php echo esc_html( $t['waiting_for'] ); ?></span><?php elseif ( $ps['last'] ) : ?><span class="sap-long-last">آخرین گزارش (<?php echo esc_html( sap_jdate( substr( $ps['last']['at'], 0, 10 ), 'day' ) ); ?>): <?php echo esc_html( mb_strimwidth( $ps['last']['text'], 0, 140, '…' ) ); ?></span><?php endif; ?>
+						</div>
+						<a class="sap-btn is-ghost is-small" href="<?php echo esc_url( sap_project_url( $t['project_id'], 'plan', array( 'task' => $t['id'] ) ) ); ?>#task-<?php echo esc_attr( $t['id'] ); ?>">باز کردن</a>
+					</summary>
+					<?php sap_view( 'progress-log', array( 't' => $t, 'form' => false ) ); ?>
+				</details>
 			<?php endforeach; ?>
 		</div>
 	</section>
