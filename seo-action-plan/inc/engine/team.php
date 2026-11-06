@@ -285,7 +285,7 @@ add_action( 'sap_task_saved', function ( $before, $after ) {
 	// Assigned (or re-assigned) to someone else: queued, so a burst of assignments becomes one message.
 	// A project manager's proposal is announced only once a full manager approves it.
 	$approved = $before && 'proposed' === $before['status'] && 'proposed' !== $after['status'];
-	if ( $after['assignee'] && ( ! $before || (int) $before['assignee'] !== $after['assignee'] || $approved ) && $after['assignee'] !== $me && ! in_array( $after['status'], array( 'done', 'proposed', 'dropped', 'review' ), true ) ) {
+	if ( $after['assignee'] && ( $before || 'repeat' !== $after['source'] ) && ( ! $before || (int) $before['assignee'] !== $after['assignee'] || $approved ) && $after['assignee'] !== $me && ! in_array( $after['status'], array( 'done', 'proposed', 'dropped', 'review' ), true ) ) {
 		sap_assign_queue_add( $after['assignee'], $after['id'] );
 	}
 	// Approved after review: a short «تأیید شد» email (the motivating one went at submission).
@@ -297,7 +297,7 @@ add_action( 'sap_task_saved', function ( $before, $after ) {
 				'title' => 'کارت تأیید شد ✅',
 				'badge' => '✅ تأیید مدیر · ' . ( $p['name'] ?? '' ),
 				'tone'  => '#16A34A',
-				'intro' => sap_first_name( $m['name'] ) . ' عزیز، مدیر سئو گزارش کار «' . $after['title'] . '» را بررسی و تأیید کرد. این کار در لاگ اقدامات و گزارش ماهانه پروژه ثبت شد. عالی بود!',
+				'intro' => sap_first_name( $m['name'] ) . ' عزیز، ' . ( sap_user_name( $me ) ?: 'مدیر' ) . ' گزارش کار «' . $after['title'] . '» را بررسی و تأیید کرد. این کار در لاگ اقدامات و گزارش ماهانه پروژه ثبت شد. عالی بود!',
 				'button' => array( 'کارهای بعدی من', sap_url( 'my' ) ),
 			) );
 		}
@@ -320,7 +320,7 @@ add_action( 'sap_task_saved', function ( $before, $after ) {
 					'badge'     => '✅ کار انجام شد · ' . ( $p['name'] ?? '' ),
 					'tone'      => '#16A34A',
 					'preheader' => $cheers[ $today_n % count( $cheers ) ] . ' امروز ' . sap_num( $today_n ) . ' کار انجام دادی.',
-					'intro'     => $m['name'] . ' عزیز، ' . $cheers[ $today_n % count( $cheers ) ] . "\nکار «" . $after['title'] . ( 'review' === $after['status'] ? '» ثبت شد و برای تأیید نهایی به مدیر سئو رفت؛ بعد از تأیید در لاگ اقدامات و گزارش ماهانه پروژه می‌آید.' : '» انجام شد و در لاگ اقدامات و گزارش ماهانه پروژه ثبت شد. اثرش روی رتبه و ترافیک هم در سرچ کنسول سنجیده می‌شود.' ),
+					'intro'     => $m['name'] . ' عزیز، ' . $cheers[ $today_n % count( $cheers ) ] . "\nکار «" . $after['title'] . ( 'review' === $after['status'] ? '» ثبت شد و برای تأیید نهایی به ' . ( $after['created_by'] && 'pm' === sap_user_role( $after['created_by'] ) ? 'مدیر پروژه (' . sap_user_name( $after['created_by'] ) . ')' : 'مدیر سئو' ) . ' رفت؛ بعد از تأیید در لاگ اقدامات و گزارش ماهانه پروژه می‌آید.' : '» انجام شد و در لاگ اقدامات و گزارش ماهانه پروژه ثبت شد. اثرش روی رتبه و ترافیک هم در سرچ کنسول سنجیده می‌شود.' ),
 					'rows'      => array_filter( array(
 						'کارهای امروز'   => sap_num( $today_n ) . ' کار',
 						'کارهای این ماه' => sap_num( $month_n ) . ' کار',
@@ -328,6 +328,19 @@ add_action( 'sap_task_saved', function ( $before, $after ) {
 					) ),
 					'note'      => 'شب‌ها ساعت ' . sap_num( (int) sap_setting( 'done_sms_hour', 21 ) ) . ' خلاصه کارهای انجام‌شده همان روز با یک پیامک برایت ارسال می‌شود.',
 					'button'    => array( 'کارهای بعدی من', sap_url( 'my' ) ),
+				) );
+			}
+			$pmu = 'review' === $after['status'] && $after['created_by'] && 'pm' === sap_user_role( $after['created_by'] ) ? sap_member( $after['created_by'] ) : null;
+			if ( $pmu && $pmu['notify_email'] && $pmu['id'] !== $m['id'] ) {
+				$pp = sap_project( $after['project_id'] );
+				sap_notify_email( $pmu['email'], '📝 ' . $m['name'] . ' گزارش «' . mb_substr( $after['title'], 0, 60 ) . '» را برای تأیید شما فرستاد', array(
+					'title'     => 'یک گزارش منتظر تأیید شماست',
+					'badge'     => '📝 گزارش کار · ' . ( $pp['name'] ?? '' ),
+					'tone'      => '#0891B2',
+					'preheader' => mb_substr( (string) $after['result'], 0, 120 ),
+					'intro'     => sap_first_name( $pmu['name'] ) . ' عزیز، کاری که ثبت کرده بودید انجام شد. گزارش را بررسی کنید و تأیید کنید یا با بازخورد برگردانید:',
+					'rows'      => array( 'کار' => $after['title'], 'مسئول' => $m['name'], 'گزارش' => mb_substr( (string) $after['result'], 0, 600 ) ),
+					'button'    => array( 'بررسی در میز کار', sap_url( 'pm' ) . '#review' ),
 				) );
 			}
 			if ( ! $m['manager'] ) {

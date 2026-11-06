@@ -2332,3 +2332,84 @@ body.has-task-open { overflow: hidden; }
 .sap-desk-stats a.is-warn b { color: var(--warn); }
 .sap-cal-flag, .sap-cal-logs { font-style: normal; font-size: 10.5px; white-space: nowrap; }
 .sap-cal-logs { color: var(--muted); }
+
+/* ==========================================================================
+   0.23 — item dates, weekend, repeat, project manager projects
+   ========================================================================== */
+.sap-jdp-grid button:disabled { opacity: .35; cursor: not-allowed; background: none; }
+/* Checklist item rows */
+.sap-ci-rows { display: flex; flex-direction: column; gap: 6px; }
+.sap-ci-row { display: grid; grid-template-columns: 22px minmax(0, 1fr) 150px 30px; gap: 6px; align-items: center; }
+.sap-ci-row .sap-ci-n { font-size: 11.5px; color: var(--muted); text-align: center; }
+.sap-ci-row input { margin: 0; min-width: 0; }
+.sap-ci-row .sap-jdate { font-size: 12.5px; }
+.sap-ci-rm { width: 30px; height: 34px; border: 0; border-radius: 9px; background: none; color: var(--muted); font-size: 18px; cursor: pointer; }
+.sap-ci-rm:hover { background: #FEF2F2; color: var(--bad); }
+.sap-ci-foot { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; padding: 2px 28px 0; }
+@media (max-width: 600px) { .sap-ci-row { grid-template-columns: 18px minmax(0, 1fr) 30px; } .sap-ci-row .sap-jdate { grid-column: 2; } }
+.sap-ci-due { font-size: 11px; color: #94A3B8; white-space: nowrap; margin-inline-start: 6px; font-weight: 400; }
+.sap-ci-due.is-late { color: var(--bad); }
+.sap-checklist li .sap-ci-due { margin-inline-start: auto; }
+/* Checklist preview on the outside of a board card */
+.sap-task-checks { list-style: none; margin: 6px 0 2px; padding: 0; display: flex; flex-direction: column; gap: 1px; width: 100%; font-size: 12px; color: var(--ink-2); }
+.sap-task-checks.is-more { max-height: 92px; overflow: hidden; -webkit-mask-image: linear-gradient(to bottom, #000 62%, transparent); mask-image: linear-gradient(to bottom, #000 62%, transparent); }
+.sap-task-checks li { display: flex; align-items: center; gap: 6px; min-width: 0; line-height: 1.7; }
+.sap-task-checks li span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0; }
+.sap-task-checks li i { width: 13px; height: 13px; border-radius: 4px; border: 1.5px solid #CBD5E1; flex: none; font-style: normal; font-size: 9px; line-height: 10px; text-align: center; color: #fff; }
+.sap-task-checks li.is-done i { background: var(--ok); border-color: var(--ok); }
+.sap-task-checks li.is-done span { text-decoration: line-through; color: var(--muted); }
+.sap-task-checks-more { display: block; font-size: 11px; color: var(--muted); margin-top: -2px; width: 100%; }
+.sap-drawer .sap-task-checks, .sap-task[open] .sap-task-checks, .sap-task[open] .sap-task-checks-more { display: none; }
+/* Calendar: checklist items, read-only chips */
+.sap-cal-task.is-item { border-style: dashed; border-inline-start-style: solid; background: #FCFDFF; font-weight: 400; }
+.sap-cal-task.is-item .sap-cal-title { font-weight: 500; }
+.sap-cal-item-ico { color: var(--muted); font-size: 13px; }
+.sap-cal-task.is-item.is-done .sap-cal-item-ico { color: var(--ok); }
+.sap-cal-task.is-item.is-done::before { content: none; }
+.sap-cal-of { color: var(--muted); font-size: 10.5px; white-space: nowrap; }
+span.sap-cal-task { cursor: default; }
+span.sap-cal-task:hover { transform: none; box-shadow: none; }
+.sap-cal-row.is-friday .sap-cal-free { color: #E3A0A0; }
+/* Project manager › projects */
+.sap-pmp { display: grid; grid-template-columns: 250px minmax(0, 1fr); gap: 16px; align-items: start; }
+.sap-pmp-side { position: sticky; top: 16px; display: flex; flex-direction: column; gap: 6px; background: #fff; border: 1px solid var(--line); border-radius: var(--radius); padding: 8px; box-shadow: var(--shadow); }
+.sap-pmp-proj { display: flex; align-items: center; gap: 8px; padding: 9px 10px; border-radius: 12px; color: var(--ink) !important; position: relative; }
+.sap-pmp-proj:hover { background: var(--soft); }
+.sap-pmp-proj.is-active { background: var(--accent-soft); box-shadow: inset -3px 0 0 var(--accent); }
+.sap-pmp-proj span { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.4; }
+.sap-pmp-proj b { font-size: 13.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sap-pmp-proj small { font-size: 11px; color: var(--muted); text-align: right; }
+.sap-pmp-proj em { font-style: normal; font-size: 11.5px; color: var(--muted); }
+.sap-pmp-proj strong { min-width: 20px; height: 20px; border-radius: 99px; background: var(--bad); color: #fff; font-size: 11px; display: grid; place-items: center; padding: 0 5px; }
+.sap-pmp-main { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.sap-pmp-top { display: flex; justify-content: space-between; align-items: flex-end; gap: 14px; flex-wrap: wrap; background: #fff; border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; box-shadow: var(--shadow); }
+.sap-pmp-top > div { flex: 1; min-width: 220px; }
+.sap-pmp-top h2 { margin: 0 0 8px; font-size: 18px; }
+.sap-pmp-top .sap-progress { height: 9px; margin-bottom: 4px; }
+.sap-pmp-filters { display: flex; gap: 8px; flex-wrap: wrap; }
+.sap-pmp-kpis { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; }
+.sap-pmp-kpis > div { background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 10px 12px; display: flex; flex-direction: column; }
+.sap-pmp-kpis b { font-size: 20px; line-height: 1.3; }
+.sap-pmp-kpis span { font-size: 12px; color: var(--muted); }
+.sap-pmp-kpis .is-bad b { color: var(--bad); } .sap-pmp-kpis .is-good b { color: var(--ok); } .sap-pmp-kpis .is-warn b { color: var(--warn); } .sap-pmp-kpis .is-info b { color: var(--accent); }
+.sap-pmp-tabs { margin-bottom: 10px; flex-wrap: wrap; }
+.sap-pmp-tabs button em { font-style: normal; font-size: 11px; opacity: .7; }
+.sap-pm-row.is-stuck { border-inline-start-color: var(--bad); background: #FFFBFB; }
+.sap-tnote.is-bad { color: var(--bad); }
+@media (max-width: 900px) { .sap-pmp { grid-template-columns: 1fr; } .sap-pmp-side { position: static; flex-direction: row; overflow-x: auto; } .sap-pmp-proj { min-width: 200px; } .sap-pmp-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+/* PM desk: today's reports */
+.sap-today-list { display: flex; flex-direction: column; gap: 6px; }
+.sap-today { display: flex; align-items: flex-start; gap: 10px; background: #fff; border: 1px solid var(--line); border-inline-start: 4px solid var(--ok); border-radius: 12px; padding: 10px 12px; color: var(--ink) !important; }
+.sap-today.is-blocked { border-inline-start-color: var(--bad); }
+.sap-today:hover { box-shadow: var(--shadow); }
+.sap-today > span { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.sap-today b { font-size: 13.5px; }
+.sap-today em { font-style: normal; font-size: 12.5px; color: var(--ink-2); }
+.sap-today time { font-size: 11.5px; color: var(--muted); }
+.sap-today .sap-av { flex: none; width: 28px; height: 28px; }
+.sap-pmp-done { margin-top: 12px; border-top: 1px dashed var(--line); padding-top: 10px; }
+.sap-pmp-done > summary { cursor: pointer; list-style: none; font-weight: 700; font-size: 14px; color: var(--ink-2); padding: 4px 2px 8px; }
+.sap-pmp-done > summary::-webkit-details-marker { display: none; }
+.sap-pmp-done > summary em { font-style: normal; font-size: 12px; color: var(--muted); font-weight: 400; margin-inline-start: 4px; }
+.sap-pmp-done > summary::after { content: ' ▾'; color: var(--muted); }
+.sap-pmp-done[open] > summary::after { content: ' ▴'; }

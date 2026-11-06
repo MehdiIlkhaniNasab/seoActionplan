@@ -2201,6 +2201,7 @@
 		var card = ev.target.closest('[data-sap-desk-card], .sap-task, .sap-tactions');
 		var gone = function (msg) {
 			toast(msg);
+			if (ev.target.closest('.sap-pm-row')) { setTimeout(function () { location.reload(); }, 700); return; }
 			var box = ev.target.closest('[data-sap-desk-card]') || ev.target.closest('.sap-task');
 			if (box) { fadeOut(box); setTimeout(function () { box.remove(); }, 420); }
 		};
@@ -2358,7 +2359,7 @@
 			for (var d = 1; d <= jlen(jy, jm); d++) {
 				var g = iso(j2g(jy, jm, d));
 				var col = (wd + d - 1) % 7;
-				h += '<button type="button" data-jdp-day="' + g + '" class="' + (g === val ? 'is-sel ' : '') + (g === today ? 'is-today ' : '') + (col === 6 ? 'is-fri' : '') + '">' + fa(d) + '</button>';
+				h += '<button type="button" ' + (col === 6 ? 'disabled title="جمعه تعطیل است" ' : 'data-jdp-day="' + g + '" ') + 'class="' + (g === val ? 'is-sel ' : '') + (g === today ? 'is-today ' : '') + (col === 6 ? 'is-fri' : '') + '">' + fa(d) + '</button>';
 			}
 			h += '</div><div class="sap-jdp-foot"><button type="button" data-jdp="today">امروز</button><button type="button" data-jdp="tomorrow">فردا</button><button type="button" data-jdp="clear">پاک کردن</button></div>';
 			pop.innerHTML = h;
@@ -2414,7 +2415,7 @@
 				var a = act.getAttribute('data-jdp'), v = pop._view;
 				if (a === 'prev') { render(v[1] === 1 ? [v[0] - 1, 12] : [v[0], v[1] - 1]); }
 				if (a === 'next') { render(v[1] === 12 ? [v[0] + 1, 1] : [v[0], v[1] + 1]); }
-				if (a === 'today' || a === 'tomorrow') { var t = new Date(); if (a === 'tomorrow') { t.setDate(t.getDate() + 1); } setVal(cur, iso([t.getFullYear(), t.getMonth() + 1, t.getDate()])); close(); }
+				if (a === 'today' || a === 'tomorrow') { var t = new Date(); if (a === 'tomorrow') { t.setDate(t.getDate() + 1); } if (t.getDay() === 5) { t.setDate(t.getDate() + 1); } setVal(cur, iso([t.getFullYear(), t.getMonth() + 1, t.getDate()])); close(); }
 				if (a === 'clear') { setVal(cur, ''); close(); }
 				return;
 			}
@@ -2455,12 +2456,52 @@
 		}).catch(function (e) { cb.disabled = false; cb.checked = !cb.checked; li.classList.toggle('is-done', cb.checked); toast(e.message, true); });
 	});
 
-	/* ---- Checklist field in task forms: switch, count, AI fill ---- */
+	/* ---- Checklist field in task forms: rows (item + own date), switch, AI fill ---- */
 	(function () {
+		var parse = function (txt) {
+			return String(txt || '').split(/\n/).map(function (l) {
+				var m = l.match(/^(.*?)\s*\|\s*(\d{4}-\d{2}-\d{2})\s*$/);
+				return m ? { t: m[1].trim(), due: m[2] } : { t: l.trim(), due: '' };
+			}).filter(function (r) { return r.t; });
+		};
 		var count = function (fl) {
-			var ta = fl.querySelector('[data-sap-check-text]');
-			var n = ta.value.split(/\n+/).filter(function (l) { return l.trim(); }).length;
+			var n = parse(fl.querySelector('[data-sap-check-text]').value).length;
 			fl.querySelector('[data-sap-check-n]').textContent = n ? n.toLocaleString('fa-IR') + ' مورد' : '';
+		};
+		var sync = function (fl) {
+			var lines = [];
+			fl.querySelectorAll('.sap-ci-row').forEach(function (r) {
+				var t = r.querySelector('[data-ci-t]').value.replace(/\|/g, '/').trim();
+				var d = r.querySelector('[data-ci-due]').value;
+				if (t) { lines.push(t + (d ? ' | ' + d : '')); }
+			});
+			fl.querySelector('[data-sap-check-text]').value = lines.join('\n');
+			count(fl);
+		};
+		var row = function (r) {
+			var el = document.createElement('div');
+			el.className = 'sap-ci-row';
+			el.innerHTML = '<span class="sap-ci-n"></span><input type="text" data-ci-t placeholder="مثلاً: محصول ۱ — پاشنه کش فلزی"><input type="date" data-ci-due placeholder="تاریخ (اختیاری)"><button type="button" class="sap-ci-rm" data-ci-rm aria-label="حذف">×</button>';
+			el.querySelector('[data-ci-t]').value = r ? r.t : '';
+			el.querySelector('[data-ci-due]').value = r ? r.due : '';
+			return el;
+		};
+		var number = function (fl) { fl.querySelectorAll('.sap-ci-n').forEach(function (n, i) { n.textContent = (i + 1).toLocaleString('fa-IR'); }); };
+		var render = function (fl) {
+			var box = fl.querySelector('[data-sap-ci-rows]');
+			var ta = fl.querySelector('[data-sap-check-text]');
+			if (!box) { return; }
+			box.innerHTML = '';
+			var rows = parse(ta.value);
+			(rows.length ? rows : [null]).forEach(function (r) { box.appendChild(row(r)); });
+			var add = document.createElement('div');
+			add.className = 'sap-ci-foot';
+			add.innerHTML = '<button type="button" class="sap-linkbtn" data-ci-add>+ افزودن مورد</button><button type="button" class="sap-linkbtn" data-ci-all>یک تاریخ برای همه</button><small class="sap-muted">Enter = مورد بعدی · چند خط را یک‌جا Paste کنید</small>';
+			box.appendChild(add);
+			box.hidden = false;
+			ta.hidden = true;
+			number(fl);
+			count(fl);
 		};
 		var setOn = function (fl, on) {
 			fl.classList.toggle('is-on', on);
@@ -2468,19 +2509,77 @@
 			fl.querySelector('.sap-check-items').hidden = !on;
 			fl.querySelector('[data-sap-check-text]').disabled = !on;
 		};
-		document.querySelectorAll('[data-sap-check-field]').forEach(count);
+		document.querySelectorAll('[data-sap-check-field]').forEach(render);
 		document.addEventListener('change', function (ev) {
 			var tg = ev.target.closest('[data-sap-check-toggle]');
-			if (!tg) { return; }
-			var fl = tg.closest('[data-sap-check-field]');
-			setOn(fl, tg.checked);
-			if (tg.checked) { fl.querySelector('[data-sap-check-text]').focus(); }
+			if (tg) {
+				var fl = tg.closest('[data-sap-check-field]');
+				setOn(fl, tg.checked);
+				var first = fl.querySelector('[data-ci-t]');
+				if (tg.checked && first) { first.focus(); }
+				return;
+			}
+			var d = ev.target.closest('[data-ci-due]');
+			if (d) { sync(d.closest('[data-sap-check-field]')); }
 		});
 		document.addEventListener('input', function (ev) {
-			var ta = ev.target.closest('[data-sap-check-text]');
-			if (ta) { count(ta.closest('[data-sap-check-field]')); }
+			var t = ev.target.closest('[data-ci-t]');
+			if (t) { sync(t.closest('[data-sap-check-field]')); }
+		});
+		document.addEventListener('paste', function (ev) {
+			var t = ev.target.closest && ev.target.closest('[data-ci-t]');
+			if (!t) { return; }
+			var txt = (ev.clipboardData || window.clipboardData).getData('text');
+			if (txt.indexOf('\n') === -1) { return; }
+			ev.preventDefault();
+			var fl = t.closest('[data-sap-check-field]');
+			var cur = t.closest('.sap-ci-row');
+			var lines = txt.split(/\r?\n/).map(function (l) { return l.replace(/^\s*(?:[-•*]|\d+[.)\-])\s*/, '').trim(); }).filter(Boolean);
+			t.value = lines.shift() || t.value;
+			lines.forEach(function (l) { var r = row({ t: l, due: '' }); cur.after(r); cur = r; });
+			number(fl);
+			sync(fl);
+		});
+		document.addEventListener('keydown', function (ev) {
+			var t = ev.target.closest && ev.target.closest('[data-ci-t]');
+			if (!t || ev.key !== 'Enter') { return; }
+			ev.preventDefault();
+			var fl = t.closest('[data-sap-check-field]');
+			var r = row(null);
+			t.closest('.sap-ci-row').after(r);
+			number(fl);
+			r.querySelector('[data-ci-t]').focus();
 		});
 		document.addEventListener('click', function (ev) {
+			var rm = ev.target.closest('[data-ci-rm]');
+			var ad = ev.target.closest('[data-ci-add]');
+			var al = ev.target.closest('[data-ci-all]');
+			if (rm || ad || al) {
+				ev.preventDefault();
+				var fl = ev.target.closest('[data-sap-check-field]');
+				var box = fl.querySelector('[data-sap-ci-rows]');
+				if (rm) {
+					var r0 = rm.closest('.sap-ci-row');
+					if (box.querySelectorAll('.sap-ci-row').length > 1) { r0.remove(); } else { r0.querySelector('[data-ci-t]').value = ''; r0.querySelector('[data-ci-due]').value = ''; r0.querySelector('[data-ci-due]').dispatchEvent(new Event('change', { bubbles: true })); }
+				} else if (ad) {
+					var nr = row(null);
+					box.insertBefore(nr, box.querySelector('.sap-ci-foot'));
+					nr.querySelector('[data-ci-t]').focus();
+				} else {
+					var firstDue = '';
+					box.querySelectorAll('[data-ci-due]').forEach(function (d) { if (!firstDue && d.value) { firstDue = d.value; } });
+					if (!firstDue) { toast('اول برای یک مورد تاریخ بگذارید؛ همان تاریخ روی همه می‌نشیند.', true); return; }
+					sync(fl);
+					var ta = fl.querySelector('[data-sap-check-text]');
+					ta.value = parse(ta.value).map(function (r) { return r.t + ' | ' + firstDue; }).join('\n');
+					render(fl);
+					toast('تاریخ روی همه موارد گذاشته شد.');
+					return;
+				}
+				number(fl);
+				sync(fl);
+				return;
+			}
 			var b = ev.target.closest('[data-sap-check-ai]');
 			if (!b) { return; }
 			ev.preventDefault();
@@ -2492,7 +2591,7 @@
 			b.classList.add('is-loading');
 			post('task-checklist', { title: ti.value, notes: no ? no.value : '' }).then(function (res) {
 				var fl = b.closest('[data-sap-check-field]');
-				if (res.items.length) { fl.querySelector('[data-sap-check-text]').value = res.items.join('\n'); count(fl); }
+				if (res.items.length) { fl.querySelector('[data-sap-check-text]').value = res.items.join('\n'); render(fl); }
 				toast(res.msg, !res.items.length);
 			}).catch(function (e) { toast(e.message, true); }).then(function () { b.disabled = false; b.classList.remove('is-loading'); });
 		});
@@ -2503,7 +2602,7 @@
 			if (ta.value.trim()) { return false; }
 			setOn(fl, true);
 			ta.value = items.join('\n');
-			count(fl);
+			render(fl);
 			return true;
 		};
 	})();
@@ -2540,6 +2639,8 @@
 		if (!box) { return; }
 		box.querySelectorAll('.sap-seg-mini [data-sap-pm-tab]').forEach(function (x) { x.classList.toggle('is-active', x.getAttribute('data-sap-pm-tab') === k); });
 		box.querySelectorAll('.sap-pm-row').forEach(function (r) { r.hidden = k !== 'all' && r.getAttribute('data-bucket') !== k; });
+		var dn = box.querySelector('[data-sap-pmp-done]');
+		if (dn) { dn.open = k === 'done'; dn.hidden = k !== 'all' && k !== 'done'; }
 	});
 	if (/^#t-\d+$/.test(location.hash)) {
 		var tr = document.querySelector(location.hash + '.sap-pm-row');

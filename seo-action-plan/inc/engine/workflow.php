@@ -304,6 +304,7 @@ function sap_pm_propose( $data ) {
 		'url'        => $data['url'] ?? '',
 		'effort'     => $data['effort'] ?? 1,
 		'checklist'  => (string) ( $data['checklist'] ?? '' ),
+		'repeat_every' => (string) ( $data['repeat_every'] ?? '' ),
 		'status'     => sap_can() ? 'next' : 'proposed',
 		'period'     => sap_period_current(),
 		'source'     => 'pm',
@@ -538,11 +539,14 @@ add_action( 'rest_api_init', function () {
 	) );
 	register_rest_route( $ns, '/task/(?P<id>\d+)/review', array(
 		'methods'             => 'POST',
-		'permission_callback' => 'sap_can',
+		'permission_callback' => 'sap_can_work',
 		'callback'            => function ( WP_REST_Request $req ) {
 			$t = sap_task( (int) $req['id'] );
 			if ( ! $t ) {
 				return new WP_Error( 'sap_task', 'کار پیدا نشد.', array( 'status' => 404 ) );
+			}
+			if ( ! sap_can_review( $t ) ) {
+				return new WP_Error( 'sap_forbidden', 'فقط مدیر سئو یا مدیر پروژه‌ای که این کار را ثبت کرده می‌تواند گزارش را تأیید کند.', array( 'status' => 403 ) );
 			}
 			$r = sap_task_review( $t, sanitize_key( (string) $req->get_param( 'do' ) ), (string) $req->get_param( 'note' ) );
 			return is_wp_error( $r ) ? $r : array_merge( array( 'ok' => true ), $r );
@@ -629,6 +633,7 @@ add_action( 'admin_post_sap_pm_task', function () {
 		'url'        => sap_post( 'url' ),
 		'effort'     => sap_post( 'effort' ),
 		'checklist'  => sap_checklist_posted(),
+		'repeat_every' => sap_post( 'repeat_every' ),
 	) );
 	sap_back( sap_url( 'pm' ), is_wp_error( $r ) ? $r->get_error_message() : ( sap_can() ? 'کار ثبت و واگذار شد.' : 'کار ثبت شد و بعد از تأیید مدیر سئو به مسئول واگذار می‌شود.' ), ! is_wp_error( $r ) );
 } );

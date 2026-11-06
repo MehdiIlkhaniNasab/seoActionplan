@@ -109,14 +109,43 @@ function sap_checklist_from_text( $text, $old = array() ) {
 		if ( '' === $line ) {
 			continue;
 		}
+		// «متن مورد | تاریخ»: the item's own deadline (Jalali or Gregorian).
+		$due = '';
+		if ( preg_match( '/^(.*?)\s*\|\s*([0-9۰-۹\/\-.]{8,10})\s*$/u', $line, $mm ) ) {
+			$line = trim( $mm[1] );
+			$due  = sap_no_friday( sap_parse_date( $mm[2] ) );
+		}
+		if ( '' === $line ) {
+			continue;
+		}
 		$line  = mb_substr( sanitize_text_field( $line ), 0, 240 );
 		$prev  = $done[ sap_norm_text( $line ) ] ?? null;
-		$out[] = $prev ? array( 't' => $line, 'd' => 1, 'by' => (int) ( $prev['by'] ?? 0 ), 'at' => (string) ( $prev['at'] ?? '' ) ) : array( 't' => $line, 'd' => 0, 'by' => 0, 'at' => '' );
+		$out[] = $prev ? array( 't' => $line, 'd' => 1, 'by' => (int) ( $prev['by'] ?? 0 ), 'at' => (string) ( $prev['at'] ?? '' ), 'due' => $due ) : array( 't' => $line, 'd' => 0, 'by' => 0, 'at' => '', 'due' => $due );
 		if ( count( $out ) >= 100 ) {
 			break;
 		}
 	}
 	return $out;
+}
+
+/**
+ * Items as editor text: «متن | 2026-11-20» per line.
+ */
+function sap_checklist_to_text( $items ) {
+	return implode( "\n", array_map( function ( $it ) {
+		return $it['t'] . ( ! empty( $it['due'] ) ? ' | ' . $it['due'] : '' );
+	}, (array) $items ) );
+}
+
+/**
+ * A small grey date for an item (red when it is past and not done).
+ */
+function sap_checklist_due_tag( $it ) {
+	if ( empty( $it['due'] ) ) {
+		return '';
+	}
+	$late = empty( $it['d'] ) && $it['due'] < current_time( 'Y-m-d' );
+	return '<time class="sap-ci-due' . ( $late ? ' is-late' : '' ) . '">' . esc_html( ( $late ? 'گذشته · ' : '' ) . sap_jdate( $it['due'], 'day' ) ) . '</time>';
 }
 
 /**
@@ -128,7 +157,8 @@ function sap_checklist_clean( $items ) {
 		if ( ! is_array( $it ) || '' === trim( (string) ( $it['t'] ?? '' ) ) ) {
 			continue;
 		}
-		$out[] = array( 't' => mb_substr( sanitize_text_field( (string) $it['t'] ), 0, 240 ), 'd' => empty( $it['d'] ) ? 0 : 1, 'by' => (int) ( $it['by'] ?? 0 ), 'at' => (string) ( $it['at'] ?? '' ) );
+		$due   = preg_match( '/^\d{4}-\d{2}-\d{2}$/', (string) ( $it['due'] ?? '' ) ) ? (string) $it['due'] : '';
+		$out[] = array( 't' => mb_substr( sanitize_text_field( (string) $it['t'] ), 0, 240 ), 'd' => empty( $it['d'] ) ? 0 : 1, 'by' => (int) ( $it['by'] ?? 0 ), 'at' => (string) ( $it['at'] ?? '' ), 'due' => $due );
 	}
 	return array_slice( $out, 0, 100 );
 }
@@ -280,6 +310,10 @@ function sap_task_progress_add( $task, $text, $state = 'progress', $why = '' ) {
 	}
 	sap_task_save( $data, $task['id'] );
 	$t = sap_task( $task['id'] );
+	$pm = $t['created_by'] && 'pm' === sap_user_role( $t['created_by'] ) && $t['created_by'] !== get_current_user_id() ? $t['created_by'] : 0;
+	if ( 'blocked' !== $state && $pm ) {
+		sap_notice_add( $pm, array( 'icon' => '🗒️', 'title' => sap_user_name( get_current_user_id() ) . ' روی «' . $t['title'] . '» گزارش روزانه ثبت کرد', 'text' => $text, 'url' => sap_url( 'pmp' ) . '?p=' . $t['project_id'] . '#t-' . $t['id'] ) );
+	}
 	if ( 'blocked' === $state ) {
 		$who  = sap_user_name( get_current_user_id() );
 		$days = sap_task_open_days( $t );
@@ -289,8 +323,8 @@ function sap_task_progress_add( $task, $text, $state = 'progress', $why = '' ) {
 				sap_notice_add( $u->ID, $n );
 			}
 		}
-		if ( $t['created_by'] && 'pm' === sap_user_role( $t['created_by'] ) && $t['created_by'] !== get_current_user_id() ) {
-			sap_notice_add( $t['created_by'], array_merge( $n, array( 'url' => sap_url( 'pm' ) . '#t-' . $t['id'] ) ) );
+		if ( $pm ) {
+			sap_notice_add( $pm, array_merge( $n, array( 'url' => sap_url( 'pmp' ) . '?p=' . $t['project_id'] . '#t-' . $t['id'] ) ) );
 		}
 	}
 	return array( 'msg' => 'blocked' === $state ? 'گزارش ثبت شد و کار به «در انتظار» رفت؛ مدیر در جریان قرار گرفت.' : 'گزارش امروز ثبت شد. 👏', 'count' => count( $t['progress'] ), 'status' => $t['status'] );
@@ -330,6 +364,179 @@ function sap_progress_summary( $t ) {
 			return 'blocked' === ( $p['state'] ?? '' );
 		} ) ),
 	);
+}
+
+/* ---------------------------------------------------------------------------
+ * Weekend, repeating tasks, who reviews a report
+ * ------------------------------------------------------------------------- */
+
+/**
+ * Friday is the weekend: a date that falls on it moves to Saturday.
+ */
+function sap_no_friday( $ymd ) {
+	$ymd = (string) $ymd;
+	if ( ! preg_match( '/^\d{4}-\d{2}-\d{2}$/', $ymd ) ) {
+		return $ymd;
+	}
+	return 5 === (int) gmdate( 'w', strtotime( $ymd ) ) ? gmdate( 'Y-m-d', strtotime( $ymd . ' +1 day' ) ) : $ymd;
+}
+
+/**
+ * Repeat choices.
+ */
+function sap_repeat_options() {
+	return array( 'daily' => 'روزانه', 'weekly' => 'هفتگی', 'monthly' => 'ماهانه' );
+}
+
+/**
+ * The next deadline of a repeating task (never in the past, never a Friday).
+ */
+function sap_repeat_next_due( $due, $every ) {
+	$today = current_time( 'Y-m-d' );
+	$base  = preg_match( '/^\d{4}-\d{2}-\d{2}$/', (string) $due ) ? (string) $due : $today;
+	if ( 'monthly' === $every ) {
+		$ts               = strtotime( $base );
+		list( $jy, $jm, $jd ) = sap_g2j( (int) gmdate( 'Y', $ts ), (int) gmdate( 'n', $ts ), (int) gmdate( 'j', $ts ) );
+		do {
+			$jm = 12 === $jm ? 1 : $jm + 1;
+			$jy = 1 === $jm ? $jy + 1 : $jy;
+			list( $gy, $gm, $gd ) = sap_j2g( $jy, $jm, min( $jd, sap_jmonth_days( $jy, $jm ) ) );
+			$next = sprintf( '%04d-%02d-%02d', $gy, $gm, $gd );
+		} while ( $next <= $today );
+		return sap_no_friday( $next );
+	}
+	$step = 'weekly' === $every ? 7 : 1;
+	$next = $base;
+	do {
+		$next = gmdate( 'Y-m-d', strtotime( $next . ' +' . $step . ' day' ) );
+		if ( 1 === $step && 5 === (int) gmdate( 'w', strtotime( $next ) ) ) {
+			$next = gmdate( 'Y-m-d', strtotime( $next . ' +1 day' ) );
+		}
+	} while ( $next <= $today );
+	return sap_no_friday( $next );
+}
+
+/**
+ * A repeating task was approved (done): its next copy is created at once —
+ * same person, description and checklist (unticked, dates moved along).
+ *
+ * @return int new task id (0 = none)
+ */
+function sap_repeat_spawn( $t ) {
+	if ( '' === $t['repeat_every'] || $t['repeat_next'] ) {
+		return 0;
+	}
+	$due   = sap_repeat_next_due( $t['due_date'], $t['repeat_every'] );
+	$shift = $t['due_date'] ? (int) round( ( strtotime( $due ) - strtotime( $t['due_date'] ) ) / DAY_IN_SECONDS ) : 0;
+	$items = array_map( function ( $it ) use ( $shift ) {
+		$d = '' !== $it['due'] ? sap_no_friday( gmdate( 'Y-m-d', strtotime( $it['due'] . ' ' . ( $shift >= 0 ? '+' : '' ) . $shift . ' day' ) ) ) : '';
+		return array( 't' => $it['t'], 'd' => 0, 'by' => 0, 'at' => '', 'due' => $d );
+	}, $t['checklist'] );
+	$id = sap_task_save( array(
+		'project_id'   => $t['project_id'],
+		'focus_id'     => $t['focus_id'],
+		'title'        => $t['title'],
+		'notes'        => $t['notes'],
+		'outcome'      => $t['outcome'],
+		'context'      => $t['context'],
+		'assignee'     => $t['assignee'],
+		'effort'       => $t['effort'],
+		'url'          => $t['url'],
+		'keyword'      => $t['keyword'],
+		'due_date'     => $due,
+		'period'       => sap_period_of( $due ),
+		'status'       => 'next',
+		'source'       => 'repeat',
+		'repeat_every' => $t['repeat_every'],
+		'checklist'    => $items,
+		'created_by'   => $t['created_by'],
+	) );
+	if ( $id ) {
+		sap_task_save( array( 'repeat_next' => $id ), $t['id'] );
+	}
+	return $id;
+}
+add_action( 'sap_task_saved', function ( $before, $after ) {
+	if ( $after && 'done' === $after['status'] && ( ! $before || 'done' !== $before['status'] ) && '' !== $after['repeat_every'] && ! $after['repeat_next'] ) {
+		sap_repeat_spawn( $after );
+	}
+}, 30, 2 );
+
+/**
+ * Who may approve a submitted report: full-access managers, and the project
+ * manager who created the task.
+ */
+function sap_can_review( $t ) {
+	return sap_can() || ( $t && sap_is_pm() && (int) $t['created_by'] === get_current_user_id() );
+}
+
+/**
+ * Reports waiting for the current project manager (tasks they created).
+ */
+function sap_pm_reviews( $uid = 0 ) {
+	global $wpdb;
+	$uid = $uid ?: get_current_user_id();
+	return array_map( 'sap_task_hydrate', (array) $wpdb->get_results( $wpdb->prepare( 'SELECT * FROM ' . sap_table( 'tasks' ) . " WHERE created_by = %d AND status = 'review' ORDER BY submitted_at ASC", $uid ) ) ); // phpcs:ignore
+}
+
+/**
+ * Where a task stands, for the project manager's lists:
+ * proposed | review | done | dropped | stuck | late | open.
+ */
+function sap_task_bucket( $t ) {
+	if ( in_array( $t['status'], array( 'proposed', 'review', 'done', 'dropped' ), true ) ) {
+		return $t['status'];
+	}
+	if ( sap_progress_summary( $t )['blocked'] ) {
+		return 'stuck';
+	}
+	return $t['due_date'] && $t['due_date'] < current_time( 'Y-m-d' ) ? 'late' : 'open';
+}
+
+/**
+ * Chip [text, class] for a task's state.
+ */
+function sap_task_state_chip( $t ) {
+	$b = sap_task_bucket( $t );
+	switch ( $b ) {
+		case 'proposed':
+			return array( 'منتظر تأیید مدیر سئو', 'is-warn' );
+		case 'review':
+			return array( 'گزارش ثبت شد · منتظر تأیید', 'is-info' );
+		case 'done':
+			return array( 'انجام شد', 'is-good' );
+		case 'dropped':
+			return array( 'رد / حذف شد', 'is-bad' );
+		case 'stuck':
+			return array( '⚠️ گیر کرده', 'is-bad' );
+		case 'late':
+			return array( sap_num( sap_days_late( $t['due_date'] ) ) . ' روز تأخیر', 'is-bad' );
+	}
+	return 'doing' === $t['status'] ? array( 'در حال انجام', 'is-info' ) : array( 'هنوز شروع نشده', 'is-soft' );
+}
+
+/**
+ * Today's progress reports on the tasks a project manager created.
+ *
+ * @return array[] {task, entry}
+ */
+function sap_pm_today_reports( $uid = 0 ) {
+	global $wpdb;
+	$uid   = $uid ?: get_current_user_id();
+	$today = current_time( 'Y-m-d' );
+	$out   = array();
+	$rows  = array_map( 'sap_task_hydrate', (array) $wpdb->get_results( $wpdb->prepare( 'SELECT * FROM ' . sap_table( 'tasks' ) . ' WHERE created_by = %d AND progress LIKE %s', $uid, '%' . $wpdb->esc_like( $today ) . '%' ) ) ); // phpcs:ignore
+	foreach ( $rows as $t ) {
+		foreach ( $t['progress'] as $e ) {
+			if ( 0 === strpos( (string) $e['at'], $today ) ) {
+				$out[] = array( 'task' => $t, 'entry' => $e );
+			}
+		}
+	}
+	usort( $out, function ( $a, $b ) {
+		return strcmp( $b['entry']['at'], $a['entry']['at'] );
+	} );
+	return $out;
 }
 
 /* ---------------------------------------------------------------------------
@@ -402,7 +609,7 @@ add_action( 'sap_task_saved', function ( $before, $after ) {
 	$pn   = sap_project( $after['project_id'] )['name'] ?? '';
 	$was  = $before ? $before['status'] : '';
 	if ( $after['assignee'] && $after['assignee'] !== $me && ( ! $before || $before['assignee'] !== $after['assignee'] || 'proposed' === $was ) && ! in_array( $after['status'], array( 'proposed', 'done', 'dropped' ), true ) ) {
-		sap_notice_add( $after['assignee'], array( 'icon' => '📌', 'title' => 'کار جدید: ' . $after['title'], 'text' => $pn . ( $after['due_date'] ? ' · ددلاین ' . sap_jdate( $after['due_date'] ) : '' ), 'url' => $link ) );
+		sap_notice_add( $after['assignee'], array( 'icon' => 'repeat' === $after['source'] && ! $before ? '🔁' : '📌', 'title' => ( 'repeat' === $after['source'] && ! $before ? 'نوبت بعدی کار تکراری: ' : 'کار جدید: ' ) . $after['title'], 'text' => $pn . ( $after['due_date'] ? ' · ددلاین ' . sap_jdate( $after['due_date'] ) : '' ), 'url' => $link ) );
 	}
 	if ( 'review' === $after['status'] && 'review' !== $was && $pm ) {
 		sap_notice_add( $pm, array( 'icon' => '📝', 'title' => sap_user_name( $after['assignee'] ) . ' گزارش «' . $after['title'] . '» را ثبت کرد', 'text' => mb_substr( $after['result'], 0, 300 ), 'url' => sap_url( 'pm' ) . '#t-' . $after['id'] ) );
@@ -584,6 +791,32 @@ function sap_calendar_tasks( $period, $project = 0, $people = array() ) {
 			continue;
 		}
 		$by[ $t['due_date'] ][] = $t;
+	}
+	return $by;
+}
+
+/**
+ * Checklist items with their own date in a month: date => [ {task, i, item} ].
+ */
+function sap_calendar_check_items( $period, $project = 0, $people = array() ) {
+	global $wpdb;
+	list( $from, $to ) = sap_period_range( $period );
+	$sql = 'SELECT * FROM ' . sap_table( 'tasks' ) . " WHERE checklist LIKE %s AND status NOT IN ('dropped','proposed')";
+	$arg = array( '%"due":"2%' );
+	if ( $project ) {
+		$sql  .= ' AND project_id = %d';
+		$arg[] = (int) $project;
+	}
+	$by = array();
+	foreach ( array_map( 'sap_task_hydrate', (array) $wpdb->get_results( $wpdb->prepare( $sql, $arg ) ) ) as $t ) { // phpcs:ignore
+		if ( $people && ! in_array( $t['assignee'], $people, true ) ) {
+			continue;
+		}
+		foreach ( $t['checklist'] as $i => $it ) {
+			if ( '' !== $it['due'] && $it['due'] >= $from && $it['due'] <= $to ) {
+				$by[ $it['due'] ][] = array( 'task' => $t, 'i' => $i, 'item' => $it );
+			}
+		}
 	}
 	return $by;
 }

@@ -206,6 +206,7 @@ endif;
 			<label>زمان تخمینی (ساعت)<input type="number" name="effort" min="0.25" step="0.25" value="1"></label>
 			<label>مسئول<select name="assignee"><option value="0">—</option><?php foreach ( sap_team_users() as $u ) : ?><option value="<?php echo esc_attr( $u->ID ); ?>"><?php echo esc_html( $u->display_name ); ?></option><?php endforeach; ?></select></label>
 			<label>ددلاین<input type="date" name="due_date" value="<?php echo esc_attr( $new_due ); ?>"></label>
+			<?php sap_view( 'repeat-field', array( 'value' => '' ) ); ?>
 			<label>آدرس صفحه<input type="url" name="url" dir="ltr"></label>
 			<input type="hidden" name="period" value="<?php echo esc_attr( $period ); ?>">
 		</div>

@@ -19,7 +19,8 @@ $on    = (bool) $items;
 		<span class="sap-switch-text"><b>✅ کار چک‌لیستی</b><small class="sap-muted">مسئول هر مورد را جدا تیک می‌زند و نوار پیشرفت می‌بیند؛ با آخرین تیک، گزارش کار باز می‌شود.</small></span>
 	</label>
 	<div class="sap-check-items" <?php echo $on ? '' : 'hidden'; ?>>
-		<textarea name="checklist" rows="5" data-sap-check-text <?php disabled( ! $on ); ?> placeholder="هر خط یک مورد؛ مثلاً:&#10;محصول ۱: پاشنه کش فلزی بلند&#10;محصول ۲: پاشنه کش پلاستیکی"><?php echo esc_textarea( implode( "\n", wp_list_pluck( $items, 't' ) ) ); ?></textarea>
+		<textarea name="checklist" rows="5" data-sap-check-text <?php disabled( ! $on ); ?> placeholder="هر خط یک مورد؛ مثلاً:&#10;محصول ۱: پاشنه کش فلزی بلند&#10;محصول ۲: پاشنه کش پلاستیکی"><?php echo esc_textarea( sap_checklist_to_text( $items ) ); ?></textarea>
+		<div class="sap-ci-rows" data-sap-ci-rows hidden></div>
 		<div class="sap-check-tools">
 			<button type="button" class="sap-btn is-soft is-small" data-sap-check-ai <?php disabled( ! sap_ai_connected() ); ?>><?php echo sap_icon( 'spark', 13 ); // phpcs:ignore ?>ساخت موارد با هوش مصنوعی</button>
 			<small class="sap-muted" data-sap-check-n></small>

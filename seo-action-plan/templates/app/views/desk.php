@@ -73,6 +73,7 @@ $att   = function ( $list ) {
 						<small class="sap-muted"><?php echo esc_html( $t['submitted_at'] ? 'ثبت ' . sap_jdate( substr( $t['submitted_at'], 0, 10 ), 'short' ) . ' ' . sap_fa( substr( $t['submitted_at'], 11, 5 ) ) : '' ); ?></small>
 					</header>
 					<h3><?php echo esc_html( $t['title'] ); ?></h3>
+					<?php if ( $t['created_by'] && 'pm' === sap_user_role( $t['created_by'] ) ) : ?><p class="sap-small sap-muted">📋 ثبت‌شده توسط مدیر پروژه <?php echo esc_html( sap_user_name( $t['created_by'] ) ); ?> — او هم می‌تواند این گزارش را تأیید کند.</p><?php endif; ?>
 					<div class="sap-desk-report">
 						<span>گزارش کار</span>
 						<div><?php echo sap_rich_text( $t['result'], sap_task_site_base( $t ) ); // phpcs:ignore ?></div>

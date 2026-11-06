@@ -32,6 +32,14 @@ $flow    = array( 'next' => 'اقدام بعدی', 'doing' => 'در حال ان�
 			<input type="checkbox" class="sap-task-pick" value="<?php echo esc_attr( $t['id'] ); ?>" aria-label="انتخاب">
 		<?php endif; ?>
 		<span class="sap-task-title"><?php echo esc_html( $t['title'] ); ?></span>
+		<?php if ( $t['checklist'] ) : ?>
+			<ul class="sap-task-checks<?php echo count( $t['checklist'] ) > 4 ? ' is-more' : ''; ?>">
+				<?php foreach ( array_slice( $t['checklist'], 0, 6 ) as $it ) : ?>
+					<li class="<?php echo $it['d'] ? 'is-done' : ''; ?>"><i><?php echo $it['d'] ? '✓' : ''; ?></i><span><?php echo esc_html( $it['t'] ); ?></span><?php echo sap_checklist_due_tag( $it ); // phpcs:ignore ?></li>
+				<?php endforeach; ?>
+			</ul>
+			<?php if ( count( $t['checklist'] ) > 4 ) : ?><small class="sap-task-checks-more">+ <?php echo esc_html( sap_num( count( $t['checklist'] ) - 4 ) ); ?> مورد دیگر</small><?php endif; ?>
+		<?php endif; ?>
 		<span class="sap-task-meta">
 			<?php echo sap_context_chip( $t['context'] ); // phpcs:ignore ?>
 			<?php if ( $t['due_date'] ) : ?>
@@ -40,6 +48,7 @@ $flow    = array( 'next' => 'اقدام بعدی', 'doing' => 'در حال ان�
 			<?php if ( 'review' === $t['status'] ) : ?><span class="sap-chip is-info">منتظر تأیید</span><?php endif; ?>
 			<?php if ( '' !== $t['review_note'] && 'doing' === $t['status'] ) : ?><span class="sap-chip is-warn">برگشت با بازخورد</span><?php endif; ?>
 			<?php if ( $t['recurring'] ) : ?><span class="sap-chip is-rec">دوره‌ای</span><?php endif; ?>
+			<?php if ( '' !== $t['repeat_every'] ) : ?><span class="sap-chip is-rec" title="بعد از تأیید، نوبت بعدی خودکار ساخته می‌شود">🔁 <?php echo esc_html( sap_repeat_options()[ $t['repeat_every'] ] ?? '' ); ?></span><?php endif; ?>
 			<?php if ( $psum['blocked'] ) : ?><span class="sap-chip is-bad" title="<?php echo esc_attr( $t['waiting_for'] ); ?>">⚠️ گیر کرده</span><?php endif; ?>
 			<?php if ( null !== $odays && $odays >= sap_long_days() ) : ?><span class="sap-chip is-warn" title="روز از شروع کار"><?php echo esc_html( sap_num( $odays ) ); ?> روز باز</span><?php endif; ?>
 			<?php if ( $psum['count'] ) : ?><span class="sap-chip is-soft" title="گزارش روزانه">🗒️ <?php echo esc_html( sap_num( $psum['count'] ) ); ?></span><?php endif; ?>
@@ -77,7 +86,7 @@ $flow    = array( 'next' => 'اقدام بعدی', 'doing' => 'در حال ان�
 				<div class="sap-checklist-bar"><i data-sap-check-bar style="width:<?php echo esc_attr( $prog['pct'] ); ?>%"></i><em data-sap-check-pct><?php echo esc_html( sap_num( $prog['pct'] ) ); ?>٪</em></div>
 				<ul>
 					<?php foreach ( $t['checklist'] as $ci => $it ) : ?>
-						<li class="<?php echo $it['d'] ? 'is-done' : ''; ?>"><label><input type="checkbox" data-sap-check="<?php echo esc_attr( $ci ); ?>" <?php checked( $it['d'] ); ?> <?php disabled( $closed || 'review' === $t['status'] ); ?>><span><?php echo esc_html( $it['t'] ); ?></span></label><?php if ( $it['d'] && $it['by'] ) : ?><small class="sap-muted"><?php echo esc_html( sap_first_name( sap_user_name( $it['by'] ) ) . ( $it['at'] ? ' · ' . sap_jdate( substr( $it['at'], 0, 10 ), 'day' ) : '' ) ); ?></small><?php endif; ?></li>
+						<li class="<?php echo $it['d'] ? 'is-done' : ''; ?>"><label><input type="checkbox" data-sap-check="<?php echo esc_attr( $ci ); ?>" <?php checked( $it['d'] ); ?> <?php disabled( $closed || 'review' === $t['status'] ); ?>><span><?php echo esc_html( $it['t'] ); ?></span></label><?php echo sap_checklist_due_tag( $it ); // phpcs:ignore ?><?php if ( $it['d'] && $it['by'] ) : ?><small class="sap-muted"><?php echo esc_html( sap_first_name( sap_user_name( $it['by'] ) ) . ( $it['at'] ? ' · ' . sap_jdate( substr( $it['at'], 0, 10 ), 'day' ) : '' ) ); ?></small><?php endif; ?></li>
 					<?php endforeach; ?>
 				</ul>
 			</div>
@@ -135,6 +144,7 @@ $flow    = array( 'next' => 'اقدام بعدی', 'doing' => 'در حال ان�
 					<div class="sap-grid-3">
 						<label>مسئول<select name="assignee"><option value="0">—</option><?php foreach ( sap_team_users() as $u ) : ?><option value="<?php echo esc_attr( $u->ID ); ?>" <?php selected( (int) $u->ID, $t['assignee'] ); ?>><?php echo esc_html( $u->display_name ); ?></option><?php endforeach; ?></select></label>
 						<label>ددلاین<input type="date" name="due_date" value="<?php echo esc_attr( (string) $t['due_date'] ); ?>"></label>
+						<?php sap_view( 'repeat-field', array( 'value' => $t['repeat_every'] ) ); ?>
 						<label>نوع کار<select name="context"><?php foreach ( sap_contexts() as $k => $label ) : ?><option value="<?php echo esc_attr( $k ); ?>" <?php selected( $k, $t['context'] ); ?>><?php echo esc_html( $label ); ?></option><?php endforeach; ?></select></label>
 					</div>
 					<label>آدرس صفحه<input type="url" name="url" dir="ltr" value="<?php echo esc_attr( $t['url'] ); ?>"></label>
@@ -152,7 +162,7 @@ $flow    = array( 'next' => 'اقدام بعدی', 'doing' => 'در حال ان�
 					</details>
 					<div class="sap-form-foot sap-tedit-foot">
 						<button class="sap-btn is-small is-primary" type="submit">ذخیره تغییرات</button>
-						<button type="button" class="sap-btn is-small is-ghost<?php echo 0 === strpos( (string) $t['recurring'], 'p' ) ? ' is-on' : ''; ?>" data-sap-task-repeat="<?php echo esc_attr( $t['id'] ); ?>" title="هر ماه خودکار به اکشن پلن اضافه شود"><?php echo sap_icon( 'refresh', 13 ); // phpcs:ignore ?>تکرار ماهانه</button>
+						<?php if ( 0 === strpos( (string) $t['recurring'], 'p' ) ) : ?><button type="button" class="sap-btn is-small is-ghost<?php echo 0 === strpos( (string) $t['recurring'], 'p' ) ? ' is-on' : ''; ?>" data-sap-task-repeat="<?php echo esc_attr( $t['id'] ); ?>" title="هر ماه خودکار به اکشن پلن اضافه شود"><?php echo sap_icon( 'refresh', 13 ); // phpcs:ignore ?>تکرار ماهانه</button><?php endif; ?>
 						<button type="button" class="sap-btn is-small is-ghost is-danger" data-sap-task-del="<?php echo esc_attr( $t['id'] ); ?>"><?php echo sap_icon( 'trash', 13 ); // phpcs:ignore ?>حذف</button>
 					</div>
 				</form>

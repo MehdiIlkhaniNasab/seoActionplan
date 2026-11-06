@@ -51,6 +51,8 @@ function sap_task_hydrate( $row ) {
 	$prg                 = json_decode( (string) ( $row['progress'] ?? '' ), true );
 	$row['progress']     = is_array( $prg ) ? $prg : array();
 	$row['started_at']   = (string) ( $row['started_at'] ?? '' );
+	$row['repeat_every'] = (string) ( $row['repeat_every'] ?? '' );
+	$row['repeat_next']  = (int) ( $row['repeat_next'] ?? 0 );
 	foreach ( array( 'notes', 'result', 'url', 'waiting_for', 'keyword', 'period', 'recurring', 'source', 'ai_ref', 'ai_output', 'outcome' ) as $k ) {
 		$row[ $k ] = (string) ( $row[ $k ] ?? '' );
 	}
@@ -158,7 +160,13 @@ function sap_task_save( $data, $id = 0 ) {
 		$fields['period'] = '' === $data['period'] ? '' : sap_period_sanitize( $data['period'] );
 	}
 	if ( array_key_exists( 'due_date', $data ) ) {
-		$fields['due_date'] = sap_parse_date( $data['due_date'] ) ?: null;
+		$fields['due_date'] = sap_no_friday( sap_parse_date( $data['due_date'] ) ) ?: null; // Friday is the weekend: Saturday instead.
+	}
+	if ( array_key_exists( 'repeat_every', $data ) ) {
+		$fields['repeat_every'] = array_key_exists( (string) $data['repeat_every'], sap_repeat_options() ) ? (string) $data['repeat_every'] : '';
+	}
+	if ( array_key_exists( 'repeat_next', $data ) ) {
+		$fields['repeat_next'] = absint( $data['repeat_next'] );
 	}
 	if ( array_key_exists( 'effort', $data ) ) {
 		$fields['effort'] = max( 0.25, (float) sap_norm_text( $data['effort'] ) );

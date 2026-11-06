@@ -55,9 +55,16 @@ $link     = function ( $key, $url, $icon, $label, $badge = 0 ) use ( $nav ) {
 				$link( 'calendar', sap_url( 'calendar' ), 'calendar', 'تقویم کارها' );
 			}
 			if ( sap_is_pm() ) {
-				$link( 'pm', sap_url( 'pm' ), 'list', 'میز کار مدیر پروژه' );
+				$link( 'pm', sap_url( 'pm' ), 'list', 'میز کار مدیر پروژه', $manager ? 0 : count( sap_pm_reviews() ) );
+				if ( ! $manager ) {
+					$link( 'pmp', sap_url( 'pmp' ), 'grid', 'پروژه‌ها' );
+					$link( 'calendar', sap_url( 'calendar' ), 'calendar', 'تقویم کارها' );
+				}
 			}
 			$link( 'my', sap_url( 'my' ), 'check', 'کارهای من', $my_open );
+			if ( ! $manager && ! sap_is_pm() ) {
+				$link( 'calendar', sap_url( 'calendar' ), 'calendar', 'تقویم من' );
+			}
 			$link( 'inbox', sap_url( 'inbox' ), 'bell', 'اعلان‌ها', $unread );
 			if ( ! $manager ) {
 				$link( 'requests', sap_url( 'requests' ), 'log', 'درخواست‌ها' );

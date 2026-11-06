@@ -132,6 +132,8 @@ function sap_install() {
 		checklist longtext NULL,
 		progress longtext NULL,
 		started_at datetime NULL,
+		repeat_every varchar(10) NOT NULL DEFAULT '',
+		repeat_next bigint(20) unsigned NOT NULL DEFAULT 0,
 		created_by bigint(20) unsigned NOT NULL DEFAULT 0,
 		submitted_at datetime NULL,
 		late_alert datetime NULL,

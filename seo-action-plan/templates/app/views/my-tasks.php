@@ -192,7 +192,7 @@ $guide = function ( $notes ) {
 							<div class="sap-checklist-bar"><i data-sap-check-bar style="width:<?php echo esc_attr( $pg['pct'] ); ?>%"></i><em data-sap-check-pct><?php echo esc_html( sap_num( $pg['pct'] ) ); ?>٪</em></div>
 							<ul>
 								<?php foreach ( $t['checklist'] as $ci => $it ) : ?>
-									<li class="<?php echo $it['d'] ? 'is-done' : ''; ?>"><label><input type="checkbox" data-sap-check="<?php echo esc_attr( $ci ); ?>" <?php checked( $it['d'] ); ?>><span><?php echo esc_html( $it['t'] ); ?></span></label></li>
+									<li class="<?php echo $it['d'] ? 'is-done' : ''; ?>"><label><input type="checkbox" data-sap-check="<?php echo esc_attr( $ci ); ?>" <?php checked( $it['d'] ); ?>><span><?php echo esc_html( $it['t'] ); ?></span></label><?php echo sap_checklist_due_tag( $it ); // phpcs:ignore ?></li>
 								<?php endforeach; ?>
 							</ul>
 						</div>

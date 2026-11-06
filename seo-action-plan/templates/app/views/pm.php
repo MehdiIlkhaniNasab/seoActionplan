@@ -13,17 +13,11 @@ $projects = sap_projects();
 $users    = sap_team_users();
 $roles    = sap_member_roles();
 $mine     = array_map( 'sap_task_hydrate', (array) $wpdb->get_results( $wpdb->prepare( 'SELECT * FROM ' . sap_table( 'tasks' ) . ' WHERE created_by = %d ORDER BY id DESC LIMIT 150', get_current_user_id() ) ) ); // phpcs:ignore
-$st_label = array( 'proposed' => array( 'منتظر تأیید مدیر سئو', 'is-warn' ), 'dropped' => array( 'رد شد', 'is-bad' ), 'done' => array( 'انجام شد', 'is-good' ), 'review' => array( 'گزارش ثبت شد · منتظر تأیید', 'is-info' ), 'doing' => array( 'در حال انجام', 'is-info' ), 'waiting' => array( 'در انتظار', 'is-soft' ), 'someday' => array( 'شاید بعداً', 'is-soft' ) );
-$today    = current_time( 'Y-m-d' );
-$bucket   = function ( $t ) use ( $today ) {
-	if ( in_array( $t['status'], array( 'proposed', 'review', 'done', 'dropped' ), true ) ) {
-		return $t['status'];
-	}
-	return $t['due_date'] && $t['due_date'] < $today ? 'late' : 'open';
-};
-$counts = array( 'all' => count( $mine ), 'open' => 0, 'late' => 0, 'review' => 0, 'done' => 0, 'proposed' => 0 );
+$reviews  = sap_pm_reviews();
+$todayr   = sap_pm_today_reports();
+$counts   = array( 'all' => count( $mine ), 'open' => 0, 'late' => 0, 'stuck' => 0, 'review' => 0, 'done' => 0, 'proposed' => 0 );
 foreach ( $mine as $t ) {
-	$b = $bucket( $t );
+	$b = sap_task_bucket( $t );
 	if ( isset( $counts[ $b ] ) ) {
 		++$counts[ $b ];
 	}
@@ -33,15 +27,43 @@ foreach ( $mine as $t ) {
 	<div>
 		<p class="sap-eyebrow">سُکان · مدیر پروژه</p>
 		<h1>میز کار مدیر پروژه</h1>
-		<p class="sap-muted">کار جدید را با توضیح شفاف ثبت کنید. بعد از تأیید مدیر سئو، کار به مسئول واگذار و برایش ایمیل و پیامک می‌رود.</p>
+		<p class="sap-muted">گزارش کارهایی که ثبت کرده‌اید اینجا برای تأیید شما می‌آید. کار جدید بعد از تأیید مدیر سئو به مسئول واگذار می‌شود.</p>
 	</div>
+	<a class="sap-btn is-soft" href="<?php echo esc_url( sap_url( 'pmp' ) ); ?>"><?php echo sap_icon( 'grid', 16 ); // phpcs:ignore ?>همه کارهای هر پروژه</a>
 </header>
+
+<?php if ( $reviews ) : ?>
+	<section class="sap-desk-sec" id="review">
+		<h2><?php echo sap_icon( 'check', 18 ); // phpcs:ignore ?>منتظر تأیید شما <small><?php echo esc_html( sap_num( count( $reviews ) ) ); ?> گزارش · تأیید کنید یا با بازخورد برگردانید</small></h2>
+		<div class="sap-pm-rows">
+			<?php foreach ( $reviews as $t ) : ?>
+				<?php sap_view( 'pm-row', array( 't' => $t ) ); ?>
+			<?php endforeach; ?>
+		</div>
+	</section>
+<?php endif; ?>
+
+<?php if ( $todayr ) : ?>
+	<section class="sap-desk-sec" id="today">
+		<h2>🗒️ گزارش‌های روزانه امروز <small><?php echo esc_html( sap_num( count( $todayr ) ) ); ?> گزارش روی کارهای شما</small></h2>
+		<div class="sap-today-list">
+			<?php foreach ( $todayr as $x ) : ?>
+				<a class="sap-today<?php echo 'blocked' === ( $x['entry']['state'] ?? '' ) ? ' is-blocked' : ''; ?>" href="<?php echo esc_url( sap_url( 'pmp', array( 'p' => $x['task']['project_id'] ) ) . '#t-' . $x['task']['id'] ); ?>">
+					<?php echo sap_avatar( (int) $x['entry']['u'], 28 ); // phpcs:ignore ?>
+					<span><b><?php echo esc_html( $x['task']['title'] ); ?></b><em><?php echo esc_html( mb_strimwidth( $x['entry']['text'], 0, 160, '…' ) ); ?></em><?php if ( 'blocked' === ( $x['entry']['state'] ?? '' ) ) : ?><small class="sap-plog-why">⚠️ <?php echo esc_html( $x['entry']['why'] ); ?></small><?php endif; ?></span>
+					<time><?php echo esc_html( sap_fa( substr( $x['entry']['at'], 11, 5 ) ) ); ?></time>
+				</a>
+			<?php endforeach; ?>
+		</div>
+	</section>
+<?php endif; ?>
 
 <?php if ( $mine ) : ?>
 	<div class="sap-desk-stats sap-pm-stats">
 		<a href="#tracking" data-sap-pm-tab="open" class="<?php echo $counts['open'] ? 'is-on' : ''; ?>"><b><?php echo esc_html( sap_num( $counts['open'] ) ); ?></b><span>در جریان</span></a>
 		<a href="#tracking" data-sap-pm-tab="review" class="<?php echo $counts['review'] ? 'is-on' : ''; ?>"><b><?php echo esc_html( sap_num( $counts['review'] ) ); ?></b><span>گزارش ثبت‌شده</span></a>
 		<a href="#tracking" data-sap-pm-tab="late" class="<?php echo $counts['late'] ? 'is-bad' : ''; ?>"><b><?php echo esc_html( sap_num( $counts['late'] ) ); ?></b><span>عقب‌افتاده</span></a>
+		<a href="#tracking" data-sap-pm-tab="stuck" class="<?php echo $counts['stuck'] ? 'is-bad' : ''; ?>"><b><?php echo esc_html( sap_num( $counts['stuck'] ) ); ?></b><span>گیر کرده</span></a>
 		<a href="#tracking" data-sap-pm-tab="done"><b><?php echo esc_html( sap_num( $counts['done'] ) ); ?></b><span>انجام شده</span></a>
 		<a href="#tracking" data-sap-pm-tab="proposed"><b><?php echo esc_html( sap_num( $counts['proposed'] ) ); ?></b><span>منتظر تأیید مدیر سئو</span></a>
 	</div>
@@ -68,6 +90,7 @@ foreach ( $mine as $t ) {
 			<div class="sap-grid-3">
 				<label>مسئول<select name="assignee"><option value="0">—</option><?php foreach ( $users as $u ) : ?><option value="<?php echo esc_attr( $u->ID ); ?>"><?php echo esc_html( $u->display_name ); ?></option><?php endforeach; ?></select></label>
 				<label>ددلاین<input type="date" name="due_date"></label>
+				<?php sap_view( 'repeat-field', array( 'value' => '' ) ); ?>
 				<label>زمان تخمینی (ساعت)<input type="number" name="effort" min="0.25" step="0.25" value="1"></label>
 			</div>
 			<label>آدرس صفحه (اگر لازم است)<input type="url" name="url" dir="ltr" placeholder="https://"></label>
@@ -101,54 +124,16 @@ foreach ( $mine as $t ) {
 <?php if ( $mine ) : ?>
 	<section class="sap-panel sap-pm-track" id="tracking" data-sap-pm-track>
 		<div class="sap-panel-head">
-			<h2><?php echo sap_icon( 'list' ); // phpcs:ignore ?>پیگیری کارهایی که ثبت کرده‌اید</h2>
+			<h2><?php echo sap_icon( 'list' ); // phpcs:ignore ?>کارهایی که ثبت کرده‌اید</h2>
 			<div class="sap-seg-mini">
-				<?php foreach ( array( 'all' => 'همه', 'open' => 'در جریان', 'late' => 'عقب‌افتاده', 'review' => 'گزارش ثبت‌شده', 'done' => 'انجام شده', 'proposed' => 'منتظر تأیید' ) as $k => $l ) : ?>
+				<?php foreach ( array( 'all' => 'همه', 'open' => 'در جریان', 'late' => 'عقب‌افتاده', 'stuck' => 'گیر کرده', 'review' => 'گزارش ثبت‌شده', 'done' => 'انجام شده', 'proposed' => 'منتظر تأیید' ) as $k => $l ) : ?>
 					<button type="button" class="<?php echo 'all' === $k ? 'is-active' : ''; ?>" data-sap-pm-tab="<?php echo esc_attr( $k ); ?>"><?php echo esc_html( $l ); ?> <em><?php echo esc_html( sap_num( $counts[ $k ] ) ); ?></em></button>
 				<?php endforeach; ?>
 			</div>
 		</div>
 		<div class="sap-pm-rows">
 			<?php foreach ( $mine as $t ) : ?>
-				<?php
-				$b    = $bucket( $t );
-				$sl   = 'late' === $b ? array( sap_num( sap_days_late( $t['due_date'] ) ) . ' روز تأخیر', 'is-bad' ) : ( $st_label[ $t['status'] ] ?? array( 'واگذار شد · هنوز شروع نشده', 'is-soft' ) );
-				$prog = $t['checklist'] ? sap_checklist_progress( $t ) : null;
-				$pj   = sap_project( $t['project_id'] );
-				$rep  = '' !== $t['result'] || $t['attachments'];
-				?>
-				<details class="sap-pm-row is-<?php echo esc_attr( $b ); ?>" id="t-<?php echo esc_attr( $t['id'] ); ?>" data-bucket="<?php echo esc_attr( $b ); ?>">
-					<summary>
-						<span class="sap-chip <?php echo esc_attr( $sl[1] ); ?>"><?php echo esc_html( $sl[0] ); ?></span>
-						<b><?php echo esc_html( $t['title'] ); ?></b>
-						<?php $ps = sap_progress_summary( $t ); ?>
-						<?php if ( $ps['blocked'] ) : ?><span class="sap-chip is-bad" title="<?php echo esc_attr( $t['waiting_for'] ); ?>">⚠️ گیر کرده</span><?php endif; ?>
-						<?php if ( $ps['count'] ) : ?><span class="sap-chip is-soft">🗒️ <?php echo esc_html( sap_num( $ps['count'] ) ); ?> گزارش</span><?php endif; ?>
-						<span class="sap-ptag" style="--c:<?php echo esc_attr( sap_member_color( $t['project_id'] + 3 ) ); ?>"><?php echo esc_html( $pj['name'] ?? '' ); ?></span>
-						<?php if ( $prog ) : ?><span class="sap-mini-prog<?php echo $prog['done'] === $prog['total'] ? ' is-full' : ''; ?>"><i style="width:<?php echo esc_attr( $prog['pct'] ); ?>%"></i><em><?php echo esc_html( sap_num( $prog['done'] ) . '/' . sap_num( $prog['total'] ) ); ?></em></span><?php endif; ?>
-						<?php echo $t['assignee'] ? sap_person( $t['assignee'], 20 ) : '<em class="sap-muted sap-small">بدون مسئول</em>'; // phpcs:ignore ?>
-						<small class="sap-muted"><?php echo esc_html( $t['due_date'] ? 'ددلاین ' . sap_jdate( $t['due_date'], 'day' ) : 'بدون ددلاین' ); ?></small>
-					</summary>
-					<div class="sap-pm-row-body">
-						<?php sap_view( 'progress-log', array( 't' => $t, 'form' => false ) ); ?>
-						<?php if ( $prog ) : ?>
-							<ul class="sap-pm-check"><?php foreach ( $t['checklist'] as $it ) : ?><li class="<?php echo $it['d'] ? 'is-done' : ''; ?>"><?php echo $it['d'] ? '✔' : '○'; ?> <?php echo esc_html( $it['t'] ); ?></li><?php endforeach; ?></ul>
-						<?php endif; ?>
-						<?php if ( $rep ) : ?>
-							<div class="sap-treport">
-								<span>گزارش کار<?php echo $t['spent'] ? ' · ' . esc_html( sap_num( $t['spent'], 1 ) ) . ' ساعت' : ''; ?><?php echo $t['submitted_at'] ? ' · ' . esc_html( sap_jdate( substr( $t['submitted_at'], 0, 10 ), 'day' ) ) : ''; ?></span>
-								<?php if ( '' !== $t['result'] ) : ?><div><?php echo sap_rich_text( $t['result'], sap_task_site_base( $t ) ); // phpcs:ignore ?></div><?php endif; ?>
-								<?php if ( $t['attachments'] ) : ?>
-									<div class="sap-att-list"><?php foreach ( $t['attachments'] as $a ) : ?><a class="sap-att<?php echo 'image' === ( $a['type'] ?? '' ) ? ' is-img' : ''; ?>" href="<?php echo esc_url( $a['url'] ); ?>" target="_blank" rel="noopener"><?php echo 'image' === ( $a['type'] ?? '' ) ? '<img src="' . esc_url( $a['url'] ) . '" alt="" loading="lazy">' : esc_html( '' !== ( $a['name'] ?? '' ) ? $a['name'] : sap_short_url( $a['url'], 40 ) ); ?></a><?php endforeach; ?></div>
-								<?php endif; ?>
-							</div>
-						<?php else : ?>
-							<p class="sap-muted sap-small">هنوز گزارشی ثبت نشده.</p>
-						<?php endif; ?>
-						<?php if ( '' !== $t['review_note'] ) : ?><p class="sap-tnote"><b>🔁 بازخورد مدیر سئو:</b> <?php echo esc_html( $t['review_note'] ); ?></p><?php endif; ?>
-						<?php if ( '' !== trim( $t['notes'] ) ) : ?><details class="sap-desk-brief"><summary>شرح کار</summary><div class="sap-notes"><?php echo sap_rich_text( $t['notes'], sap_task_site_base( $t ) ); // phpcs:ignore ?></div></details><?php endif; ?>
-					</div>
-				</details>
+				<?php sap_view( 'pm-row', array( 't' => $t ) ); ?>
 			<?php endforeach; ?>
 		</div>
 	</section>
