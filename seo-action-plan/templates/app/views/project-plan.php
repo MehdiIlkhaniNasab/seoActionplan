@@ -17,7 +17,10 @@ $who    = isset( $_GET['who'] ) && '' !== $_GET['who'] ? sanitize_key( $_GET['wh
 $due    = isset( $_GET['due'] ) ? sanitize_key( $_GET['due'] ) : '';
 $due_on = isset( $_GET['on'] ) ? (string) sap_parse_date( sanitize_text_field( wp_unslash( $_GET['on'] ) ) ) : '';
 // phpcs:enable
-$tasks   = sap_tasks( array( 'project_id' => $pid, 'period' => $period, 'context' => $ctx ) );
+// Execution projects are not monthly plans: all their tasks show unless a month is picked.
+$ops      = ! sap_project_is_seo( $project );
+$all_p    = $ops && ( ! isset( $_GET['period'] ) || 'all' === $_GET['period'] ) && ! $open; // phpcs:ignore WordPress.Security.NonceVerification
+$tasks   = sap_tasks( array( 'project_id' => $pid, 'period' => $all_p ? '' : $period, 'context' => $ctx ) );
 // Filters: person and deadline.
 $today_d = current_time( 'Y-m-d' );
 $tmrw_d  = gmdate( 'Y-m-d', strtotime( $today_d . ' +1 day' ) );
@@ -71,7 +74,7 @@ foreach ( $tasks as $t ) {
 }
 $cap  = (float) $project['capacity_hours'];
 $live = array_sum( array_map( 'count', $cols ) );
-$here = sap_project_url( $pid, 'plan', array_filter( array( 'period' => $period, 'context' => $ctx, 'who' => $who, 'due' => $due, 'on' => $due_on ), 'strlen' ) );
+$here = sap_project_url( $pid, 'plan', array_filter( array( 'period' => $all_p ? 'all' : $period, 'context' => $ctx, 'who' => $who, 'due' => $due, 'on' => $due_on ), 'strlen' ) );
 $args = array( 'fnames' => $fnames, 'here' => $here, 'focuses' => $focuses, 'open_id' => $open ? $open['id'] : 0 );
 ?>
 <div class="sap-toolbar">
@@ -79,8 +82,9 @@ $args = array( 'fnames' => $fnames, 'here' => $here, 'focuses' => $focuses, 'ope
 	<form method="get" class="sap-filters" action="<?php echo esc_url( strtok( $fbase, '?' ) ); ?>">
 		<?php sap_filter_form( $fbase ); ?>
 		<select name="period" onchange="this.form.submit()">
+			<?php if ( $ops ) : ?><option value="all" <?php selected( $all_p ); ?>>همه کارهای پروژه</option><?php endif; ?>
 			<?php foreach ( sap_period_options( 12, 3 ) as $k => $label ) : ?>
-				<option value="<?php echo esc_attr( $k ); ?>" <?php selected( $k, $period ); ?>><?php echo esc_html( $label ); ?><?php echo sap_period_current() === $k ? ' (ماه جاری)' : ''; ?></option>
+				<option value="<?php echo esc_attr( $k ); ?>" <?php selected( ! $all_p && $k === $period ); ?>><?php echo esc_html( $label ); ?><?php echo sap_period_current() === $k ? ' (ماه جاری)' : ''; ?></option>
 			<?php endforeach; ?>
 		</select>
 		<select name="context" onchange="this.form.submit()">
@@ -99,6 +103,7 @@ $args = array( 'fnames' => $fnames, 'here' => $here, 'focuses' => $focuses, 'ope
 		<input type="hidden" name="due" value="<?php echo esc_attr( $due ); ?>">
 	</form>
 	<div class="sap-actions">
+		<?php if ( ! $ops ) : ?>
 		<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" class="sap-inline">
 			<?php sap_form_fields( 'sap_plan_generate', array( 'project_id' => $pid, 'period' => $period ) ); ?>
 			<label class="sap-inline-label">ظرفیت <input type="number" name="capacity" min="1" value="<?php echo esc_attr( (int) $cap ); ?>" class="is-tiny"> ساعت</label>
@@ -114,12 +119,14 @@ $args = array( 'fnames' => $fnames, 'here' => $here, 'focuses' => $focuses, 'ope
 				<button class="sap-btn" type="submit" title="کارهای ناتمام (غیر دوره‌ای) به ماه بعد منتقل می‌شوند">انتقال ناتمام‌ها به <?php echo esc_html( sap_period_label( sap_period_shift( $period, 1 ) ) ); ?></button>
 			</form>
 		<?php endif; ?>
+		<?php endif; ?>
 	</div>
 </div>
 
 <?php
-$due_url = function ( $v, $extra = array() ) use ( $pid, $period, $ctx, $who ) {
-	return sap_project_url( $pid, 'plan', array_filter( array_merge( array( 'period' => $period, 'context' => $ctx, 'who' => $who, 'due' => $v ), $extra ), 'strlen' ) );
+$period_q = $all_p ? 'all' : $period;
+$due_url  = function ( $v, $extra = array() ) use ( $pid, $period_q, $ctx, $who ) {
+	return sap_project_url( $pid, 'plan', array_filter( array_merge( array( 'period' => $period_q, 'context' => $ctx, 'who' => $who, 'due' => $v ), $extra ), 'strlen' ) );
 };
 $due_opts = array( '' => 'همه', 'today' => 'امروز', 'tomorrow' => 'فردا', 'overdue' => 'عقب‌افتاده', 'week' => '۷ روز آینده', 'nodate' => 'بدون ددلاین' );
 ?>
@@ -130,7 +137,7 @@ $due_opts = array( '' => 'همه', 'today' => 'امروز', 'tomorrow' => 'فر�
 	<?php endforeach; ?>
 	<form method="get" class="sap-due-on" action="<?php echo esc_url( strtok( sap_project_url( $pid, 'plan' ), '?' ) ); ?>">
 		<?php sap_filter_form( sap_project_url( $pid, 'plan' ) ); ?>
-		<input type="hidden" name="period" value="<?php echo esc_attr( $period ); ?>"><input type="hidden" name="context" value="<?php echo esc_attr( $ctx ); ?>"><input type="hidden" name="who" value="<?php echo esc_attr( $who ); ?>"><input type="hidden" name="due" value="on">
+		<input type="hidden" name="period" value="<?php echo esc_attr( $period_q ); ?>"><input type="hidden" name="context" value="<?php echo esc_attr( $ctx ); ?>"><input type="hidden" name="who" value="<?php echo esc_attr( $who ); ?>"><input type="hidden" name="due" value="on">
 		<input type="date" name="on" value="<?php echo esc_attr( $due_on ); ?>" onchange="this.form.submit()" class="<?php echo 'on' === $due ? 'is-active' : ''; ?>" title="تاریخ مشخص">
 	</form>
 </div>
@@ -138,7 +145,7 @@ $due_opts = array( '' => 'همه', 'today' => 'امروز', 'tomorrow' => 'فر�
 <?php
 // A new month has started: show what happened last month and offer to carry over / build.
 $prev_p = sap_period_shift( $period, -1 );
-if ( sap_period_current() === $period && ! $tasks ) :
+if ( ! $ops && sap_period_current() === $period && ! $tasks ) :
 	$prev_t    = sap_tasks( array( 'project_id' => $pid, 'period' => $prev_p ) );
 	$prev_open = count( array_filter( $prev_t, function ( $t ) {
 		return in_array( $t['status'], array( 'inbox', 'next', 'doing', 'waiting' ), true ) && ! $t['recurring'];

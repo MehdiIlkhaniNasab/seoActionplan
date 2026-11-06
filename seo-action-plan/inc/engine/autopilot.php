@@ -202,7 +202,7 @@ add_action( 'sap_hourly', function () {
 		return;
 	}
 	update_option( 'sap_autopilot_day', $today, false );
-	foreach ( sap_projects() as $p ) {
+	foreach ( sap_seo_projects() as $p ) {
 		if ( 'off' !== sap_autopilot( $p )['mode'] ) {
 			sap_autopilot_run( $p );
 		}

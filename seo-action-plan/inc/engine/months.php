@@ -386,7 +386,7 @@ function sap_project_reset( $project_id, $parts ) {
 // Keep the snapshots fresh: the running month and the one before it.
 add_action( 'sap_daily', function () {
 	$cur = sap_period_current();
-	foreach ( sap_projects() as $p ) {
+	foreach ( sap_seo_projects() as $p ) {
 		foreach ( array( sap_period_shift( $cur, -1 ), $cur ) as $per ) {
 			sap_month_snapshot( $p, $per );
 		}

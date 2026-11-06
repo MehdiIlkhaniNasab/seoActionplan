@@ -19,10 +19,16 @@ $log = (array) ( $project['options']['sync_log'] ?? array() );
 		<p class="sap-muted">
 			<?php
 			$last = $project['options']['last_sync'] ?? '';
-			echo $last ? 'آخرین تحلیل: ' . esc_html( sap_jdate( $last ) . ' ' . sap_fa( substr( $last, 11, 5 ) ) ) : 'هنوز تحلیل نشده';
+			if ( ! sap_project_is_seo( $project ) ) {
+				$st0 = sap_project_task_stats( $project['id'] );
+				echo esc_html( sprintf( '%s کار · %s انجام شده', sap_num( $st0['all'] ), sap_num( $st0['done'] ) ) );
+			} else {
+				echo $last ? 'آخرین تحلیل: ' . esc_html( sap_jdate( $last ) . ' ' . sap_fa( substr( $last, 11, 5 ) ) ) : 'هنوز تحلیل نشده';
+			}
 			?>
 		</p>
 	</div>
+	<?php if ( sap_project_is_seo( $project ) ) : ?>
 	<div class="sap-actions">
 		<div class="sap-mode" title="حالت ساده فقط بخش‌های روزمره را نشان می‌دهد">
 			<a class="<?php echo 'simple' === sap_ui_mode() ? 'is-active' : ''; ?>" href="<?php echo esc_url( add_query_arg( 'sap_mode', 'simple' ) ); ?>">ساده</a>
@@ -31,8 +37,15 @@ $log = (array) ( $project['options']['sync_log'] ?? array() );
 		<button type="button" class="sap-btn is-primary" data-sap-sync="<?php echo esc_attr( $project['id'] ); ?>"><?php echo sap_icon( 'spark' ); // phpcs:ignore ?>تحلیل کامل</button>
 		<button type="button" class="sap-btn" data-sap-sync="<?php echo esc_attr( $project['id'] ); ?>" data-force="1" title="داده‌های سئو سیگنال را هم با وجود کش تازه دوباره می‌گیرد (مصرف سهمیه)"><?php echo sap_icon( 'refresh' ); // phpcs:ignore ?>بدون کش</button>
 	</div>
+	<?php else : ?>
+	<div class="sap-actions">
+		<span class="sap-chip is-info" title="این پروژه سئو نیست؛ فقط مدیریت کار و گزارش">🧩 پروژه اجرایی · <?php echo esc_html( sap_ops_types()[ $project['options']['ops_type'] ?? 'other' ] ?? '' ); ?></span>
+		<a class="sap-btn" href="<?php echo esc_url( sap_project_url( $project['id'], 'report' ) ); ?>"><?php echo sap_icon( 'log' ); // phpcs:ignore ?>گزارش پروژه</a>
+	</div>
+	<?php endif; ?>
 </header>
 
+<?php if ( sap_project_is_seo( $project ) ) : ?>
 <section class="sap-panel sap-sync" data-sap-sync-panel hidden>
 	<h2><?php echo sap_icon( 'spark' ); // phpcs:ignore ?>تحلیل کامل پروژه</h2>
 	<div class="sap-prereq">
@@ -64,8 +77,9 @@ $log = (array) ( $project['options']['sync_log'] ?? array() );
 	</div>
 </section>
 
+<?php endif; ?>
 <?php $ac = sap_alert_counts( $project['id'] ); ?>
-<?php if ( $ac['critical'] && 'alerts' !== $tab ) : ?>
+<?php if ( $ac['critical'] && 'alerts' !== $tab && sap_project_is_seo( $project ) ) : ?>
 	<a class="sap-alertbar" href="<?php echo esc_url( sap_project_url( $project['id'], 'alerts' ) ); ?>"><?php echo sap_icon( 'bell', 16 ); // phpcs:ignore ?><b><?php echo esc_html( sap_num( $ac['critical'] ) ); ?> هشدار بحرانی باز</b><span><?php echo esc_html( sap_alerts( $project['id'], array( 'status' => 'open', 'severity' => 'critical', 'limit' => 1 ) )[0]['title'] ?? '' ); ?></span><em>مشاهده ←</em></a>
 <?php endif; ?>
 <?php
@@ -73,7 +87,7 @@ $cur_group = sap_tab_group( $tab );
 $all_tabs  = sap_project_tabs_all();
 ?>
 <nav class="sap-tabs is-groups">
-	<?php foreach ( sap_project_groups() as $g => $def ) : ?>
+	<?php foreach ( sap_project_groups_for( $project ) as $g => $def ) : ?>
 		<?php
 		$subs = array_values( array_filter( $def[2], function ( $k ) use ( $tabs ) {
 			return isset( $tabs[ $k ] );
@@ -94,7 +108,7 @@ $all_tabs  = sap_project_tabs_all();
 	<a class="sap-tab-gear <?php echo 'settings' === $tab ? 'is-active' : ''; ?>" href="<?php echo esc_url( sap_project_url( $project['id'], 'settings' ) ); ?>" title="تنظیمات پروژه"><?php echo sap_icon( 'settings', 16 ); // phpcs:ignore ?><span>تنظیمات</span></a>
 </nav>
 <?php
-$group_def = sap_project_groups()[ $cur_group ] ?? null;
+$group_def = sap_project_groups_for( $project )[ $cur_group ] ?? null;
 $subs      = $group_def ? array_values( array_filter( $group_def[2], function ( $k ) use ( $tabs, $tab ) {
 	return isset( $tabs[ $k ] ) || $k === $tab;
 } ) ) : array();
@@ -102,7 +116,7 @@ $subs      = $group_def ? array_values( array_filter( $group_def[2], function ( 
 <?php if ( count( $subs ) > 1 ) : ?>
 	<nav class="sap-subtabs">
 		<?php foreach ( $subs as $k ) : ?>
-			<a class="<?php echo $k === $tab ? 'is-active' : ''; ?>" href="<?php echo esc_url( sap_project_url( $project['id'], $k ) ); ?>"><?php echo sap_icon( $all_tabs[ $k ][1], 14 ); // phpcs:ignore ?><?php echo esc_html( $all_tabs[ $k ][0] ); ?></a>
+			<a class="<?php echo $k === $tab ? 'is-active' : ''; ?>" href="<?php echo esc_url( sap_project_url( $project['id'], $k ) ); ?>"><?php echo sap_icon( $all_tabs[ $k ][1], 14 ); // phpcs:ignore ?><?php echo esc_html( 'plan' === $k && ! sap_project_is_seo( $project ) ? 'کارها' : $all_tabs[ $k ][0] ); ?></a>
 		<?php endforeach; ?>
 	</nav>
 <?php endif; ?>

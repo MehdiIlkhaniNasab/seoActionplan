@@ -35,13 +35,19 @@ if ( 'member' === $mode ) {
 	$filter = array( $me );
 }
 // Only full managers see everyone; a project manager sees their own tasks and the ones they assigned.
-$owner   = 'pm' === $mode ? $me : 0;
+$owner   = 'pm' === $mode || sap_is_coord() ? $me : 0;
+if ( sap_is_coord() ) {
+	$filter = array(); // Own tasks and the ones they delegated.
+}
 $by_day  = sap_calendar_tasks( $period, $pid, $filter, $owner );
 $by_item = sap_calendar_check_items( $period, $pid, $filter, $owner );
 // Where a chip leads, by viewer.
 $task_link = function ( $t ) use ( $mode, $me ) {
 	if ( 'full' === $mode ) {
 		return sap_project_url( $t['project_id'], 'plan', array( 'task' => $t['id'] ) ) . '#task-' . $t['id'];
+	}
+	if ( sap_is_coord() && $t['coord_id'] === $me && $t['assignee'] !== $me ) {
+		return sap_url( 'coord' ) . '#f-' . $t['id'];
 	}
 	if ( 'pm' === $mode && $t['created_by'] === $me ) {
 		return sap_url( 'pmp', array( 'p' => $t['project_id'] ) ) . '#t-' . $t['id'];
@@ -55,7 +61,7 @@ list( $start ) = sap_period_range( $period );
 $projects = sap_projects();
 if ( 'full' !== $mode ) {
 	global $wpdb;
-	$mine_p   = array_map( 'intval', (array) $wpdb->get_col( $wpdb->prepare( 'SELECT DISTINCT project_id FROM ' . sap_table( 'tasks' ) . ' WHERE assignee = %d OR ( %s = %s AND created_by = %d )', $me, $mode, 'pm', $me ) ) ); // phpcs:ignore
+	$mine_p   = array_map( 'intval', (array) $wpdb->get_col( $wpdb->prepare( 'SELECT DISTINCT project_id FROM ' . sap_table( 'tasks' ) . ' WHERE assignee = %d OR coord_id = %d OR ( %s = %s AND created_by = %d )', $me, $me, $mode, 'pm', $me ) ) ); // phpcs:ignore
 	$projects = array_values( array_filter( $projects, function ( $p ) use ( $mine_p ) {
 		return in_array( (int) $p['id'], $mine_p, true );
 	} ) );

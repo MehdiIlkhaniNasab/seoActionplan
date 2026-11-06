@@ -311,6 +311,11 @@ function sap_task_progress_add( $task, $text, $state = 'progress', $why = '' ) {
 	sap_task_save( $data, $task['id'] );
 	$t = sap_task( $task['id'] );
 	$pm = $t['created_by'] && 'pm' === sap_user_role( $t['created_by'] ) && $t['created_by'] !== get_current_user_id() ? $t['created_by'] : 0;
+	// The coordinator who delegated it follows every report.
+	$co = $t['coord_id'] && $t['coord_id'] !== get_current_user_id() && $t['coord_id'] !== $t['assignee'] ? $t['coord_id'] : 0;
+	if ( $co ) {
+		sap_notice_add( $co, array( 'icon' => 'blocked' === $state ? '⚠️' : '🗒️', 'title' => sap_user_name( get_current_user_id() ) . ( 'blocked' === $state ? ' در «' . $t['title'] . '» گیر کرده' : ' روی «' . $t['title'] . '» گزارش ثبت کرد' ), 'text' => 'blocked' === $state ? 'علت: ' . $why : $text, 'url' => sap_url( 'coord' ) . '#f-' . $t['id'] ) );
+	}
 	if ( 'blocked' !== $state && $pm ) {
 		sap_notice_add( $pm, array( 'icon' => '🗒️', 'title' => sap_user_name( get_current_user_id() ) . ' روی «' . $t['title'] . '» گزارش روزانه ثبت کرد', 'text' => $text, 'url' => sap_url( 'pmp' ) . '?p=' . $t['project_id'] . '#t-' . $t['id'] ) );
 	}
@@ -350,13 +355,24 @@ function sap_long_tasks() {
 }
 
 /**
+ * Progress entries written as reports (without delegation / follow-up notes).
+ */
+function sap_progress_own( $t ) {
+	return array_values( array_filter( (array) $t['progress'], function ( $p ) {
+		return ! in_array( $p['kind'] ?? '', array( 'delegate', 'follow' ), true );
+	} ) );
+}
+
+/**
  * Summary of a task's reports: count, last report, days since the last one, stuck now?
  */
 function sap_progress_summary( $t ) {
-	$list = $t['progress'];
+	// The person's own reports; a coordinator's «واگذار شد» / «پیگیری» notes are not reports.
+	$list = sap_progress_own( $t );
 	$last = $list ? end( $list ) : null;
 	return array(
 		'count'   => count( $list ),
+		'notes'   => count( $t['progress'] ) - count( $list ),
 		'last'    => $last,
 		'quiet'   => $last ? sap_days_late( substr( $last['at'], 0, 10 ) ) : null,
 		'blocked' => 'waiting' === $t['status'] && $last && 'blocked' === $last['state'],
@@ -548,7 +564,7 @@ function sap_pm_today_reports( $uid = 0 ) {
  */
 function sap_can_nudge( $t ) {
 	return $t && $t['assignee'] && ! in_array( $t['status'], array( 'done', 'dropped', 'proposed' ), true )
-		&& ( sap_can() || ( sap_is_pm() && (int) $t['created_by'] === get_current_user_id() ) )
+		&& ( sap_can() || ( sap_is_pm() && (int) $t['created_by'] === get_current_user_id() ) || (int) $t['coord_id'] === get_current_user_id() )
 		&& (int) $t['assignee'] !== get_current_user_id();
 }
 
@@ -559,7 +575,8 @@ function sap_nudge_open( $t ) {
 	if ( '' === $t['nudged_at'] || in_array( $t['status'], array( 'done', 'dropped', 'review' ), true ) ) {
 		return false;
 	}
-	$last = $t['progress'] ? (string) end( $t['progress'] )['at'] : '';
+	$own  = sap_progress_own( $t );
+	$last = $own ? (string) end( $own )['at'] : '';
 	return $last < $t['nudged_at'];
 }
 
@@ -845,7 +862,7 @@ function sap_threads_answered() {
  * with $owner, it is that user's own task or one they assigned.
  */
 function sap_task_in_scope( $t, $people = array(), $owner = 0 ) {
-	if ( $owner && $t['assignee'] !== (int) $owner && $t['created_by'] !== (int) $owner ) {
+	if ( $owner && $t['assignee'] !== (int) $owner && $t['created_by'] !== (int) $owner && $t['coord_id'] !== (int) $owner ) {
 		return false;
 	}
 	return ! $people || in_array( $t['assignee'], $people, true );

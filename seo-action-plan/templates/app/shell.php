@@ -61,6 +61,9 @@ $link     = function ( $key, $url, $icon, $label, $badge = 0 ) use ( $nav ) {
 					$link( 'calendar', sap_url( 'calendar' ), 'calendar', 'تقویم کارها' );
 				}
 			}
+			if ( sap_is_coord() ) {
+				$link( 'coord', sap_url( 'coord' ), 'inbox', 'میز پیگیری', count( sap_coord_triage( $user->ID ) ) );
+			}
 			$link( 'my', sap_url( 'my' ), 'check', 'کارهای من', $my_open );
 			if ( ! $manager && ! sap_is_pm() ) {
 				$link( 'calendar', sap_url( 'calendar' ), 'calendar', 'تقویم من' );

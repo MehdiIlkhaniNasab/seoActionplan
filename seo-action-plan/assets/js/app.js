@@ -2733,4 +2733,109 @@
 		}, true);
 		document.addEventListener('keydown', function (ev) { if (ev.key === 'Escape') { close(); } });
 	})();
+
+	/* ---- Project form: SEO project or execution project ---- */
+	document.addEventListener('change', function (ev) {
+		var r = ev.target.closest('[data-sap-kind] input[name="kind"]');
+		if (!r) { return; }
+		var f = r.closest('form');
+		var ops = r.value === 'ops';
+		f.querySelectorAll('[data-sap-seo-only]').forEach(function (el) { el.hidden = ops; });
+		f.querySelectorAll('[data-sap-ops-only]').forEach(function (el) { el.hidden = !ops; });
+		var site = f.querySelector('input[name="site_url"]');
+		if (site) { site.required = !ops; }
+	});
+
+	/* ---- Coordinator desk: panes, triage (delegate / own), bulk, follow-up ---- */
+	(function () {
+		if (!document.querySelector('.sap-coord-pane')) { return; }
+		var showPane = function (k, filter) {
+			document.querySelectorAll('.sap-coord-pane').forEach(function (p) { p.hidden = p.getAttribute('data-pane') !== k; });
+			document.querySelectorAll('.sap-coord-tabs [data-sap-coord-pane]').forEach(function (b) { b.classList.toggle('is-active', b.getAttribute('data-sap-coord-pane') === k); });
+			if (filter) { var t = document.querySelector('[data-sap-follow-tab="' + filter + '"]'); if (t) { t.click(); } }
+		};
+		var nextCard = function (card) {
+			var n = card.nextElementSibling;
+			fadeOut(card);
+			setTimeout(function () {
+				if (!document.querySelector('[data-sap-tri]:not(.is-leaving)')) { location.reload(); return; }
+				if (n && n.matches('[data-sap-tri]')) { n.scrollIntoView({ behavior: 'smooth', block: 'center' }); var b = n.querySelector('[data-sap-tri-mode="delegate"]'); if (b) { b.focus(); } }
+			}, 300);
+		};
+		var picked = function () { return Array.prototype.slice.call(document.querySelectorAll('.sap-tri-pick:checked')).map(function (c) { return c.value; }); };
+		var countPicked = function () { var n = document.querySelector('[data-sap-tri-n]'); if (n) { n.textContent = picked().length.toLocaleString('fa-IR'); } };
+		if (/^#f-\d+$/.test(location.hash)) { showPane('follow'); var fr = document.querySelector(location.hash); if (fr) { fr.open = true; fr.scrollIntoView({ block: 'center' }); } }
+		document.addEventListener('click', function (ev) {
+			var pb = ev.target.closest('[data-sap-coord-pane]');
+			if (pb) { ev.preventDefault(); showPane(pb.getAttribute('data-sap-coord-pane'), pb.getAttribute('data-filter')); return; }
+			var md = ev.target.closest('[data-sap-tri-mode]');
+			if (md) {
+				var card = md.closest('[data-sap-tri]');
+				var mode = md.getAttribute('data-sap-tri-mode');
+				card.querySelectorAll('[data-sap-tri-form]').forEach(function (f) { f.hidden = f.getAttribute('data-sap-tri-form') !== mode ? true : !f.hidden; });
+				card.querySelectorAll('[data-sap-tri-mode]').forEach(function (b) { b.classList.toggle('is-on', b === md && !card.querySelector('[data-sap-tri-form="' + mode + '"]').hidden); });
+				var first = card.querySelector('[data-sap-tri-form="' + mode + '"] select, [data-sap-tri-form="' + mode + '"] [data-day]');
+				if (first) { first.focus(); }
+				return;
+			}
+			var day = ev.target.closest('.sap-load [data-day]');
+			if (day) {
+				var f = day.closest('form');
+				var inp = f.querySelector('input[name="start_date"]');
+				inp.value = day.getAttribute('data-day');
+				if (inp._jdp) { inp._jdp.hidden.dispatchEvent(new Event('change')); inp._jdp.text.value = day.getAttribute('title').split(' · ')[0]; }
+				day.parentNode.querySelectorAll('button').forEach(function (b) { b.classList.toggle('is-sel', b === day); });
+				return;
+			}
+			var tf = ev.target.closest('[data-sap-follow-tab]');
+			if (tf) {
+				var k = tf.getAttribute('data-sap-follow-tab');
+				document.querySelectorAll('[data-sap-follow-tab]').forEach(function (b) { b.classList.toggle('is-active', b === tf); });
+				document.querySelectorAll('.sap-follow').forEach(function (r) {
+					var st = r.getAttribute('data-state');
+					r.hidden = !(k === 'all' || (k === 'need' ? r.getAttribute('data-need') === '1' : st === k));
+				});
+				return;
+			}
+			var bg = ev.target.closest('[data-sap-bulk-go]');
+			if (bg) {
+				var ids = picked();
+				var who = document.querySelector('[data-sap-bulk-who]').value;
+				var due = document.querySelector('[data-sap-bulk-due]').value;
+				if (!ids.length) { toast('اول کارها را تیک بزنید.', true); return; }
+				if (!who || !due) { toast('مسئول و ددلاین را انتخاب کنید.', true); return; }
+				bg.disabled = true;
+				post('coord/bulk', { ids: ids, assignee: who, due_date: due }).then(function (res) { toast(res.msg); setTimeout(function () { location.reload(); }, 800); }).catch(function (e) { toast(e.message, true); bg.disabled = false; bg.classList.remove('is-loading'); });
+			}
+		});
+		document.addEventListener('change', function (ev) {
+			if (ev.target.closest('[data-sap-tri-all]')) { document.querySelectorAll('.sap-tri-pick').forEach(function (c) { c.checked = ev.target.checked; }); countPicked(); return; }
+			if (ev.target.closest('.sap-tri-pick')) { countPicked(); return; }
+			var au = ev.target.closest('[data-sap-coord-auto]');
+			if (au) { post('coord/auto', { on: au.checked }).then(function (res) { toast(res.msg); }).catch(function (e) { toast(e.message, true); au.checked = !au.checked; }); }
+		});
+		document.addEventListener('submit', function (ev) {
+			var f = ev.target.closest('[data-sap-tri-form], [data-sap-follow-form]');
+			if (!f) { return; }
+			ev.preventDefault();
+			var btn = f.querySelector('button[type="submit"]');
+			btn.disabled = true;
+			var fail = function (e) { toast(e.message, true); btn.disabled = false; btn.classList.remove('is-loading'); };
+			if (f.hasAttribute('data-sap-follow-form')) {
+				post('coord/follow', { task_id: f.getAttribute('data-sap-follow-form'), text: f.text.value }).then(function (res) { toast(res.msg); setTimeout(function () { location.hash = 'f-' + f.getAttribute('data-sap-follow-form'); location.reload(); }, 600); }).catch(fail);
+				return;
+			}
+			var card = f.closest('[data-sap-tri]');
+			var id = card.getAttribute('data-sap-tri');
+			var p;
+			if (f.getAttribute('data-sap-tri-form') === 'delegate') {
+				var cl = f.querySelector('[data-sap-check-text]');
+				var hc = f.querySelector('[data-sap-check-toggle]');
+				p = post('coord/delegate', { task_id: id, assignee: f.assignee.value, due_date: f.due_date.value, notes: f.notes.value, checklist_sent: 1, has_checklist: hc && hc.checked ? 1 : 0, checklist: cl ? cl.value : '' });
+			} else {
+				p = post('coord/plan', { task_id: id, start_date: f.start_date.value, due_date: f.due_date.value });
+			}
+			p.then(function (res) { toast(res.msg); nextCard(card); }).catch(fail);
+		});
+	})();
 })();

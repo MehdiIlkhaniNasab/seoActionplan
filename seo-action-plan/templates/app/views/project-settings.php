@@ -18,6 +18,7 @@ $site     = $project['site_url'] ?: 'https://' . sap_project_domain( $project ) 
 ?>
 <?php sap_view( 'project-form', array( 'project' => $project ) ); ?>
 
+<?php if ( sap_project_is_seo( $project ) ) : ?>
 <?php $conn = sap_site_conn( $project ); ?>
 <section class="sap-panel" id="site-connector">
 	<h2><?php echo sap_icon( 'link' ); // phpcs:ignore ?>اتصال به سایت کارفرما (افزونه رابط)</h2>
@@ -96,6 +97,7 @@ $site     = $project['site_url'] ?: 'https://' . sap_project_domain( $project ) 
 		</div>
 	</form>
 </section>
+<?php endif; ?>
 
 <section class="sap-panel is-danger">
 	<h2>حذف پروژه</h2>

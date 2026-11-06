@@ -75,6 +75,7 @@ function sap_project_tabs_all() {
 		'chat'        => array( 'گفتگو با داده‌ها', 'chat' ),
 		'geo'         => array( 'دیده‌شدن در هوش مصنوعی', 'globe' ),
 		'experiments' => array( 'آزمایش‌های سئو', 'flask' ),
+		'report'      => array( 'گزارش پروژه', 'log' ),
 		'settings' => array( 'تنظیمات پروژه', 'settings' ),
 	);
 }
@@ -92,8 +93,21 @@ function sap_project_groups() {
 		'content'   => array( 'سئو محتوا', 'log', array( 'audit', 'serp', 'keywords', 'calendar', 'ideas', 'content' ) ),
 		'offpage'   => array( 'آف‌پیج', 'link', array( 'offpage' ) ),
 		'keywords'  => array( 'رتبه و رقبا', 'chart', array( 'ranks', 'competitors', 'geo', 'seosignal', 'graph' ) ),
-		'work'      => array( 'برنامه و اجرا', 'list', array( 'plan', 'automate', 'experiments', 'impact', 'findings', 'activity' ) ),
+		'work'      => array( 'برنامه و اجرا', 'list', array( 'plan', 'automate', 'experiments', 'impact', 'findings', 'activity', 'report' ) ),
 	);
+}
+
+/**
+ * Groups for one project: an execution project has only the overview and the work.
+ */
+function sap_project_groups_for( $project ) {
+	if ( $project && ! sap_project_is_seo( $project ) ) {
+		return array(
+			'home' => array( 'نمای کلی', 'grid', array( 'overview' ) ),
+			'work' => array( 'کارها و پیگیری', 'list', array( 'plan', 'activity', 'report' ) ),
+		);
+	}
+	return sap_project_groups();
 }
 
 /**

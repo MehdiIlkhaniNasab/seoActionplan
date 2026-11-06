@@ -681,7 +681,7 @@ function sap_alerts_renotify( $project ) {
 function sap_alerts_digest() {
 	$items = array();
 	$sev   = sap_alert_severities();
-	foreach ( sap_projects() as $p ) {
+	foreach ( sap_seo_projects() as $p ) {
 		foreach ( sap_alerts( $p['id'], array( 'status' => 'open' ) ) as $a ) {
 			$items[] = '<b>' . esc_html( $sev[ $a['severity'] ][2] . ' ' . $p['name'] . ' — ' . $a['title'] ) . '</b>';
 		}
@@ -697,14 +697,14 @@ function sap_alerts_digest() {
  * ------------------------------------------------------------------------- */
 
 add_action( 'sap_hourly', function () {
-	foreach ( sap_projects() as $p ) {
+	foreach ( sap_seo_projects() as $p ) {
 		sap_alerts_run( $p, 'hourly' );
 	}
 	// Daily rules once a day, at the first run after 06:00 site time.
 	$today = current_time( 'Y-m-d' );
 	if ( (int) current_time( 'G' ) >= 6 && get_option( 'sap_alerts_daily_on' ) !== $today ) {
 		update_option( 'sap_alerts_daily_on', $today, false );
-		foreach ( sap_projects() as $p ) {
+		foreach ( sap_seo_projects() as $p ) {
 			sap_alerts_run( $p, 'daily' );
 		}
 		sap_alerts_digest();

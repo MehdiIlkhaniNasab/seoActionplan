@@ -309,7 +309,7 @@ add_action( 'sap_daily', function () {
 	if ( 6 !== (int) current_time( 'w' ) ) {
 		return;
 	}
-	foreach ( sap_projects() as $p ) {
+	foreach ( sap_seo_projects() as $p ) {
 		if ( ! sap_geo_prompts( $p ) ) {
 			continue;
 		}

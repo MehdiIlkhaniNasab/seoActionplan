@@ -136,8 +136,15 @@ function sap_resolve_route( $route ) {
 	$first = $parts[0] ?? '';
 	$out   = array( 'route' => $route, 'nav' => $first ?: 'dashboard', 'project' => null );
 	// Team members only have their tasks and the guide.
-	if ( ! sap_can() && ! in_array( $first, sap_is_pm() ? array( 'my', 'guide', 'pm', 'pmp', 'calendar', 'inbox', 'requests' ) : array( 'my', 'guide', 'calendar', 'inbox', 'requests' ), true ) ) {
-		$first = sap_is_pm() && '' === $first ? 'pm' : 'my';
+	$allowed = array( 'my', 'guide', 'calendar', 'inbox', 'requests' );
+	if ( sap_is_pm() ) {
+		$allowed = array_merge( $allowed, array( 'pm', 'pmp' ) );
+	}
+	if ( sap_is_coord() ) {
+		$allowed[] = 'coord';
+	}
+	if ( ! sap_can() && ! in_array( $first, $allowed, true ) ) {
+		$first = '' === $first && sap_is_pm() ? 'pm' : ( '' === $first && sap_is_coord() ? 'coord' : 'my' );
 	}
 	switch ( $first ) {
 		case 'new':
@@ -150,6 +157,8 @@ function sap_resolve_route( $route ) {
 			return array_merge( $out, array( 'view' => 'inbox', 'title' => 'اعلان‌ها', 'nav' => 'inbox', 'vars' => array() ) );
 		case 'requests':
 			return array_merge( $out, array( 'view' => 'requests', 'title' => 'درخواست‌ها', 'nav' => 'requests', 'vars' => array() ) );
+		case 'coord':
+			return array_merge( $out, array( 'view' => 'coord', 'title' => 'میز پیگیری', 'nav' => 'coord', 'vars' => array() ) );
 		case 'pmp':
 			return array_merge( $out, array( 'view' => 'pm-projects', 'title' => 'پروژه‌ها', 'nav' => 'pmp', 'vars' => array() ) );
 		case 'calendar':
@@ -170,6 +179,11 @@ function sap_resolve_route( $route ) {
 				$tabs = sap_project_tabs();
 				$tab  = sanitize_key( $parts[2] ?? 'overview' );
 				$all  = sap_project_tabs_all(); // Tabs hidden in simple mode still open by URL.
+				if ( ! sap_project_is_seo( $project ) ) {
+					// Execution project: task management only.
+					$all  = array_intersect_key( $all, array_flip( sap_ops_tabs() ) );
+					$tabs = $all;
+				}
 				if ( ! isset( $tabs[ $tab ] ) && isset( $all[ $tab ] ) ) {
 					$tabs[ $tab ] = $all[ $tab ];
 				}

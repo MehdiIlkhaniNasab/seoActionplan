@@ -261,7 +261,7 @@ function sap_exp_verdicts() {
 }
 
 add_action( 'sap_daily', function () {
-	foreach ( sap_projects() as $p ) {
+	foreach ( sap_seo_projects() as $p ) {
 		foreach ( sap_experiments( $p['id'] ) as $e ) {
 			if ( 'running' === $e['status'] ) {
 				sap_exp_measure( $p, $e['id'] );

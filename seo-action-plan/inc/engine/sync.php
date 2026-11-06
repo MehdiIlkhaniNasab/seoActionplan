@@ -814,7 +814,7 @@ add_action( 'sap_daily', function () {
 	}
 	$every = 'daily' === $mode ? DAY_IN_SECONDS - HOUR_IN_SECONDS : 7 * DAY_IN_SECONDS - HOUR_IN_SECONDS;
 	$i     = 0;
-	foreach ( sap_projects() as $p ) {
+	foreach ( sap_seo_projects() as $p ) {
 		$last = strtotime( (string) ( $p['options']['last_sync'] ?? '' ) );
 		if ( ! $last || current_time( 'timestamp' ) - $last >= $every ) { // phpcs:ignore
 			wp_schedule_single_event( time() + 60 + 600 * $i++, 'sap_sync_project', array( $p['id'] ) );

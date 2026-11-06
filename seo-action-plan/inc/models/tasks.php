@@ -56,6 +56,9 @@ function sap_task_hydrate( $row ) {
 	$row['nudged_at']    = (string) ( $row['nudged_at'] ?? '' );
 	$row['nudged_by']    = (int) ( $row['nudged_by'] ?? 0 );
 	$row['nudge_note']   = (string) ( $row['nudge_note'] ?? '' );
+	$row['coord_id']     = (int) ( $row['coord_id'] ?? 0 );
+	$row['start_date']   = (string) ( $row['start_date'] ?? '' );
+	$row['delegated_at'] = (string) ( $row['delegated_at'] ?? '' );
 	$row['needs_client']  = (int) ( $row['needs_client'] ?? 0 );
 	foreach ( array( 'notes', 'result', 'url', 'waiting_for', 'keyword', 'period', 'recurring', 'source', 'ai_ref', 'ai_output', 'outcome', 'client_status', 'client_note', 'client_link' ) as $k ) {
 		$row[ $k ] = (string) ( $row[ $k ] ?? '' );
@@ -155,10 +158,16 @@ function sap_task_save( $data, $id = 0 ) {
 	if ( array_key_exists( 'nudge_note', $data ) ) {
 		$fields['nudge_note'] = sanitize_textarea_field( (string) $data['nudge_note'] );
 	}
+	if ( array_key_exists( 'coord_id', $data ) ) {
+		$fields['coord_id'] = absint( $data['coord_id'] );
+	}
+	if ( array_key_exists( 'start_date', $data ) ) {
+		$fields['start_date'] = sap_no_friday( sap_parse_date( $data['start_date'] ) ) ?: null;
+	}
 	if ( array_key_exists( 'nudged_by', $data ) ) {
 		$fields['nudged_by'] = absint( $data['nudged_by'] );
 	}
-	foreach ( array( 'submitted_at', 'late_alert', 'started_at', 'nudged_at' ) as $dk ) {
+	foreach ( array( 'submitted_at', 'late_alert', 'started_at', 'nudged_at', 'delegated_at' ) as $dk ) {
 		if ( array_key_exists( $dk, $data ) ) {
 			$fields[ $dk ] = $data[ $dk ] ?: null;
 		}

@@ -47,7 +47,7 @@ function sap_learning( $fresh = false ) {
 	$groups = array();
 	$pset   = array();
 	$total  = 0;
-	foreach ( sap_projects() as $p ) {
+	foreach ( sap_seo_projects() as $p ) {
 		foreach ( sap_impact_items( $p['id'] ) as $i ) {
 			if ( ! in_array( $i['verdict'] ?? '', array( 'growth', 'decline', 'neutral' ), true ) ) {
 				continue;

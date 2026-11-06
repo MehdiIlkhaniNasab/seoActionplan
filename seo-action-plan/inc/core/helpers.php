@@ -285,6 +285,7 @@ function sap_roles_sokan() {
 	return array(
 		'full'   => 'دسترسی کامل (مدیر سئو)',
 		'pm'     => 'مدیر پروژه (ثبت کار برای تأیید، دیدن پروژه‌ها و اعضا)',
+		'coord'  => 'هماهنگ‌کننده و پیگیری (واگذاری کارها به اعضا و پیگیری آن‌ها)',
 		'member' => 'عضو (فقط کارهای خودش)',
 	);
 }
@@ -317,6 +318,13 @@ function sap_user_role( $user_id = 0 ) {
  */
 function sap_is_pm( $user_id = 0 ) {
 	return 'pm' === sap_user_role( $user_id );
+}
+
+/**
+ * Coordinator: receives tasks, delegates them to the right person and follows them up.
+ */
+function sap_is_coord( $user_id = 0 ) {
+	return 'coord' === sap_user_role( $user_id );
 }
 
 /**

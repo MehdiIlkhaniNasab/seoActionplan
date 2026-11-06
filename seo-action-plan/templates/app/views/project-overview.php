@@ -8,6 +8,11 @@
 
 defined( 'ABSPATH' ) || exit;
 
+if ( ! sap_project_is_seo( $project ) ) {
+	sap_view( 'project-ops', array( 'project' => $project ) );
+	return;
+}
+
 $pid     = $project['id'];
 $period  = sap_period_current();
 $path    = sap_project_path( $project );

@@ -442,7 +442,7 @@ add_action( 'sap_hourly', function () {
 		return;
 	}
 	update_option( 'sap_ranks_day', $today, false );
-	foreach ( sap_projects() as $p ) {
+	foreach ( sap_seo_projects() as $p ) {
 		sap_ranks_daily( $p );
 	}
 }, 5 ); // Before the daily alert rules (priority 10) so ranking drops are seen the same morning.

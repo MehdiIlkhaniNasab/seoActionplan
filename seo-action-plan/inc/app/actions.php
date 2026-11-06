@@ -189,8 +189,25 @@ add_action( 'admin_post_sap_save_project', function () {
 	if ( null === sap_post( 'capacity_hours', null ) && $id ) {
 		$data['capacity_hours'] = sap_project( $id )['capacity_hours'];
 	}
-	$new = ! $id;
+	$new  = ! $id;
+	$kind = 'ops' === sap_post( 'kind' ) ? 'ops' : 'seo';
+	if ( 'seo' === $kind && '' === trim( (string) $data['site_url'] ) ) {
+		sap_back( $id ? sap_project_url( $id, 'settings' ) : sap_url( 'new' ), 'برای پروژه سئو آدرس سایت لازم است (یا نوع را «پروژه اجرایی» بگذارید).', false );
+	}
+	if ( 'ops' === $kind && null === sap_post( 'capacity_hours', null ) && ! $id ) {
+		$data['capacity_hours'] = 40;
+	}
 	$id  = sap_project_save( $data, $id );
+	sap_project_set_option( $id, 'kind', $kind );
+	if ( 'ops' === $kind ) {
+		sap_project_set_option( $id, 'ops_type', array_key_exists( (string) sap_post( 'ops_type' ), sap_ops_types() ) ? (string) sap_post( 'ops_type' ) : 'other' );
+		sap_project_set_option( $id, 'ops_start', (string) sap_parse_date( (string) sap_post( 'ops_start' ) ) );
+		sap_project_set_option( $id, 'ops_end', (string) sap_parse_date( (string) sap_post( 'ops_end' ) ) );
+		if ( $new && '' !== (string) sap_post( 'ops_template' ) ) {
+			$seeded = sap_ops_seed( $id, sanitize_key( (string) sap_post( 'ops_template' ) ) );
+		}
+		sap_back( sap_project_url( $id, $new ? 'plan' : 'settings' ), $new ? 'پروژه اجرایی ساخته شد' . ( ! empty( $seeded ) ? ' و ' . sap_num( $seeded ) . ' کار اولیه از قالب اضافه شد؛ مسئول و ددلاین هر کار را تعیین کنید.' : '؛ کارها را از «ثبت کار جدید» اضافه کنید.' ) : 'تنظیمات پروژه ذخیره شد.' );
+	}
 	sap_project_set_option( $id, 'no_writeback', sap_post( 'writeback' ) ? 0 : 1 );
 	if ( null !== sap_post( 'click_value', null ) ) {
 		sap_project_set_option( $id, 'click_value', max( 0, (float) sap_post( 'click_value' ) ) );
