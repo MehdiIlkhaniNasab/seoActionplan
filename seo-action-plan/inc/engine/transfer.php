@@ -116,6 +116,7 @@ function sap_transfer_export( $ids, $opts = array() ) {
 			'notify_email' => '0' !== (string) get_user_meta( $uid, 'sap_notify_email', true ),
 			'manager'      => user_can( $u, 'manage_options' ),
 			'full'         => function_exists( 'sap_member_full' ) && sap_member_full( $u ),
+			'role'         => (string) get_user_meta( $uid, 'sap_role', true ),
 		);
 	}
 	if ( $opts['settings'] ) {
@@ -193,6 +194,9 @@ function sap_transfer_users( $users, $create ) {
 		sap_member_update( $uid, array( 'phone' => $u['phone'] ?? '', 'title' => $u['title'] ?? '', 'notify_sms' => ! empty( $u['notify_sms'] ), 'notify_email' => ! empty( $u['notify_email'] ) ) );
 		if ( ! empty( $u['full'] ) ) {
 			get_userdata( $uid )->add_cap( SAP_CAP );
+		}
+		if ( in_array( (string) ( $u['role'] ?? '' ), array( 'full', 'pm', 'coord', 'member' ), true ) ) {
+			update_user_meta( $uid, 'sap_role', (string) $u['role'] );
 		}
 		$map[ (int) $old ] = (int) $uid;
 	}

@@ -51,6 +51,9 @@ $link     = function ( $key, $url, $icon, $label, $badge = 0 ) use ( $nav ) {
 			<?php
 			if ( $manager ) {
 				$link( 'dashboard', sap_url(), 'grid', 'داشبورد' );
+				if ( sap_is_coord() ) {
+					$link( 'coord', sap_url( 'coord' ), 'target', 'میز پیگیری', count( sap_coord_triage( $user->ID ) ) );
+				}
 				$link( 'desk', sap_url( 'desk' ), 'inbox', 'میز کار', sap_desk_count() );
 				$link( 'calendar', sap_url( 'calendar' ), 'calendar', 'تقویم کارها' );
 			}
@@ -60,9 +63,6 @@ $link     = function ( $key, $url, $icon, $label, $badge = 0 ) use ( $nav ) {
 					$link( 'pmp', sap_url( 'pmp' ), 'grid', 'پروژه‌ها' );
 					$link( 'calendar', sap_url( 'calendar' ), 'calendar', 'تقویم کارها' );
 				}
-			}
-			if ( sap_is_coord() ) {
-				$link( 'coord', sap_url( 'coord' ), 'inbox', 'میز پیگیری', count( sap_coord_triage( $user->ID ) ) );
 			}
 			$link( 'my', sap_url( 'my' ), 'check', 'کارهای من', $my_open );
 			if ( ! $manager && ! sap_is_pm() ) {

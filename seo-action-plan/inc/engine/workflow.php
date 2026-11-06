@@ -102,7 +102,8 @@ function sap_task_submit( $task, $result, $spent = null, $attachments = null ) {
 	if ( null !== $attachments ) {
 		$data['attachments'] = $attachments;
 	}
-	if ( sap_can() ) {
+	// The SEO manager's own «done» is final; a coordinator's own work is still reviewed by whoever created the task.
+	if ( 'full' === sap_user_role() || ( sap_can() && ( ! $task['created_by'] || $task['created_by'] === get_current_user_id() ) ) ) {
 		$data['status'] = 'done';
 		sap_task_save( $data, $task['id'] );
 		return array( 'status' => 'done', 'msg' => 'خسته نباشید! کار ثبت شد و در گزارش می‌آید.' );

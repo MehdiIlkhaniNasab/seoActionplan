@@ -267,7 +267,8 @@ function sap_now() {
  * Can the current user manage the tool?
  */
 function sap_can() {
-	return 'full' === sap_user_role();
+	// The coordinator works with the same access as the SEO manager, plus their follow-up desk.
+	return in_array( sap_user_role(), array( 'full', 'coord' ), true );
 }
 
 /**
@@ -285,7 +286,7 @@ function sap_roles_sokan() {
 	return array(
 		'full'   => 'دسترسی کامل (مدیر سئو)',
 		'pm'     => 'مدیر پروژه (ثبت کار برای تأیید، دیدن پروژه‌ها و اعضا)',
-		'coord'  => 'هماهنگ‌کننده و پیگیری (واگذاری کارها به اعضا و پیگیری آن‌ها)',
+		'coord'  => 'هماهنگ‌کننده و پیگیری (دسترسی کامل مثل مدیر سئو + میز پیگیری برای واگذاری و پیگیری کارها)',
 		'member' => 'عضو (فقط کارهای خودش)',
 	);
 }

@@ -35,10 +35,7 @@ if ( 'member' === $mode ) {
 	$filter = array( $me );
 }
 // Only full managers see everyone; a project manager sees their own tasks and the ones they assigned.
-$owner   = 'pm' === $mode || sap_is_coord() ? $me : 0;
-if ( sap_is_coord() ) {
-	$filter = array(); // Own tasks and the ones they delegated.
-}
+$owner   = 'pm' === $mode ? $me : 0;
 $by_day  = sap_calendar_tasks( $period, $pid, $filter, $owner );
 $by_item = sap_calendar_check_items( $period, $pid, $filter, $owner );
 // Where a chip leads, by viewer.

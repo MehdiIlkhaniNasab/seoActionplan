@@ -175,8 +175,8 @@ function sap_is_member_only( $user ) {
 
 add_filter( 'login_redirect', function ( $to, $requested, $user ) {
 	$role = $user instanceof WP_User ? sap_user_role( $user->ID ) : '';
-	if ( in_array( $role, array( 'pm', 'member' ), true ) && ( '' === (string) $requested || ( sap_is_member_only( $user ) && false !== strpos( (string) $requested, '/wp-admin' ) ) ) ) {
-		return sap_url( 'pm' === $role ? 'pm' : 'my' );
+	if ( in_array( $role, array( 'pm', 'member', 'coord' ), true ) && ( '' === (string) $requested || ( sap_is_member_only( $user ) && false !== strpos( (string) $requested, '/wp-admin' ) ) ) ) {
+		return sap_url( 'pm' === $role ? 'pm' : ( 'coord' === $role ? 'coord' : 'my' ) );
 	}
 	return sap_is_member_only( $user ) && ( '' === (string) $requested || false !== strpos( (string) $requested, '/wp-admin' ) ) ? sap_url( '' ) : $to;
 }, 20, 3 );
