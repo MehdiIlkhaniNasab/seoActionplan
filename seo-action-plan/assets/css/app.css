@@ -2333,8 +2333,7 @@ body.has-task-open { overflow: hidden; }
 .sap-cal-flag, .sap-cal-logs { font-style: normal; font-size: 10.5px; white-space: nowrap; }
 .sap-cal-logs { color: var(--muted); }
 
-/* ==========================================================================
-   0.23 — item dates, weekend, repeat, project manager projects
+/* ===================================================================   0.23 — item dates, weekend, repeat, project manager projects
    ========================================================================== */
 .sap-jdp-grid button:disabled { opacity: .35; cursor: not-allowed; background: none; }
 /* Checklist item rows */
@@ -2413,3 +2412,10 @@ span.sap-cal-task:hover { transform: none; box-shadow: none; }
 .sap-pmp-done > summary em { font-style: normal; font-size: 12px; color: var(--muted); font-weight: 400; margin-inline-start: 4px; }
 .sap-pmp-done > summary::after { content: ' ▾'; color: var(--muted); }
 .sap-pmp-done[open] > summary::after { content: ' ▴'; }
+/* 0.23 — client portal (Pilot) */
+.sap-client-tick { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; background: #FFF7ED; border: 1px dashed #FDBA74; border-radius: 10px; padding: 8px 12px; margin: 4px 0 8px; font-weight: 600; }
+.sap-client-tick input { width: 16px; height: 16px; accent-color: #EA580C; }
+.sap-client-tick small { font-weight: 400; }
+.sap-tclient { background: #FFF7ED; border-color: #FED7AA; }
+.sap-tclient a { color: #C2410C; font-weight: 700; text-decoration: none; }
+.sap-desk-card.is-client { border-color: #FDBA74; box-shadow: 0 0 0 3px #FFF7ED; }
