@@ -40,6 +40,8 @@ $flow    = array( 'next' => 'اقدام بعدی', 'doing' => 'در حال ان�
 			<?php if ( 'review' === $t['status'] ) : ?><span class="sap-chip is-info">منتظر تأیید</span><?php endif; ?>
 			<?php if ( '' !== $t['review_note'] && 'doing' === $t['status'] ) : ?><span class="sap-chip is-warn">برگشت با بازخورد</span><?php endif; ?>
 			<?php if ( $t['recurring'] ) : ?><span class="sap-chip is-rec">دوره‌ای</span><?php endif; ?>
+			<?php if ( sap_is_client_request( $t ) ) : ?><span class="sap-chip is-warn">🧑‍💼 درخواست کارفرما</span><?php endif; ?>
+			<?php echo sap_client_chip( $t ); // phpcs:ignore ?>
 			<?php if ( $psum['blocked'] ) : ?><span class="sap-chip is-bad" title="<?php echo esc_attr( $t['waiting_for'] ); ?>">⚠️ گیر کرده</span><?php endif; ?>
 			<?php if ( null !== $odays && $odays >= sap_long_days() ) : ?><span class="sap-chip is-warn" title="روز از شروع کار"><?php echo esc_html( sap_num( $odays ) ); ?> روز باز</span><?php endif; ?>
 			<?php if ( $psum['count'] ) : ?><span class="sap-chip is-soft" title="گزارش روزانه">🗒️ <?php echo esc_html( sap_num( $psum['count'] ) ); ?></span><?php endif; ?>
@@ -58,6 +60,14 @@ $flow    = array( 'next' => 'اقدام بعدی', 'doing' => 'در حال ان�
 
 		<?php if ( '' !== $t['review_note'] ) : ?>
 			<p class="sap-tnote"><b>🔁 بازخورد شما:</b> <?php echo esc_html( $t['review_note'] ); ?></p>
+		<?php endif; ?>
+
+		<?php if ( $t['needs_client'] || '' !== $t['client_status'] || '' !== $t['client_link'] ) : ?>
+			<?php $cs = sap_client_statuses()[ $t['client_status'] ] ?? sap_client_statuses()['']; ?>
+			<p class="sap-tnote sap-tclient">
+				<?php if ( $t['needs_client'] || '' !== $t['client_status'] ) : ?><b><?php echo esc_html( $cs[2] . ' تأیید کارفرما: ' . $cs[0] ); ?></b><?php echo 'changes' === $t['client_status'] && '' !== $t['client_note'] ? ' — «' . esc_html( $t['client_note'] ) . '»' : ''; ?><?php endif; ?>
+				<?php if ( '' !== $t['client_link'] ) : ?> <a href="<?php echo esc_url( $t['client_link'] ); ?>" target="_blank" rel="noopener">💬 گفتگو در پایلوت</a><?php endif; ?>
+			</p>
 		<?php endif; ?>
 
 		<div class="sap-tdesc">
@@ -138,6 +148,8 @@ $flow    = array( 'next' => 'اقدام بعدی', 'doing' => 'در حال ان�
 						<label>نوع کار<select name="context"><?php foreach ( sap_contexts() as $k => $label ) : ?><option value="<?php echo esc_attr( $k ); ?>" <?php selected( $k, $t['context'] ); ?>><?php echo esc_html( $label ); ?></option><?php endforeach; ?></select></label>
 					</div>
 					<label>آدرس صفحه<input type="url" name="url" dir="ltr" value="<?php echo esc_attr( $t['url'] ); ?>"></label>
+					<input type="hidden" name="needs_client" value="0">
+					<label class="sap-check sap-client-tick"><input type="checkbox" name="needs_client" value="1" <?php checked( (bool) $t['needs_client'] ); ?>> 🛡 نیاز به تأیید کارفرما <small class="sap-muted">— پیش از اجرا در پورتال پایلوت برای کارفرما فرستاده می‌شود؛ بدون تیک نیازی به تأیید نیست</small></label>
 					<label>توضیحات<textarea name="notes" rows="6" data-sap-task-notes-input><?php echo esc_textarea( $t['notes'] ); ?></textarea></label>
 					<?php sap_view( 'checklist-field', array( 'items' => $t['checklist'] ) ); ?>
 					<details class="sap-more">

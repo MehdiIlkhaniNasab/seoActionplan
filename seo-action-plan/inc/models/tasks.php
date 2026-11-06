@@ -51,7 +51,8 @@ function sap_task_hydrate( $row ) {
 	$prg                 = json_decode( (string) ( $row['progress'] ?? '' ), true );
 	$row['progress']     = is_array( $prg ) ? $prg : array();
 	$row['started_at']   = (string) ( $row['started_at'] ?? '' );
-	foreach ( array( 'notes', 'result', 'url', 'waiting_for', 'keyword', 'period', 'recurring', 'source', 'ai_ref', 'ai_output', 'outcome' ) as $k ) {
+	$row['needs_client']  = (int) ( $row['needs_client'] ?? 0 );
+	foreach ( array( 'notes', 'result', 'url', 'waiting_for', 'keyword', 'period', 'recurring', 'source', 'ai_ref', 'ai_output', 'outcome', 'client_status', 'client_note', 'client_link' ) as $k ) {
 		$row[ $k ] = (string) ( $row[ $k ] ?? '' );
 	}
 	return $row;
@@ -124,11 +125,17 @@ function sap_task_save( $data, $id = 0 ) {
 		'outcome'     => 'sanitize_textarea_field',
 		'review_note' => 'sanitize_textarea_field',
 		'created_by'  => 'absint',
+		'client_status' => 'sanitize_key',
+		'client_note' => 'sanitize_textarea_field',
+		'client_link' => 'esc_url_raw',
 	);
 	foreach ( $map as $k => $fn ) {
 		if ( array_key_exists( $k, $data ) ) {
 			$fields[ $k ] = call_user_func( $fn, $data[ $k ] );
 		}
+	}
+	if ( array_key_exists( 'needs_client', $data ) ) {
+		$fields['needs_client'] = empty( $data['needs_client'] ) ? 0 : 1;
 	}
 	if ( array_key_exists( 'attachments', $data ) ) {
 		$fields['attachments'] = wp_json_encode( array_values( array_filter( (array) $data['attachments'], 'is_array' ) ), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES );

@@ -20,7 +20,7 @@ $ptag  = function ( $id ) use ( $proj ) {
 	$p = $proj( $id );
 	return '<span class="sap-ptag" style="--c:' . esc_attr( sap_member_color( $id + 3 ) ) . '">' . esc_html( $p['name'] ?? '' ) . '</span>';
 };
-$total = count( $d['review'] ) + count( $d['questions'] ) + count( $d['requests'] ) + count( $d['proposed'] ) + count( $d['late'] );
+$total = count( $d['review'] ) + count( $d['questions'] ) + count( $d['requests'] ) + count( $d['proposed'] ) + count( $d['client'] ) + count( $d['late'] );
 $answered = sap_threads_answered();
 $long     = sap_long_tasks();
 $att   = function ( $list ) {
@@ -48,6 +48,7 @@ $att   = function ( $list ) {
 </header>
 
 <div class="sap-desk-stats">
+	<a href="#client" class="<?php echo $d['client'] ? 'is-on' : ''; ?>"><b><?php echo esc_html( sap_num( count( $d['client'] ) ) ); ?></b><span>درخواست کارفرما</span></a>
 	<a href="#review" class="<?php echo $d['review'] ? 'is-on' : ''; ?>"><b><?php echo esc_html( sap_num( count( $d['review'] ) ) ); ?></b><span>در انتظار تأیید</span></a>
 	<a href="#questions" class="<?php echo $d['questions'] ? 'is-on' : ''; ?>"><b><?php echo esc_html( sap_num( count( $d['questions'] ) ) ); ?></b><span>سوال تیم</span></a>
 	<a href="#requests" class="<?php echo $d['requests'] ? 'is-on' : ''; ?>"><b><?php echo esc_html( sap_num( count( $d['requests'] ) ) ); ?></b><span>درخواست</span></a>
@@ -154,6 +155,37 @@ $att   = function ( $list ) {
 					</header>
 					<h3><?php echo esc_html( $q['title'] ); ?></h3>
 					<?php sap_view( 'thread', array( 'q' => $q, 'side' => 'manager' ) ); ?>
+				</article>
+			<?php endforeach; ?>
+		</div>
+	</section>
+<?php endif; ?>
+
+<?php if ( $d['client'] ) : ?>
+	<section class="sap-desk-sec" id="client">
+		<h2>🧑‍💼 درخواست‌های کارفرما (پایلوت) <small><?php echo esc_html( sap_num( count( $d['client'] ) ) ); ?> منتظر واگذاری</small></h2>
+		<p class="sap-muted sap-small">کارفرما این‌ها را در پورتال پایلوت ثبت کرده و الان در مرحله «واگذاری» می‌بیند. با «تأیید و واگذاری» کار به مسئول می‌رسد و کارفرما پیام «کار شروع شد 🚀» می‌گیرد؛ «رد» درخواست را در پایلوت می‌بندد.</p>
+		<div class="sap-desk-list">
+			<?php foreach ( $d['client'] as $t ) : ?>
+				<article class="sap-desk-card is-client" data-sap-desk-card>
+					<header>
+						<span class="sap-chip is-warn">🧑‍💼 درخواست کارفرما</span>
+						<?php if ( '' !== $t['client_note'] ) : ?><span class="sap-small"><?php echo esc_html( $t['client_note'] ); ?></span><?php endif; ?>
+						<?php echo $ptag( $t['project_id'] ); // phpcs:ignore ?>
+						<?php echo sap_context_chip( $t['context'] ); // phpcs:ignore ?>
+						<span class="sap-small sap-muted"><?php echo esc_html( sap_jdate( substr( $t['created_at'], 0, 10 ), 'day' ) ); ?></span>
+					</header>
+					<h3><?php echo esc_html( preg_replace( '/^درخواست کارفرما:\s*/u', '', $t['title'] ) ); ?></h3>
+					<?php if ( '' !== trim( $t['notes'] ) ) : ?><details class="sap-desk-brief" open><summary>توضیحات کارفرما</summary><div class="sap-notes"><?php echo sap_rich_text( $t['notes'], sap_task_site_base( $t ) ); // phpcs:ignore ?></div></details><?php endif; ?>
+					<div class="sap-desk-assign">
+						<label>مسئول<select data-sap-prop-assignee><option value="0">—</option><?php foreach ( sap_team_users() as $u ) : ?><option value="<?php echo esc_attr( $u->ID ); ?>" <?php selected( (int) $u->ID, $t['assignee'] ); ?>><?php echo esc_html( $u->display_name ); ?></option><?php endforeach; ?></select></label>
+						<label>ددلاین<input type="date" data-sap-prop-due value="<?php echo esc_attr( (string) $t['due_date'] ); ?>"></label>
+					</div>
+					<footer>
+						<button type="button" class="sap-btn is-primary is-small" data-sap-proposal="approve" data-id="<?php echo esc_attr( $t['id'] ); ?>"><?php echo sap_icon( 'check', 14 ); // phpcs:ignore ?>تأیید و واگذاری</button>
+						<?php if ( '' !== $t['client_link'] ) : ?><a class="sap-btn is-ghost is-small" href="<?php echo esc_url( $t['client_link'] ); ?>" target="_blank" rel="noopener">💬 گفتگو با کارفرما در پایلوت</a><?php endif; ?>
+						<button type="button" class="sap-btn is-ghost is-danger is-small" data-sap-proposal="reject" data-id="<?php echo esc_attr( $t['id'] ); ?>">رد</button>
+					</footer>
 				</article>
 			<?php endforeach; ?>
 		</div>

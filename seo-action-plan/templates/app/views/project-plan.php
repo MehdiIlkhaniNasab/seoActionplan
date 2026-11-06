@@ -209,6 +209,8 @@ endif;
 			<label>آدرس صفحه<input type="url" name="url" dir="ltr"></label>
 			<input type="hidden" name="period" value="<?php echo esc_attr( $period ); ?>">
 		</div>
+		<input type="hidden" name="needs_client" value="0">
+		<label class="sap-check sap-client-tick"><input type="checkbox" name="needs_client" value="1"> 🛡 نیاز به تأیید کارفرما <small class="sap-muted">— پیش از اجرا در پورتال پایلوت برای کارفرما فرستاده می‌شود؛ بدون تیک نیازی به تأیید نیست</small></label>
 		<label>توضیحات<textarea name="notes" rows="4" data-sap-brief-notes placeholder="کوتاه بنویسید؛ «شفاف‌سازی» هدف، مراحل، خروجی و متن گزارش را کامل می‌کند."></textarea></label>
 		<?php sap_view( 'checklist-field', array( 'items' => array() ) ); ?>
 		<input type="hidden" name="outcome" data-sap-brief-outcome>

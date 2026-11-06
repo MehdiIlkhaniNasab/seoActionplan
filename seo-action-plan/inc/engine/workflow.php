@@ -33,6 +33,7 @@ function sap_desk_items() {
 		return strcmp( (string) $a['submitted_at'], (string) $b['submitted_at'] );
 	} );
 	$open = (array) $wpdb->get_results( 'SELECT * FROM ' . sap_table( 'questions' ) . " WHERE status = 'open' ORDER BY COALESCE(updated_at, created_at) ASC LIMIT 300", ARRAY_A ); // phpcs:ignore
+	$proposed = sap_tasks( array( 'status' => 'proposed' ) );
 	return array(
 		'review'    => $review,
 		'questions' => array_values( array_filter( $open, function ( $q ) {
@@ -41,7 +42,10 @@ function sap_desk_items() {
 		'requests'  => array_values( array_filter( $open, function ( $q ) {
 			return 'request' === ( $q['kind'] ?? 'task' );
 		} ) ),
-		'proposed'  => sap_tasks( array( 'status' => 'proposed' ) ),
+		'proposed'  => array_values( array_filter( $proposed, function ( $t ) {
+			return ! sap_is_client_request( $t );
+		} ) ),
+		'client'    => array_values( array_filter( $proposed, 'sap_is_client_request' ) ),
 		'late'      => $late,
 	);
 }
@@ -53,7 +57,7 @@ function sap_desk_count() {
 	static $n = null;
 	if ( null === $n ) {
 		$d = sap_desk_items();
-		$n = count( $d['review'] ) + count( $d['questions'] ) + count( $d['requests'] ) + count( $d['proposed'] ) + count( $d['late'] );
+		$n = count( $d['review'] ) + count( $d['questions'] ) + count( $d['requests'] ) + count( $d['proposed'] ) + count( $d['client'] ) + count( $d['late'] );
 	}
 	return $n;
 }

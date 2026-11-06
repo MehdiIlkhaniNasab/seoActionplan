@@ -463,7 +463,7 @@ add_action( 'admin_post_sap_task_save', function () {
 		wp_die( 'فقط کارهای خودتان را می‌توانید ویرایش کنید.', 403 );
 	}
 	$fields = sap_can()
-		? array( 'title', 'notes', 'result', 'context', 'status', 'period', 'assignee', 'waiting_for', 'due_date', 'effort', 'url', 'keyword', 'focus_id', 'outcome', 'spent' )
+		? array( 'title', 'notes', 'result', 'context', 'status', 'period', 'assignee', 'waiting_for', 'due_date', 'effort', 'url', 'keyword', 'focus_id', 'outcome', 'spent', 'needs_client' )
 		: array( 'status', 'result', 'url', 'spent' );
 	$data   = array();
 	foreach ( $fields as $k ) {
