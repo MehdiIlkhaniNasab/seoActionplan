@@ -115,7 +115,7 @@ $att   = function ( $list ) {
 							<span class="sap-long-meta"><?php echo $t['assignee'] ? sap_person( $t['assignee'], 18 ) : ''; // phpcs:ignore ?><?php echo $ptag( $t['project_id'] ); // phpcs:ignore ?><span class="sap-chip <?php echo esc_attr( $kind[0] ); ?>"><?php echo esc_html( $kind[1] ); ?></span><span class="sap-chip is-soft">🗒️ <?php echo esc_html( sap_num( $ps['count'] ) ); ?> گزارش</span><?php if ( $ps['stuck_n'] ) : ?><span class="sap-chip is-soft"><?php echo esc_html( sap_num( $ps['stuck_n'] ) ); ?> بار گیر کرده</span><?php endif; ?></span>
 							<?php if ( $ps['blocked'] ) : ?><span class="sap-long-why">علت: <?php echo esc_html( $t['waiting_for'] ); ?></span><?php elseif ( $ps['last'] ) : ?><span class="sap-long-last">آخرین گزارش (<?php echo esc_html( sap_jdate( substr( $ps['last']['at'], 0, 10 ), 'day' ) ); ?>): <?php echo esc_html( mb_strimwidth( $ps['last']['text'], 0, 140, '…' ) ); ?></span><?php endif; ?>
 						</div>
-						<a class="sap-btn is-ghost is-small" href="<?php echo esc_url( sap_project_url( $t['project_id'], 'plan', array( 'task' => $t['id'] ) ) ); ?>#task-<?php echo esc_attr( $t['id'] ); ?>">باز کردن</a>
+						<span class="sap-long-acts"><?php sap_view( 'nudge-btn', array( 't' => $t, 'compact' => true ) ); ?><a class="sap-btn is-ghost is-small" href="<?php echo esc_url( sap_project_url( $t['project_id'], 'plan', array( 'task' => $t['id'] ) ) ); ?>#task-<?php echo esc_attr( $t['id'] ); ?>">باز کردن</a></span>
 					</summary>
 					<?php sap_view( 'progress-log', array( 't' => $t, 'form' => false ) ); ?>
 				</details>
@@ -225,11 +225,14 @@ $att   = function ( $list ) {
 		<h2>⏰ نیاز به پیگیری فوری <small><?php echo esc_html( sap_num( count( $d['late'] ) ) ); ?> کار بیش از ۷ روز از سررسید گذشته</small></h2>
 		<div class="sap-late-list">
 			<?php foreach ( $d['late'] as $t ) : ?>
+				<div class="sap-late-item">
 				<a class="sap-late-row" href="<?php echo esc_url( sap_project_url( $t['project_id'], 'plan', array( 'task' => $t['id'] ) ) ); ?>">
 					<?php echo sap_avatar( $t['assignee'], 32 ); // phpcs:ignore ?>
 					<div><b><?php echo esc_html( $t['title'] ); ?></b><small><?php echo esc_html( sap_user_name( $t['assignee'] ) ); ?> · <?php echo esc_html( $proj( $t['project_id'] )['name'] ?? '' ); ?> · <?php echo esc_html( sap_task_statuses()[ $t['status'] ] ?? '' ); ?></small></div>
 					<span class="sap-late-days"><?php echo esc_html( sap_num( sap_days_late( $t['due_date'] ) ) ); ?> روز</span>
 				</a>
+				<?php sap_view( 'nudge-btn', array( 't' => $t, 'compact' => true ) ); ?>
+				</div>
 			<?php endforeach; ?>
 		</div>
 	</section>

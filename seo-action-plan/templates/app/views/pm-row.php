@@ -24,6 +24,7 @@ $show_project = $show_project ?? true;
 	<summary>
 		<span class="sap-chip <?php echo esc_attr( $sl[1] ); ?>"><?php echo esc_html( $sl[0] ); ?></span>
 		<b><?php echo esc_html( $t['title'] ); ?></b>
+		<?php if ( sap_nudge_open( $t ) ) : ?><span class="sap-chip is-warn">📣 منتظر پاسخ</span><?php endif; ?>
 		<?php if ( $fresh ) : ?><span class="sap-chip is-good" title="امروز گزارش روزانه ثبت شده">🗒️ گزارش امروز</span><?php elseif ( $ps['count'] ) : ?><span class="sap-chip is-soft">🗒️ <?php echo esc_html( sap_num( $ps['count'] ) ); ?></span><?php endif; ?>
 		<?php if ( '' !== $t['repeat_every'] ) : ?><span class="sap-chip is-rec">🔁 <?php echo esc_html( sap_repeat_options()[ $t['repeat_every'] ] ?? '' ); ?></span><?php endif; ?>
 		<?php if ( $show_project ) : ?><span class="sap-ptag" style="--c:<?php echo esc_attr( sap_member_color( $t['project_id'] + 3 ) ); ?>"><?php echo esc_html( sap_project( $t['project_id'] )['name'] ?? '' ); ?></span><?php endif; ?>
@@ -32,6 +33,7 @@ $show_project = $show_project ?? true;
 		<small class="sap-muted"><?php echo esc_html( $t['due_date'] ? 'ددلاین ' . sap_jdate( $t['due_date'], 'day' ) : 'بدون ددلاین' ); ?></small>
 	</summary>
 	<div class="sap-pm-row-body">
+		<?php if ( sap_can_nudge( $t ) ) : ?><div class="sap-tnudge"><?php sap_view( 'nudge-btn', array( 't' => $t ) ); ?></div><?php endif; ?>
 		<?php if ( $ps['blocked'] ) : ?><p class="sap-tnote is-bad"><b>⚠️ گیر کرده:</b> <?php echo esc_html( $t['waiting_for'] ); ?></p><?php endif; ?>
 		<?php if ( $prog ) : ?>
 			<ul class="sap-pm-check"><?php foreach ( $t['checklist'] as $it ) : ?><li class="<?php echo $it['d'] ? 'is-done' : ''; ?>"><?php echo $it['d'] ? '✔' : '○'; ?> <?php echo esc_html( $it['t'] ); ?> <?php echo sap_checklist_due_tag( $it ); // phpcs:ignore ?></li><?php endforeach; ?></ul>

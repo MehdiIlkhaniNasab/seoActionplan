@@ -51,6 +51,7 @@ $flow    = array( 'next' => 'اقدام بعدی', 'doing' => 'در حال ان�
 			<?php if ( '' !== $t['repeat_every'] ) : ?><span class="sap-chip is-rec" title="بعد از تأیید، نوبت بعدی خودکار ساخته می‌شود">🔁 <?php echo esc_html( sap_repeat_options()[ $t['repeat_every'] ] ?? '' ); ?></span><?php endif; ?>
 			<?php if ( sap_is_client_request( $t ) ) : ?><span class="sap-chip is-warn">🧑‍💼 درخواست کارفرما</span><?php endif; ?>
 			<?php echo sap_client_chip( $t ); // phpcs:ignore ?>
+			<?php if ( sap_nudge_open( $t ) ) : ?><span class="sap-chip is-warn" title="یادآوری فرستاده شده و هنوز گزارشی نیامده">📣 منتظر پاسخ</span><?php endif; ?>
 			<?php if ( $psum['blocked'] ) : ?><span class="sap-chip is-bad" title="<?php echo esc_attr( $t['waiting_for'] ); ?>">⚠️ گیر کرده</span><?php endif; ?>
 			<?php if ( null !== $odays && $odays >= sap_long_days() ) : ?><span class="sap-chip is-warn" title="روز از شروع کار"><?php echo esc_html( sap_num( $odays ) ); ?> روز باز</span><?php endif; ?>
 			<?php if ( $psum['count'] ) : ?><span class="sap-chip is-soft" title="گزارش روزانه">🗒️ <?php echo esc_html( sap_num( $psum['count'] ) ); ?></span><?php endif; ?>
@@ -142,6 +143,8 @@ $flow    = array( 'next' => 'اقدام بعدی', 'doing' => 'در حال ان�
 				<?php endif; ?>
 			</form>
 		<?php endif; ?>
+
+		<?php if ( sap_can_nudge( $t ) ) : ?><div class="sap-tnudge"><?php sap_view( 'nudge-btn', array( 't' => $t ) ); ?></div><?php endif; ?>
 
 		<?php sap_view( 'comments', array( 'type' => 'task', 'object_id' => $t['id'], 'project_id' => $t['project_id'] ) ); ?>
 

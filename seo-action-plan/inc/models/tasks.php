@@ -53,6 +53,9 @@ function sap_task_hydrate( $row ) {
 	$row['started_at']   = (string) ( $row['started_at'] ?? '' );
 	$row['repeat_every'] = (string) ( $row['repeat_every'] ?? '' );
 	$row['repeat_next']  = (int) ( $row['repeat_next'] ?? 0 );
+	$row['nudged_at']    = (string) ( $row['nudged_at'] ?? '' );
+	$row['nudged_by']    = (int) ( $row['nudged_by'] ?? 0 );
+	$row['nudge_note']   = (string) ( $row['nudge_note'] ?? '' );
 	$row['needs_client']  = (int) ( $row['needs_client'] ?? 0 );
 	foreach ( array( 'notes', 'result', 'url', 'waiting_for', 'keyword', 'period', 'recurring', 'source', 'ai_ref', 'ai_output', 'outcome', 'client_status', 'client_note', 'client_link' ) as $k ) {
 		$row[ $k ] = (string) ( $row[ $k ] ?? '' );
@@ -149,7 +152,13 @@ function sap_task_save( $data, $id = 0 ) {
 	if ( array_key_exists( 'progress', $data ) ) {
 		$fields['progress'] = $data['progress'] ? wp_json_encode( array_values( (array) $data['progress'] ), JSON_UNESCAPED_UNICODE ) : null;
 	}
-	foreach ( array( 'submitted_at', 'late_alert', 'started_at' ) as $dk ) {
+	if ( array_key_exists( 'nudge_note', $data ) ) {
+		$fields['nudge_note'] = sanitize_textarea_field( (string) $data['nudge_note'] );
+	}
+	if ( array_key_exists( 'nudged_by', $data ) ) {
+		$fields['nudged_by'] = absint( $data['nudged_by'] );
+	}
+	foreach ( array( 'submitted_at', 'late_alert', 'started_at', 'nudged_at' ) as $dk ) {
 		if ( array_key_exists( $dk, $data ) ) {
 			$fields[ $dk ] = $data[ $dk ] ?: null;
 		}

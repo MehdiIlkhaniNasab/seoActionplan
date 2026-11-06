@@ -104,8 +104,12 @@ foreach ( $mine as $t ) {
 			<div class="sap-panel-head"><h2><?php echo sap_icon( 'grid' ); // phpcs:ignore ?>پروژه‌ها</h2></div>
 			<ul class="sap-pm-projects">
 				<?php foreach ( $projects as $p ) : ?>
-					<?php $open = count( sap_tasks( array( 'project_id' => $p['id'], 'status' => array( 'inbox', 'next', 'doing', 'waiting' ) ) ) ); ?>
-					<li><i class="sap-dot" style="background:<?php echo esc_attr( sap_member_color( $p['id'] + 3 ) ); ?>"></i><b><?php echo esc_html( $p['name'] ); ?></b><small dir="ltr"><?php echo esc_html( sap_clean_domain( $p['site_url'] ) ); ?></small><em><?php echo esc_html( sap_num( $open ) ); ?> کار باز</em></li>
+					<?php
+					$open = count( array_filter( $mine, function ( $t ) use ( $p ) {
+						return $t['project_id'] === (int) $p['id'] && in_array( $t['status'], array( 'inbox', 'next', 'doing', 'waiting' ), true );
+					} ) );
+					?>
+					<li><a href="<?php echo esc_url( sap_url( 'pmp', array( 'p' => $p['id'] ) ) ); ?>" class="sap-pm-plink"><i class="sap-dot" style="background:<?php echo esc_attr( sap_member_color( $p['id'] + 3 ) ); ?>"></i><b><?php echo esc_html( $p['name'] ); ?></b><small dir="ltr"><?php echo esc_html( sap_clean_domain( $p['site_url'] ) ); ?></small><em><?php echo esc_html( sap_num( $open ) ); ?> کار باز شما</em></a></li>
 				<?php endforeach; ?>
 			</ul>
 		</section>
@@ -114,7 +118,11 @@ foreach ( $mine as $t ) {
 			<ul class="sap-pm-people">
 				<?php foreach ( $users as $u ) : ?>
 					<?php $m = sap_member( $u->ID ); ?>
-					<li><?php echo sap_avatar( $u->ID, 34 ); // phpcs:ignore ?><div><b><?php echo esc_html( $m['name'] ); ?></b><small><?php echo esc_html( $m['title'] ?: ( sap_roles_sokan()[ $m['role'] ] ?? '' ) ); ?></small></div><em><?php echo esc_html( sap_num( count( sap_member_open_tasks( $u->ID ) ) ) ); ?> کار</em></li>
+					<li><?php echo sap_avatar( $u->ID, 34 ); // phpcs:ignore ?><div><b><?php echo esc_html( $m['name'] ); ?></b><small><?php echo esc_html( $m['title'] ?: ( sap_roles_sokan()[ $m['role'] ] ?? '' ) ); ?></small></div><?php
+					$given = count( array_filter( $mine, function ( $t ) use ( $u ) {
+						return $t['assignee'] === (int) $u->ID && in_array( $t['status'], array( 'inbox', 'next', 'doing', 'waiting', 'review' ), true );
+					} ) );
+					?><em title="کارهای باز که شما به او سپرده‌اید"><?php echo esc_html( sap_num( $given ) ); ?> کار از شما</em></li>
 				<?php endforeach; ?>
 			</ul>
 		</section>

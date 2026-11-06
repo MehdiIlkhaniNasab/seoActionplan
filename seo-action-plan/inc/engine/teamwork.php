@@ -540,6 +540,79 @@ function sap_pm_today_reports( $uid = 0 ) {
 }
 
 /* ---------------------------------------------------------------------------
+ * Reminder: ask the person for a status report
+ * ------------------------------------------------------------------------- */
+
+/**
+ * Who may send a reminder on a task: full managers, and the project manager who assigned it.
+ */
+function sap_can_nudge( $t ) {
+	return $t && $t['assignee'] && ! in_array( $t['status'], array( 'done', 'dropped', 'proposed' ), true )
+		&& ( sap_can() || ( sap_is_pm() && (int) $t['created_by'] === get_current_user_id() ) )
+		&& (int) $t['assignee'] !== get_current_user_id();
+}
+
+/**
+ * A reminder that is still waiting for an answer (no daily report or final report since).
+ */
+function sap_nudge_open( $t ) {
+	if ( '' === $t['nudged_at'] || in_array( $t['status'], array( 'done', 'dropped', 'review' ), true ) ) {
+		return false;
+	}
+	$last = $t['progress'] ? (string) end( $t['progress'] )['at'] : '';
+	return $last < $t['nudged_at'];
+}
+
+/**
+ * Send the reminder: an in-app notification and an email asking for a status report.
+ *
+ * @return array|WP_Error
+ */
+function sap_task_nudge( $t, $note = '' ) {
+	if ( ! sap_can_nudge( $t ) ) {
+		return new WP_Error( 'sap_nudge', 'برای این کار نمی‌توانید یادآوری بفرستید (کار بسته شده، مسئول ندارد یا شما آن را واگذار نکرده‌اید).', array( 'status' => 403 ) );
+	}
+	if ( '' !== $t['nudged_at'] && strtotime( $t['nudged_at'] ) > strtotime( sap_now() ) - 10 * MINUTE_IN_SECONDS ) {
+		return new WP_Error( 'sap_nudge', 'همین چند دقیقه پیش یادآوری فرستاده شد؛ کمی بعد دوباره امتحان کنید.' );
+	}
+	$note = trim( sanitize_textarea_field( (string) $note ) );
+	$me   = get_current_user_id();
+	sap_task_save( array( 'nudged_at' => sap_now(), 'nudged_by' => $me, 'nudge_note' => $note ), $t['id'] );
+	$m     = sap_member( $t['assignee'] );
+	$p     = sap_project( $t['project_id'] );
+	$who   = sap_user_name( $me );
+	$link  = sap_url( 'my' ) . '#task-' . $t['id'];
+	$days  = sap_task_open_days( $t );
+	sap_notice_add( $t['assignee'], array(
+		'icon'  => '📣',
+		'title' => $who . ' وضعیت کار «' . $t['title'] . '» را می‌خواهد',
+		'text'  => '' !== $note ? $note : 'لطفاً در «گزارش‌های روزانه» همین کار بنویس به کجا رسیده و اگر گیر کرده، علتش چیست.',
+		'url'   => $link,
+	) );
+	$mail = false;
+	if ( $m && $m['notify_email'] ) {
+		$mail = (bool) sap_notify_email( $m['email'], '📣 ' . sap_first_name( $m['name'] ) . ' عزیز، گزارش وضعیت «' . mb_substr( $t['title'], 0, 60 ) . '» را بفرست', array(
+			'title'     => 'یادآوری: این کار به کجا رسید؟',
+			'badge'     => '📣 درخواست گزارش وضعیت · ' . ( $p['name'] ?? '' ),
+			'tone'      => '#D97706',
+			'preheader' => '' !== $note ? mb_substr( $note, 0, 120 ) : $who . ' وضعیت این کار را می‌خواهد.',
+			'intro'     => $m['name'] . ' عزیز، ' . $who . ' وضعیت کار زیر را خواسته. در پنل، روی همین کار «ثبت گزارش امروز» را بزن و بنویس چه کرده‌ای و اگر گیر کرده، علتش چیست. اگر تمام شده، گزارش نهایی را ثبت کن.',
+			'rows'      => array_filter( array(
+				'کار'            => $t['title'],
+				'پروژه'          => $p['name'] ?? '',
+				'ددلاین'         => $t['due_date'] ? sap_jdate( $t['due_date'] ) : '—',
+				'وضعیت فعلی'     => sap_task_statuses()[ $t['status'] ] ?? $t['status'],
+				'از شروع'        => null !== $days ? sap_num( $days ) . ' روز' : '',
+				'پیام ' . $who   => $note,
+			) ),
+			'button'    => array( 'ثبت گزارش وضعیت', $link ),
+		) );
+	}
+	$name = $m['name'] ?? 'مسئول';
+	return array( 'msg' => 'یادآوری برای ' . $name . ' ارسال شد (اعلان در پنل' . ( $mail ? ' + ایمیل' : '' ) . ').', 'at' => sap_jdate( substr( sap_now(), 0, 10 ), 'day' ) . ' ' . sap_fa( substr( sap_now(), 11, 5 ) ) );
+}
+
+/* ---------------------------------------------------------------------------
  * In-app notifications
  * ------------------------------------------------------------------------- */
 
@@ -768,6 +841,17 @@ function sap_threads_answered() {
  * ------------------------------------------------------------------------- */
 
 /**
+ * A task belongs in a calendar: its person is among $people (empty = all) and,
+ * with $owner, it is that user's own task or one they assigned.
+ */
+function sap_task_in_scope( $t, $people = array(), $owner = 0 ) {
+	if ( $owner && $t['assignee'] !== (int) $owner && $t['created_by'] !== (int) $owner ) {
+		return false;
+	}
+	return ! $people || in_array( $t['assignee'], $people, true );
+}
+
+/**
  * Tasks with a deadline in a Jalali month, grouped by date.
  *
  * @param string $period  «1405-08».
@@ -775,7 +859,7 @@ function sap_threads_answered() {
  * @param int[]  $people  assignees to show (empty = all; 0 = no assignee).
  * @return array date => task[]
  */
-function sap_calendar_tasks( $period, $project = 0, $people = array() ) {
+function sap_calendar_tasks( $period, $project = 0, $people = array(), $owner = 0 ) {
 	global $wpdb;
 	list( $from, $to ) = sap_period_range( $period );
 	$sql = 'SELECT * FROM ' . sap_table( 'tasks' ) . " WHERE due_date IS NOT NULL AND due_date BETWEEN %s AND %s AND status NOT IN ('dropped','proposed')";
@@ -787,7 +871,7 @@ function sap_calendar_tasks( $period, $project = 0, $people = array() ) {
 	$rows = array_map( 'sap_task_hydrate', (array) $wpdb->get_results( $wpdb->prepare( $sql . ' ORDER BY due_date ASC, id ASC', $arg ) ) ); // phpcs:ignore
 	$by   = array();
 	foreach ( $rows as $t ) {
-		if ( $people && ! in_array( $t['assignee'], $people, true ) ) {
+		if ( ! sap_task_in_scope( $t, $people, $owner ) ) {
 			continue;
 		}
 		$by[ $t['due_date'] ][] = $t;
@@ -798,7 +882,7 @@ function sap_calendar_tasks( $period, $project = 0, $people = array() ) {
 /**
  * Checklist items with their own date in a month: date => [ {task, i, item} ].
  */
-function sap_calendar_check_items( $period, $project = 0, $people = array() ) {
+function sap_calendar_check_items( $period, $project = 0, $people = array(), $owner = 0 ) {
 	global $wpdb;
 	list( $from, $to ) = sap_period_range( $period );
 	$sql = 'SELECT * FROM ' . sap_table( 'tasks' ) . " WHERE checklist LIKE %s AND status NOT IN ('dropped','proposed')";
@@ -809,7 +893,7 @@ function sap_calendar_check_items( $period, $project = 0, $people = array() ) {
 	}
 	$by = array();
 	foreach ( array_map( 'sap_task_hydrate', (array) $wpdb->get_results( $wpdb->prepare( $sql, $arg ) ) ) as $t ) { // phpcs:ignore
-		if ( $people && ! in_array( $t['assignee'], $people, true ) ) {
+		if ( ! sap_task_in_scope( $t, $people, $owner ) ) {
 			continue;
 		}
 		foreach ( $t['checklist'] as $i => $it ) {
@@ -856,6 +940,18 @@ add_action( 'rest_api_init', function () {
 				return $t;
 			}
 			$r = sap_task_progress_add( $t, (string) $req->get_param( 'text' ), sanitize_key( (string) $req->get_param( 'state' ) ), (string) $req->get_param( 'why' ) );
+			return is_wp_error( $r ) ? $r : array_merge( array( 'ok' => true ), $r );
+		},
+	) );
+	register_rest_route( $ns, '/task/(?P<id>\d+)/nudge', array(
+		'methods'             => 'POST',
+		'permission_callback' => 'sap_can_work',
+		'callback'            => function ( WP_REST_Request $req ) {
+			$t = sap_task( (int) $req['id'] );
+			if ( ! $t ) {
+				return new WP_Error( 'sap_task', 'کار پیدا نشد.', array( 'status' => 404 ) );
+			}
+			$r = sap_task_nudge( $t, (string) $req->get_param( 'note' ) );
 			return is_wp_error( $r ) ? $r : array_merge( array( 'ok' => true ), $r );
 		},
 	) );

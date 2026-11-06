@@ -18,6 +18,15 @@ $picked  = isset( $_GET['u'] ) ? array_map( 'intval', (array) wp_unslash( $_GET[
 // Who is looking: full manager (everything, add tasks), project manager (everything, read only), member (own tasks only).
 $mode    = sap_can() ? 'full' : ( sap_is_pm() ? 'pm' : 'member' );
 $me      = get_current_user_id();
+if ( 'pm' === $mode ) {
+	// The people filter lists only those this project manager gave tasks to (and themselves).
+	global $wpdb;
+	$given = array_map( 'intval', (array) $wpdb->get_col( $wpdb->prepare( 'SELECT DISTINCT assignee FROM ' . sap_table( 'tasks' ) . ' WHERE created_by = %d', $me ) ) ); // phpcs:ignore
+	$given[] = $me;
+	$all_u   = array_values( array_filter( $all_u, function ( $u ) use ( $given ) {
+		return in_array( (int) $u->ID, $given, true );
+	} ) );
+}
 $filter  = isset( $_GET['f'] ) ? ( $picked ?: array( -1 ) ) : array(); // phpcs:ignore WordPress.Security.NonceVerification
 if ( count( array_intersect( array_merge( array( 0 ), array_map( 'intval', wp_list_pluck( $all_u, 'ID' ) ) ), $filter ) ) === count( $all_u ) + 1 ) {
 	$filter = array(); // Everyone ticked = no filter.
@@ -25,14 +34,16 @@ if ( count( array_intersect( array_merge( array( 0 ), array_map( 'intval', wp_li
 if ( 'member' === $mode ) {
 	$filter = array( $me );
 }
-$by_day  = sap_calendar_tasks( $period, $pid, $filter );
-$by_item = sap_calendar_check_items( $period, $pid, $filter );
+// Only full managers see everyone; a project manager sees their own tasks and the ones they assigned.
+$owner   = 'pm' === $mode ? $me : 0;
+$by_day  = sap_calendar_tasks( $period, $pid, $filter, $owner );
+$by_item = sap_calendar_check_items( $period, $pid, $filter, $owner );
 // Where a chip leads, by viewer.
 $task_link = function ( $t ) use ( $mode, $me ) {
 	if ( 'full' === $mode ) {
 		return sap_project_url( $t['project_id'], 'plan', array( 'task' => $t['id'] ) ) . '#task-' . $t['id'];
 	}
-	if ( 'pm' === $mode ) {
+	if ( 'pm' === $mode && $t['created_by'] === $me ) {
 		return sap_url( 'pmp', array( 'p' => $t['project_id'] ) ) . '#t-' . $t['id'];
 	}
 	return $t['assignee'] === $me && ! in_array( $t['status'], array( 'done', 'review', 'dropped' ), true ) ? sap_url( 'my' ) . '#task-' . $t['id'] : '';
@@ -42,9 +53,9 @@ list( $jy, $jm ) = array_map( 'intval', explode( '-', $period ) );
 $days    = sap_jmonth_days( $jy, $jm );
 list( $start ) = sap_period_range( $period );
 $projects = sap_projects();
-if ( 'member' === $mode ) {
+if ( 'full' !== $mode ) {
 	global $wpdb;
-	$mine_p   = array_map( 'intval', (array) $wpdb->get_col( $wpdb->prepare( 'SELECT DISTINCT project_id FROM ' . sap_table( 'tasks' ) . ' WHERE assignee = %d', $me ) ) ); // phpcs:ignore
+	$mine_p   = array_map( 'intval', (array) $wpdb->get_col( $wpdb->prepare( 'SELECT DISTINCT project_id FROM ' . sap_table( 'tasks' ) . ' WHERE assignee = %d OR ( %s = %s AND created_by = %d )', $me, $mode, 'pm', $me ) ) ); // phpcs:ignore
 	$projects = array_values( array_filter( $projects, function ( $p ) use ( $mine_p ) {
 		return in_array( (int) $p['id'], $mine_p, true );
 	} ) );
@@ -75,8 +86,8 @@ $is_on      = function ( $uid ) use ( $filter ) {
 <header class="sap-head">
 	<div>
 		<p class="sap-eyebrow">سُکان · <?php echo 'member' === $mode ? 'تقویم من' : ( 'pm' === $mode ? 'مدیر پروژه' : 'میز کار' ); ?></p>
-		<h1><?php echo 'member' === $mode ? 'تقویم کارهای من' : 'تقویم کارهای'; ?> · <?php echo esc_html( sap_period_label( $period ) ); ?></h1>
-		<p class="sap-muted"><?php echo 'member' === $mode ? 'کارهای این ماهت روز به روز: انجام‌شده‌ها خط خورده‌اند. ماه‌های قبل را هم از بالا ببین.' : 'همه کارهای ددلاین‌دار این ماه و موارد تاریخ‌دار چک‌لیست‌ها، روز به روز. روزهای خلوت را ببینید' . ( 'full' === $mode ? ' و کار برایشان بگذارید.' : '.' ); ?></p>
+		<h1><?php echo 'full' === $mode ? 'تقویم کارهای' : 'تقویم کارهای من'; ?> · <?php echo esc_html( sap_period_label( $period ) ); ?></h1>
+		<p class="sap-muted"><?php echo 'member' === $mode ? 'کارهای این ماهت روز به روز: انجام‌شده‌ها خط خورده‌اند. ماه‌های قبل را هم از بالا ببین.' : ( 'pm' === $mode ? 'کارهایی که واگذار کرده‌اید (و کارهای خودتان) روز به روز: انجام‌شده، در حال انجام، عقب‌افتاده و منتظر تأیید.' : 'همه کارهای ددلاین‌دار این ماه و موارد تاریخ‌دار چک‌لیست‌ها، روز به روز. روزهای خلوت را ببینید و کار برایشان بگذارید.' ); ?></p>
 	</div>
 	<div class="sap-cal-nav">
 		<a class="sap-btn is-ghost is-small" href="<?php echo esc_url( add_query_arg( 'period', sap_period_shift( $period, -1 ) ) ); ?>">‹ <?php echo esc_html( sap_period_label( sap_period_shift( $period, -1 ) ) ); ?></a>

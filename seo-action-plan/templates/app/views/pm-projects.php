@@ -16,6 +16,24 @@ $period   = isset( $_GET['period'] ) ? sanitize_text_field( wp_unslash( $_GET['p
 $period   = 'all' === $period ? 'all' : sap_period_sanitize( $period );
 $who      = absint( $_GET['who'] ?? 0 );
 // phpcs:enable
+// A project manager follows only the tasks they assigned; full managers see every task.
+$mine_only = ! sap_can();
+$me        = get_current_user_id();
+$scope     = function ( $ts ) use ( $mine_only, $me ) {
+	return $mine_only ? array_values( array_filter( $ts, function ( $t ) use ( $me ) {
+		return $t['created_by'] === $me;
+	} ) ) : $ts;
+};
+if ( $mine_only ) {
+	global $wpdb;
+	$mine_p   = array_map( 'intval', (array) $wpdb->get_col( $wpdb->prepare( 'SELECT DISTINCT project_id FROM ' . sap_table( 'tasks' ) . ' WHERE created_by = %d', $me ) ) ); // phpcs:ignore
+	$projects = array_values( array_filter( $projects, function ( $p ) use ( $mine_p ) {
+		return in_array( (int) $p['id'], $mine_p, true );
+	} ) );
+	if ( $pid && ! in_array( $pid, $mine_p, true ) ) {
+		$pid = 0;
+	}
+}
 if ( ! $pid && $projects ) {
 	$pid = (int) $projects[0]['id'];
 }
@@ -24,7 +42,7 @@ $project = $pid ? sap_project( $pid ) : null;
 // Counts per project (this month's open tasks) for the project list.
 $side = array();
 foreach ( $projects as $p ) {
-	$ts = sap_tasks( array( 'project_id' => $p['id'], 'period' => 'all' === $period ? '' : $period ) );
+	$ts = $scope( sap_tasks( array( 'project_id' => $p['id'], 'period' => 'all' === $period ? '' : $period ) ) );
 	$ts = array_filter( $ts, function ( $t ) {
 		return ! in_array( $t['status'], array( 'dropped' ), true );
 	} );
@@ -39,7 +57,7 @@ foreach ( $projects as $p ) {
 	);
 }
 
-$tasks = $project ? sap_tasks( array( 'project_id' => $pid, 'period' => 'all' === $period ? '' : $period ) ) : array();
+$tasks = $project ? $scope( sap_tasks( array( 'project_id' => $pid, 'period' => 'all' === $period ? '' : $period ) ) ) : array();
 $tasks = array_values( array_filter( $tasks, function ( $t ) use ( $who ) {
 	return 'dropped' !== $t['status'] && ( ! $who || $t['assignee'] === $who );
 } ) );
@@ -56,7 +74,7 @@ foreach ( $tasks as $t ) {
 		++$counts[ $b ];
 	}
 }
-foreach ( $project ? sap_tasks( array( 'project_id' => $pid ) ) : array() as $t ) {
+foreach ( $project ? $scope( sap_tasks( array( 'project_id' => $pid ) ) ) : array() as $t ) {
 	if ( $t['assignee'] ) {
 		$people[ $t['assignee'] ] = true;
 	}
@@ -69,7 +87,7 @@ $tabs = array( 'all' => 'همه', 'open' => 'در جریان', 'late' => 'عقب
 	<div>
 		<p class="sap-eyebrow">سُکان · مدیر پروژه</p>
 		<h1>پروژه‌ها</h1>
-		<p class="sap-muted">همه کارهای هر پروژه در یک نگاه: چه چیزی در جریان است، کدام عقب افتاده یا گیر کرده، چه چیزی منتظر تأیید است و چه کارهایی انجام شده.</p>
+		<p class="sap-muted"><?php echo $mine_only ? 'کارهایی که در هر پروژه واگذار کرده‌اید، در یک نگاه: چه چیزی در جریان است، کدام عقب افتاده یا گیر کرده، چه چیزی منتظر تأیید شماست و چه کارهایی انجام شده.' : 'همه کارهای هر پروژه در یک نگاه: چه چیزی در جریان است، کدام عقب افتاده یا گیر کرده، چه چیزی منتظر تأیید است و چه کارهایی انجام شده.'; ?></p>
 	</div>
 </header>
 
@@ -88,7 +106,7 @@ $tabs = array( 'all' => 'همه', 'open' => 'در جریان', 'late' => 'عقب
 
 	<section class="sap-pmp-main">
 		<?php if ( ! $project ) : ?>
-			<div class="sap-empty"><p>پروژه‌ای وجود ندارد.</p></div>
+			<div class="sap-empty"><p><?php echo $mine_only ? 'هنوز کاری واگذار نکرده‌اید. از «میز کار مدیر پروژه» کار ثبت کنید؛ بعد از تأیید، اینجا پیگیری‌اش می‌کنید.' : 'پروژه‌ای وجود ندارد.'; ?></p></div>
 		<?php else : ?>
 			<div class="sap-pmp-top">
 				<div>

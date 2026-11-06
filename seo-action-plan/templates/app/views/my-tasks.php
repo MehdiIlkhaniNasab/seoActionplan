@@ -197,6 +197,13 @@ $guide = function ( $notes ) {
 							</ul>
 						</div>
 					<?php endif; ?>
+					<?php if ( sap_nudge_open( $t ) ) : ?>
+						<div class="sap-nudge-banner">
+							<b>📣 <?php echo esc_html( sap_user_name( $t['nudged_by'] ) ?: 'مدیر' ); ?> وضعیت این کار را خواسته</b>
+							<?php if ( '' !== $t['nudge_note'] ) : ?><p><?php echo esc_html( $t['nudge_note'] ); ?></p><?php endif; ?>
+							<small>همین پایین در «گزارش‌های روزانه» بنویس به کجا رسیده‌ای (یا اگر گیر کرده‌ای، علتش را). اگر تمام شده، گزارش نهایی را ثبت کن.</small>
+						</div>
+					<?php endif; ?>
 					<?php sap_view( 'progress-log', array( 't' => $t, 'form' => true ) ); ?>
 					<?php if ( $qs ) : ?>
 						<div class="sap-mytask-qs">

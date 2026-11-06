@@ -2686,4 +2686,51 @@
 			setTimeout(function () { location.reload(); }, 700);
 		}).catch(function (e) { toast(e.message, true); btn.disabled = false; btn.classList.remove('is-loading'); });
 	});
+
+	/* ---- Reminder: ask the person for a status report (notification + email) ---- */
+	(function () {
+		var pop = null;
+		var close = function () { if (pop) { pop.remove(); pop = null; } };
+		document.addEventListener('click', function (ev) {
+			var b = ev.target.closest('[data-sap-nudge]');
+			if (b) {
+				ev.preventDefault();
+				ev.stopPropagation();
+				close();
+				pop = document.createElement('div');
+				pop.className = 'sap-nudge-pop';
+				pop.innerHTML = '<b>📣 یادآوری به ' + (b.getAttribute('data-name') || 'مسئول') + '</b><small>اعلان در پنل و ایمیل می‌رود تا وضعیت این کار را گزارش کند.</small><textarea rows="3" placeholder="پیام کوتاه (اختیاری)؛ مثلاً: تا فردا ظهر وضعیت اینماد را بگو."></textarea><div><button type="button" class="sap-btn is-primary is-small" data-sap-nudge-send>ارسال یادآوری</button><button type="button" class="sap-btn is-ghost is-small" data-sap-nudge-cancel>انصراف</button></div>';
+				document.body.appendChild(pop);
+				var r = b.getBoundingClientRect();
+				var left = Math.max(8, Math.min(r.right + window.scrollX - pop.offsetWidth, window.innerWidth - pop.offsetWidth - 8));
+				var top = r.bottom + window.scrollY + 6;
+				if (r.bottom + pop.offsetHeight + 12 > window.innerHeight && r.top > pop.offsetHeight + 12) { top = r.top + window.scrollY - pop.offsetHeight - 6; }
+				pop.style.left = left + 'px';
+				pop.style.top = top + 'px';
+				pop._btn = b;
+				pop.querySelector('textarea').focus();
+				return;
+			}
+			if (!pop) { return; }
+			if (ev.target.closest('[data-sap-nudge-cancel]')) { close(); return; }
+			var send = ev.target.closest('[data-sap-nudge-send]');
+			if (send) {
+				var btn = pop._btn;
+				send.disabled = true;
+				send.classList.add('is-loading');
+				post('task/' + btn.getAttribute('data-sap-nudge') + '/nudge', { note: pop.querySelector('textarea').value }).then(function (res) {
+					toast(res.msg);
+					close();
+					btn.disabled = true;
+					btn.textContent = '✓ یادآوری ارسال شد';
+					var st = btn.parentNode.querySelector('[data-sap-nudge-state]');
+					if (!st && !btn.parentNode.classList.contains('is-compact')) { st = document.createElement('small'); st.setAttribute('data-sap-nudge-state', ''); btn.parentNode.appendChild(st); }
+					if (st) { st.textContent = 'آخرین یادآوری: ' + res.at + ' · منتظر پاسخ'; st.className = 'sap-nudge-state is-wait'; }
+				}).catch(function (e) { toast(e.message, true); send.disabled = false; send.classList.remove('is-loading'); });
+				return;
+			}
+			if (!pop.contains(ev.target)) { close(); }
+		}, true);
+		document.addEventListener('keydown', function (ev) { if (ev.key === 'Escape') { close(); } });
+	})();
 })();
