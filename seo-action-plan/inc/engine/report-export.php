@@ -261,7 +261,7 @@ function sap_report_action_plan( $project, $period, $m = null ) {
 		$impact[ $i['ref'] ?? '' ] = $i;
 	}
 	$verdicts = sap_impact_verdicts();
-	$sources  = array( 'ai' => 'تحلیل هوشمند', 'finding' => 'پیشنهاد تأییدشده', 'auto' => 'قانون خودکار', 'custom' => 'کار سفارشی (هوش مصنوعی)', 'recurring' => 'کار تکراری', 'manual' => 'دستی' );
+	$sources  = array( 'ai' => 'تحلیل هوشمند', 'finding' => 'پیشنهاد تأییدشده', 'auto' => 'قانون خودکار', 'custom' => 'کار سفارشی (هوش مصنوعی)', 'recurring' => 'کار تکراری', 'manual' => 'دستی', 'nakhoda' => 'ناخدا (فروش)' );
 	$group    = array( 'done' => 'done', 'doing' => 'doing', 'waiting' => 'doing', 'inbox' => 'todo', 'next' => 'todo', 'someday' => 'deferred', 'dropped' => 'dropped' );
 	$today    = current_time( 'Y-m-d' );
 	$items    = array();

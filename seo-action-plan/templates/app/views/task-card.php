@@ -48,6 +48,7 @@ $flow    = array( 'next' => 'اقدام بعدی', 'doing' => 'در حال ان�
 			<?php if ( 'review' === $t['status'] ) : ?><span class="sap-chip is-info">منتظر تأیید</span><?php endif; ?>
 			<?php if ( '' !== $t['review_note'] && 'doing' === $t['status'] ) : ?><span class="sap-chip is-warn">برگشت با بازخورد</span><?php endif; ?>
 			<?php if ( $t['recurring'] ) : ?><span class="sap-chip is-rec">دوره‌ای</span><?php endif; ?>
+			<?php if ( 'nakhoda' === $t['source'] ) : ?><span class="sap-chip is-nakhoda" title="پیشنهاد ناخدا بر پایه فروش">ناخدا · فروش</span><?php endif; ?>
 			<?php if ( '' !== $t['repeat_every'] ) : ?><span class="sap-chip is-rec" title="بعد از تأیید، نوبت بعدی خودکار ساخته می‌شود">🔁 <?php echo esc_html( sap_repeat_options()[ $t['repeat_every'] ] ?? '' ); ?></span><?php endif; ?>
 			<?php if ( sap_is_client_request( $t ) ) : ?><span class="sap-chip is-warn">🧑‍💼 درخواست کارفرما</span><?php endif; ?>
 			<?php echo sap_client_chip( $t ); // phpcs:ignore ?>
