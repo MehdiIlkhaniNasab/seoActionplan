@@ -151,16 +151,16 @@ if (-not $Found) { exit 1 }
 
 $out = Join-Path $env:TEMP ("sokan-crawl-" + (Get-Date -Format "yyyyMMdd-HHmmss"))
 New-Item -ItemType Directory -Path $out | Out-Null
-$base = @("--headless", "--output-folder", $out, "--export-tabs", "Internal:All", "--overwrite")
+$sfBase = @("--headless", "--output-folder", $out, "--export-tabs", "Internal:All", "--overwrite")
 if ($Mode -eq "full") {
-  $base = @("--crawl", $Site) + $base
+  $sfBase = @("--crawl", $Site) + $sfBase
 } else {
   $list = Join-Path $out "urls.txt"
   Invoke-WebRequest -Uri "$Base/urls" -Headers $Headers -OutFile $list -UseBasicParsing
   Write-Host "[Sokan] Important URLs: $((Get-Content $list).Count)"
-  $base = @("--crawl-list", $list) + $base
+  $sfBase = @("--crawl-list", $list) + $sfBase
 }
-if ($Config) { $base += @("--config", $Config) }
+if ($Config) { $sfBase += @("--config", $Config) }
 # Extra exports: every internal link with its position (body / menu / footer / sidebar) and the redirects report.
 # Names differ between SEO Spider versions, so older names are tried when a version rejects the new ones.
 $extras = @(
@@ -172,7 +172,7 @@ Send-Ping "crawling"
 $csv = Join-Path $out "internal_all.csv"
 foreach ($ex in $extras) {
   Write-Host "[Sokan] Crawling ($Mode) $($ex -join ' ') ..."
-  $sfArgs = $base + $ex
+  $sfArgs = $sfBase + $ex
   & $SpiderPath @sfArgs
   if (Test-Path $csv) { break }
   Write-Warning "SEO Spider did not produce internal_all.csv with these export names; trying the next set."
