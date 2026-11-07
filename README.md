@@ -10,6 +10,7 @@
   «تأیید و واگذاری» = کارفرما پیام «کار شروع شد 🚀» می‌گیرد؛ «انجام شد» = درخواست در پایلوت بسته و در تایم‌لاین ثبت می‌شود؛ «رد» = درخواست بسته می‌شود.
 - **API برای پایلوتِ روی وردپرس دیگر** (با همان کلید API گزارش پروژه، هدر `X-SAP-Key`):
   `POST /wp-json/seoactionplan/v1/client/{project}/request`، `GET …/client/{project}/sync?ids=`، `POST …/client/{project}/task/{id}/flag`، `POST …/client/{project}/task/{id}/approval`.
+- **۰٫۲۶٫۲ — نمای کارفرما از Focusها:** `sap_client_insights()` و `GET …/client/{project}/insights`: اعضای تیم پروژه با نقش، هر Focus فعال با هدف و KPI، کلمات نقشه کلمات، صفحه‌ها، کارهای باز و انجام‌شده با مسئول، و قوی‌ترین یافته‌های باز (برای کارت‌های «فرصت رشد» پایلوت).
 - پایلوت روی همین وردپرس بدون تنظیم اضافه وصل است (رویدادهای `sap_client_approval_requested` / `sap_client_approval_withdrawn` و تابع `sap_task_client_status()`).
 
 ## تازه‌های نسخه ۰٫۲۰ — گردش کار تیمی حرفه‌ای

@@ -205,6 +205,149 @@ function sap_client_sync_payload( $project, $ids = array() ) {
 	);
 }
 
+/**
+ * What the client portal shows of a project beyond single tasks: the team with
+ * their roles, every active focus (goal, KPI, keyword map, its tasks with the
+ * person doing them) and the strongest open findings (for growth ideas).
+ * Internal categories and notes never leave Sokan.
+ */
+function sap_client_insights( $project ) {
+	$pid     = (int) $project['id'];
+	$roles   = sap_member_roles();
+	$members = sap_project_members( $pid );
+	$people  = array();
+	$person  = function ( $uid, $role = '' ) use ( &$people, $roles ) {
+		$uid = (int) $uid;
+		if ( ! $uid || isset( $people[ $uid ] ) ) {
+			return;
+		}
+		$m = sap_member( $uid );
+		if ( ! $m ) {
+			return;
+		}
+		$people[ $uid ] = array(
+			'id'         => $uid,
+			'name'       => $m['name'],
+			'email'      => $m['email'],
+			'role'       => $role,
+			'role_label' => $roles[ $role ] ?? ( $m['manager'] ? 'مدیر سئو' : '' ),
+			'title'      => $m['title'],
+			'avatar'     => get_avatar_url( $uid, array( 'size' => 96 ) ),
+			'manager'    => (bool) $m['manager'],
+		);
+	};
+	foreach ( $members as $uid => $role ) {
+		$person( $uid, $role );
+	}
+	$period = sap_period_current();
+	$tasks  = sap_tasks( array( 'project_id' => $pid, 'status' => array( 'next', 'doing', 'waiting', 'review', 'done' ) ) );
+	foreach ( $tasks as $t ) {
+		$person( $t['assignee'] );
+	}
+
+	$ctx     = sap_focus_context( $pid );
+	$map     = sap_keymap( $pid );
+	$focuses = array();
+	foreach ( $ctx as $f ) {
+		$k      = sap_focus_kpis( $f, $pid );
+		$metric = $f['kpi_metric'];
+		$kws    = array();
+		$pages  = array();
+		foreach ( $map as $m ) {
+			if ( ! sap_keymap_has_kw( $m['status'] ) || '' === $m['primary_kw'] ) {
+				continue;
+			}
+			$in = (int) $m['focus_id'] === (int) $f['id'] || ( ! $m['focus_id'] && sap_focus_match( array( $f ), $m['url'], $m['primary_kw'] )[0] );
+			if ( $in ) {
+				$kws[ sap_kw_key( $m['primary_kw'] ) ] = $m['primary_kw'];
+				if ( count( $pages ) < 30 ) {
+					$pages[] = array( 'url' => $m['url'], 'title' => $m['title'] ?: sap_page_title( $pid, $m['url'] ), 'keyword' => $m['primary_kw'], 'secondary' => array_slice( (array) $m['secondary'], 0, 5 ) );
+				}
+			}
+		}
+		foreach ( $f['keywords'] as $kw ) {
+			$kws[ sap_kw_key( $kw ) ] = $kw;
+		}
+		$open = array();
+		$done = array();
+		foreach ( $tasks as $t ) {
+			if ( (int) $t['focus_id'] !== (int) $f['id'] ) {
+				continue;
+			}
+			$row = array(
+				'id'            => (int) $t['id'],
+				'title'         => $t['title'],
+				'url'           => $t['url'],
+				'status'        => $t['status'],
+				'status_label'  => sap_task_statuses()[ $t['status'] ] ?? $t['status'],
+				'assignee'      => (int) $t['assignee'],
+				'assignee_name' => sap_user_name( $t['assignee'] ),
+				'category'      => $t['context'],
+				'period'        => $t['period'],
+				'done_at'       => (string) $t['done_at'],
+				'outcome'       => (string) ( $t['outcome'] ?? '' ),
+			);
+			if ( 'done' === $t['status'] ) {
+				$done[] = $row;
+			} elseif ( $t['period'] <= sap_period_shift( $period, 1 ) ) {
+				$open[] = $row;
+			}
+		}
+		usort( $done, function ( $a, $b ) {
+			return strcmp( $b['done_at'], $a['done_at'] );
+		} );
+		$focuses[] = array(
+			'id'           => (int) $f['id'],
+			'name'         => $f['name'],
+			'goal'         => $f['goal'],
+			'metric'       => $metric,
+			'metric_label' => sap_kpi_metrics()[ $metric ] ?? $metric,
+			'baseline'     => $f['kpi_baseline'],
+			'target'       => $f['kpi_target'],
+			'current'      => $k ? $k[ $metric ] : null,
+			'progress'     => $k ? sap_focus_progress( $f, $k[ $metric ] ) : null,
+			'kpis'         => $k,
+			'deadline'     => $f['deadline'],
+			'keywords'     => array_slice( array_values( $kws ), 0, 60 ),
+			'pages'        => $pages,
+			'open'         => array_slice( $open, 0, 30 ),
+			'done'         => array_slice( $done, 0, 30 ),
+		);
+	}
+
+	$fnames   = wp_list_pluck( $ctx, 'name', 'id' );
+	$findings = array();
+	foreach ( array_slice( sap_findings( $pid, array( 'status' => 'open', 'limit' => 40 ) ), 0, 40 ) as $x ) {
+		if ( $x['task_id'] ) {
+			continue;
+		}
+		$findings[] = array(
+			'id'       => (int) $x['id'],
+			'title'    => $x['title'],
+			'detail'   => wp_trim_words( wp_strip_all_tags( (string) $x['detail'] ), 40, '…' ),
+			'category' => $x['context'],
+			'url'      => (string) $x['url'],
+			'keyword'  => (string) $x['keyword'],
+			'impact'   => (float) $x['impact'],
+			'score'    => (float) $x['score'],
+			'focus'    => $fnames[ $x['focus_id'] ] ?? '',
+		);
+		if ( count( $findings ) >= 15 ) {
+			break;
+		}
+	}
+	usort( $findings, function ( $a, $b ) {
+		return $b['score'] <=> $a['score'];
+	} );
+	return array(
+		'sokan'    => SAP_VERSION,
+		'period'   => array( 'key' => $period, 'label' => sap_period_label( $period ) ),
+		'team'     => array_values( $people ),
+		'focuses'  => $focuses,
+		'findings' => $findings,
+	);
+}
+
 add_action( 'rest_api_init', function () {
 	$ns   = 'seoactionplan/v1';
 	$perm = 'sap_rest_key_permission';
@@ -221,6 +364,16 @@ add_action( 'rest_api_init', function () {
 			$j  = (array) $req->get_json_params();
 			$id = sap_client_request_add( (int) $req['project'], $j );
 			return is_wp_error( $id ) ? $id : array( 'ok' => true, 'id' => $id, 'desk_url' => sap_url( 'desk' ) . '#client' );
+		},
+	) );
+
+	// Pilot ← team, focuses (goal, keyword map, tasks) and top findings.
+	register_rest_route( $ns, '/client/(?P<project>\d+)/insights', array(
+		'methods'             => 'GET',
+		'permission_callback' => $perm,
+		'callback'            => function ( WP_REST_Request $req ) {
+			$p = sap_project( (int) $req['project'] );
+			return $p ? sap_client_insights( $p ) : new WP_Error( 'sap_project', 'پروژه یافت نشد.', array( 'status' => 404 ) );
 		},
 	) );
 
