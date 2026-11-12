@@ -1271,7 +1271,7 @@
 			}
 			if (add) {
 				busy(add, '…');
-				post('updates/' + add.getAttribute('data-project'), { url: add.getAttribute('data-sap-update-add'), source: 'audit' }).then(function (res) { toast(res.msg); add.textContent = '✓ در تقویم'; }).catch(function (e) { toast(e.message, true); idle(add); });
+				post('updates/' + add.getAttribute('data-project'), { url: add.getAttribute('data-sap-update-add'), source: 'audit', force: add.hasAttribute('data-force') }).then(function (res) { toast(res.msg); add.textContent = '✓ در تقویم'; }).catch(function (e) { toast(e.message, true); idle(add); });
 			}
 			if (bulk) {
 				var urls = picked();

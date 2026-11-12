@@ -1057,7 +1057,7 @@ details > .sap-months { margin-top: 12px; }
 .sap-tab-count { font-style: normal; font-size: 11px; font-weight: 800; min-width: 20px; height: 20px; padding: 0 6px; border-radius: 99px; background: #F59E0B; color: #fff; display: inline-grid; place-items: center; margin-inline-start: 4px; }
 .sap-chip.is-soft { background: #EEF4FF; color: #1D4ED8 !important; }
 .sap-pillar-head { display: flex; gap: 22px; align-items: stretch; flex-wrap: wrap; }
-.sap-pillar-intro { flex: 1 1 420px; }
+.sap-pillar-intro { flex: 1 1 min(420px, 100%); min-width: 0; }
 .sap-pillar-intro h2 { margin-bottom: 6px; }
 .sap-pillar-intro p { margin: 0 0 14px; line-height: 1.95; }
 .sap-pillar-score { flex: 0 0 170px; border-radius: 18px; background: var(--soft); border: 1px solid var(--line); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; padding: 16px; }
@@ -2605,3 +2605,40 @@ form:has(input[name="kind"][value="seo"]:checked) .sap-ops-only { display: none;
 	.sap-assist-input .sap-btn span { display: none; }
 	.sap-assist-log { max-height: 60vh; }
 }
+
+/* ---- Page analysis: real-data opportunities ---- */
+.sap-ar-value { background: linear-gradient(180deg, #F6F9FF, #fff); border: 1px solid #DCE6F7; border-radius: 16px; padding: 14px 16px !important; }
+.sap-ar-value-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 8px; }
+.sap-ar-value-head h4 { margin: 0 !important; flex: 1; }
+.sap-chip.is-mute { background: #F1F4F9; color: var(--muted); }
+.sap-ar-gain { display: inline-flex; align-items: center; padding: 3px 10px; border-radius: 999px; background: #E7F7EE; color: #0E7A3E; font-weight: 700; font-size: 12.5px; white-space: nowrap; }
+.sap-ar-gain.is-small { padding: 1px 7px; font-size: 11.5px; }
+.sap-ar-opps { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.sap-ar-opps li { display: flex; gap: 8px; align-items: flex-start; padding: 8px 10px; border-radius: 12px; background: #fff; border: 1px solid var(--line); font-size: 13px; line-height: 1.9; }
+.sap-ar-opps li span { flex: none; line-height: 1.9; }
+.sap-ar-intent { display: flex; height: 8px; border-radius: 99px; overflow: hidden; margin: 12px 0 4px; background: var(--line); }
+.sap-ar-intent i { display: block; height: 100%; }
+.sap-ar-intent .is-buy, .sap-ar-intent-l .is-buy::before { background: #2563EB; }
+.sap-ar-intent .is-cmp, .sap-ar-intent-l .is-cmp::before { background: #8B5CF6; }
+.sap-ar-intent .is-info, .sap-ar-intent-l .is-info::before { background: #F59E0B; }
+.sap-ar-intent-l { display: flex; flex-wrap: wrap; gap: 12px; margin: 0; font-size: 11.5px; color: var(--muted); }
+.sap-ar-intent-l span { display: inline-flex; align-items: center; gap: 5px; }
+.sap-ar-intent-l span::before { content: ''; width: 8px; height: 8px; border-radius: 50%; }
+.sap-ar-serp { margin-top: 12px; padding-top: 10px; border-top: 1px dashed var(--line); }
+.sap-ar-serp b { font-size: 13px; }
+.sap-ar-serp p { margin: 6px 0 4px; }
+.sap-ar-q tr.is-opp td:first-child { font-weight: 700; }
+.sap-ar-flag { display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 6px; font-size: 11px; background: #F1F4F9; color: var(--muted); }
+.sap-ar-flag.is-y { background: #E7F7EE; color: #0E7A3E; }
+.sap-ar-flag.is-n { background: #FDECEC; color: #B42318; }
+.sap-ar-ev { display: flex; gap: 8px; margin: 4px 0 0 !important; font-size: 12.5px; color: var(--ink-2); line-height: 1.85; }
+.sap-ar-ev span { flex: none; color: var(--muted); font-size: 11.5px; min-width: 52px; }
+.sap-ar-deliv { margin-top: 6px; padding: 8px 12px; border-radius: 10px; background: var(--soft); border: 1px dashed var(--line-2); font-size: 12.5px; line-height: 1.9; cursor: copy; white-space: normal; }
+.sap-ar-deliv:hover { border-color: var(--accent); }
+.sap-ar-deliv.is-copied { border-color: var(--ok); }
+.sap-chip.is-impact-high { background: #E7F7EE; color: #0E7A3E; }
+.sap-chip.is-impact-medium { background: #FFF5E0; color: #A15C07; }
+.sap-chip.is-impact-low { background: #F1F4F9; color: var(--muted); }
+.sap-ar-noneed { flex-basis: 100%; margin: 0 0 6px; padding: 8px 12px; border-radius: 12px; background: #F6F8FB; border: 1px solid var(--line); font-size: 12.5px; color: var(--ink-2); }
+@media (max-width: 640px) { .sap-pillar-head .sap-btn { white-space: normal; line-height: 1.6; text-align: center; max-width: 100%; } }
+.sap-ar-deliv::before { content: 'خروجی آماده · برای کپی بزنید'; display: block; font-size: 11px; color: var(--muted); margin-bottom: 2px; }

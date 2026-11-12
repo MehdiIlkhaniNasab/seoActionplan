@@ -240,7 +240,10 @@ function sap_page_plan_commit( $project, $url, $ids, $period ) {
 	}
 	$b       = sap_page_brief( $project, $url, $findings );
 	$kinds   = sap_page_action_kinds();
-	$content = 'posts' === $b['group'];
+	// A calendar slot only for real writing work: the analysis says the page needs an
+	// update, or (older analyses) a content / FAQ / merge action was chosen.
+	$a_need  = sap_audit_needs_update( sap_dataset_payload( $pid, 'ai_audit' )['groups'][ $b['group'] ][ $k ] ?? null );
+	$content = true === $a_need;
 	$ctx     = array();
 	$effort  = 0;
 	$focus   = 0;
@@ -250,7 +253,7 @@ function sap_page_plan_commit( $project, $url, $ids, $period ) {
 		$ctx[ $c ] = ( $ctx[ $c ] ?? 0 ) + (float) $f['effort'];
 		$effort   += (float) $f['effort'];
 		$focus     = $focus ?: (int) $f['focus_id'];
-		$content   = $content || in_array( $kind, array( 'content', 'faq', 'attributes', 'merge' ), true );
+		$content   = $content || ( false !== $a_need && in_array( $kind, array( 'content', 'faq', 'merge' ), true ) );
 	}
 	arsort( $ctx );
 	$context = (string) key( $ctx );

@@ -495,7 +495,7 @@ function sap_audit_result_html( $project, $url ) {
 	$a  = sap_dataset_payload( $project['id'], 'ai_audit' )['groups'][ $g ][ sap_norm_url( $url ) ] ?? null;
 	$wp = $row['wp'] ? sap_site_page_details( $project, $url ) : null;
 	ob_start();
-	sap_view( 'audit-result', array( 'project' => $project, 'row' => $row, 'a' => $a, 'wp' => $wp ) );
+	sap_view( 'audit-result', array( 'project' => $project, 'row' => $row, 'a' => $a, 'wp' => $wp, 'sig' => sap_page_signals_view( $project, $row ) ) );
 	return (string) ob_get_clean();
 }
 
@@ -508,7 +508,7 @@ function sap_audit_result_html( $project, $url ) {
  */
 function sap_audit_lens( $group ) {
 	$l = array(
-		'products'    => 'صفحه محصول را از دید فروش و تبدیل بررسی کن: توضیحات کامل و جامع بر اساس کلمه اصلی (نام محصول/مدل) و کلمات فرعی، مزایا و کاربرد واقعی، جدول مشخصات و ویژگی‌های ووکامرس (Attributes) کامل و دقیق (جنس، ابعاد، وزن، سازگاری، کشور سازنده و…)، راهنمای انتخاب/سایز، تصاویر با Alt، نظرات و امتیاز، قیمت و موجودی و اسکیمای Product/Offer/AggregateRating، FAQ، اعتمادسازی (گارانتی، ارسال، مرجوعی)، CTA روشن، و لینک به دسته‌بندی و محصولات مرتبط. کلمه عمومی خرید (مثل «خرید چسب کفش» یا «چسب کتونی») هدف صفحه دسته است نه یک محصول؛ اگر چنین کلمه‌ای به محصول داده شده، در keyword_fit بگو کجا باید برود.',
+		'products'    => 'صفحه محصول را از دید فروش و تبدیل بررسی کن: توضیحات کامل و جامع بر اساس کلمه اصلی (نام محصول/مدل) و کلمات فرعی، مزایا و کاربرد واقعی، جدول مشخصات و ویژگی‌های ووکامرس (Attributes) کامل و دقیق (جنس، ابعاد، وزن، سازگاری، کشور سازنده و…)، راهنمای انتخاب/سایز، تصاویر با Alt، نظرات و امتیاز، اسکیمای Product/Offer/AggregateRating (قیمت و موجودی فقط از خود ووکامرس، هرگز در متن)، FAQ، اعتمادسازی (گارانتی، ارسال، مرجوعی)، CTA روشن، و لینک به دسته‌بندی و محصولات مرتبط. کلمه عمومی خرید (مثل «خرید چسب کفش» یا «چسب کتونی») هدف صفحه دسته است نه یک محصول؛ اگر چنین کلمه‌ای به محصول داده شده، در keyword_fit بگو کجا باید برود.',
 		'product_tax' => 'صفحه دسته/برچسب/برند را از دید فروش بررسی کن: کلمه اصلی عمومی خرید (مثل «خرید X»، «قیمت X») باید هدف همین صفحه باشد؛ H1 و تایتل با کلمه اصلی، متن معرفی کوتاه بالای محصولات و متن راهنمای خرید جامع پایین صفحه (انواع، نحوه انتخاب، قیمت‌ها)، FAQ، لینک به زیردسته‌ها، محصولات پرفروش و مقالات راهنمای خرید، اسکیمای BreadcrumbList و FAQ، و برچسب‌های کم‌ارزش که باید noindex یا ادغام شوند.',
 		'posts'       => 'مقاله را از دید جذب ترافیک و هدایت به فروش بررسی کن: پوشش کامل نیت اطلاعاتی کلمه اصلی و فرعی‌ها، ساختار H2/H3، به‌روز بودن اطلاعات، لینک داخلی به صفحات پولساز (دسته/محصول) با انکر مناسب و CTA به محصول، لینک خارجی به منبع معتبر، اسکیمای Article و FAQ، و خطر کنیبال با مقالات یا دسته‌های دیگر.',
 		'post_cat'    => 'دسته مقالات را بررسی کن: متن معرفی، لینک به مقالات پیلار و صفحات پولساز، جلوگیری از محتوای تکراری و صفحه‌بندی بی‌ارزش در ایندکس.',
@@ -539,13 +539,17 @@ add_filter( 'sap_ai_stages', function ( $stages ) {
 				'title'       => array( 'type' => 'string', 'description' => 'تایتل پیشنهادی (حداکثر ۶۰ کاراکتر) یا خالی اگر فعلی خوب است' ),
 				'meta'        => array( 'type' => 'string', 'description' => 'متای پیشنهادی (۱۲۰ تا ۱۵۵ کاراکتر) یا خالی' ),
 				'actions'     => array( 'type' => 'array', 'items' => sap_ai_obj( array(
-					'type'     => array( 'type' => 'string', 'enum' => array( 'content', 'title_meta', 'attributes', 'faq', 'schema', 'links', 'cta', 'images', 'merge', 'noindex' ) ),
-					'title'    => array( 'type' => 'string', 'description' => 'کار مشخص با نام صفحه' ),
-					'detail'   => array( 'type' => 'string', 'description' => 'دقیقاً چه چیزی اضافه/اصلاح شود' ),
-					'priority' => array( 'type' => 'string', 'enum' => array( 'high', 'medium', 'low' ) ),
-					'hours'    => array( 'type' => 'number' ),
+					'type'        => array( 'type' => 'string', 'enum' => array( 'content', 'title_meta', 'attributes', 'faq', 'schema', 'links', 'cta', 'images', 'merge', 'noindex' ) ),
+					'title'       => array( 'type' => 'string', 'description' => 'کار مشخص با نام صفحه' ),
+					'evidence'    => array( 'type' => 'string', 'description' => 'داده‌ای که این کار را لازم می‌کند، با عدد: کوئری و جایگاه/نمایش، موضوع جاافتاده نتایج برتر، ویژگی خالی…' ),
+					'where'       => array( 'type' => 'string', 'description' => 'جای دقیق در صفحه: تایتل، H1، پاراگراف اول، بعد از تیتر «…»، جدول مشخصات، پایین دسته…' ),
+					'deliverable' => array( 'type' => 'string', 'description' => 'خروجی آماده اجرا: متن تیترهای جدید، سوال‌های FAQ، نام ویژگی‌ها، انکر و صفحه مقصد لینک — نه توصیه کلی' ),
+					'impact'      => array( 'type' => 'string', 'enum' => array( 'high', 'medium', 'low' ), 'description' => 'اثر روی کلیک/فروش با توجه به پتانسیل داده' ),
+					'priority'    => array( 'type' => 'string', 'enum' => array( 'high', 'medium', 'low' ) ),
+					'hours'       => array( 'type' => 'number' ),
 				) ) ),
-				'update_brief' => array( 'type' => 'string', 'description' => 'اگر صفحه آپدیت کامل لازم دارد: بریف کوتاه (کلمه اصلی و فرعی، بخش‌هایی که اضافه شود، ویژگی‌ها، FAQ، لینک‌ها) وگرنه خالی' ),
+				'needs_update' => array( 'type' => 'boolean', 'description' => 'true فقط اگر صفحه نوشتن/بازنویسی محتوا لازم دارد و ارزش یک آیتم تقویم محتوا را دارد' ),
+				'update_brief' => array( 'type' => 'string', 'description' => 'اگر needs_update: بریف آپدیت (کلمه اصلی و فرعی و جایشان، تیترهای دقیق بخش‌های جدید، FAQ، لینک‌ها) وگرنه خالی' ),
 			) ) ) ) ),
 			'task'   => '',
 		);
@@ -564,7 +568,12 @@ add_filter( 'sap_ai_stage_task', function ( $task, $stage ) {
 		sap_audit_lens( $g ),
 		'recent_work کارهایی است که در ۷۵ روز اخیر روی همان صفحه انجام شده یا در برنامه است (تغییر تایتل/متا، آپدیت محتوا، لینک…). آن‌ها را دوباره پیشنهاد نده؛ اگر تایتل/متا یا محتوا تازه تغییر کرده، فرصت بده نتیجه‌اش دیده شود و فقط اشتباه واضح را بگو.',
 		'my_notes دیدگاه متخصص سئوی پروژه درباره همان صفحه است؛ بر هر چیز دیگری مقدم است و پیشنهادهایت باید با آن بخواند.',
-		'قواعد: کلی‌گویی نکن، به متن و کوئری واقعی استناد کن؛ برای هر صفحه حداکثر ۴ اقدام مشخص، عملی و پراثر با ساعت تخمینی بنویس (هر اقدام یک آیتم چک‌لیست همان صفحه است، نه یک کار جدا)؛ کارهای کوچک هم‌نوع را در یک اقدام ادغام کن؛ اقدامی که سخت، مبهم یا کم‌اثر است ننویس؛ اگر صفحه خوب است verdict را good بگذار و اقدام اضافه نساز. نیت هر کلمه را دقیق بسنج و کلمات نامناسب را در keyword_fit بیاور (فله‌ای پیشنهاد نده).',
+		'signals داده سخت همین صفحه است که از قبل حساب شده: کوئری‌های واقعی با جایگاه، نمایش، CTR، اینکه در تایتل/متن هستند یا نه و پتانسیل کلیک؛ opportunities فرصت‌های عددی؛ serp_top10 موضوعاتی که نتایج برتر گوگل پوشش داده‌اند و این صفحه نه؛ value ارزش کار روی این صفحه. تحلیل باید روی همین‌ها بنا شود.',
+		'قواعد اقدام: هر اقدام باید evidence عددی از signals یا داده وردپرس داشته باشد؛ اقدامی که شاهد ندارد ننویس. where جای دقیق را بگوید. deliverable خروجی آماده اجرا باشد (متن دقیق تیترهای H2 جدید، خود سوال‌های FAQ، نام ویژگی‌ها، انکر + آدرس مقصد)؛ «محتوا را کامل‌تر کنید» یا «کلمات کلیدی بیشتر» ممنوع است.',
+		'حداکثر ۴ اقدام، مرتب از پراثر به کم‌اثر؛ کارهای کوچک هم‌نوع را ادغام کن؛ اقدام سخت، مبهم یا کم‌اثر ننویس. اگر value پایین است فقط اقدام سریع و واضح (مثل تایتل/متا) بنویس یا هیچ. اگر صفحه خوب است verdict را good بگذار و اقدامی نساز.',
+		'needs_update را فقط وقتی true بگذار که صفحه واقعاً نوشتن بخش جدید یا بازنویسی لازم دارد (موضوع جاافتاده با نمایش، کمبود جدی نسبت به نتایج برتر، اطلاعات قدیمی) و value متوسط یا بالاست؛ اصلاح تایتل/متا، اسکیما یا ویژگی محصول آیتم تقویم محتوا نیست.',
+		'ممنوع: پیشنهاد نوشتن قیمت، تخفیف، موجودی یا زمان ارسال در متن (این‌ها از خود ووکامرس نمایش داده می‌شوند)؛ پیشنهاد سال یا تاریخ در متن مگر برای صفحه‌ای که ذاتاً سالانه است.',
+		'نیت هر کلمه را دقیق بسنج و کلمات نامناسب را در keyword_fit بیاور (فله‌ای پیشنهاد نده).',
 	) );
 }, 10, 2 );
 
@@ -611,7 +620,10 @@ add_filter( 'sap_ai_stage_input', function ( $input, $project, $stage, $ctx ) {
 		if ( $notes ) {
 			$facts['my_notes'] = array_slice( $notes, -5 );
 		}
-		$out[]               = $facts;
+		$sig              = sap_page_signals( $project, $r, $ctx['pages'][ $k ] ?? null );
+		$facts['signals'] = sap_page_signals_ai( $sig );
+		sap_page_signals_save( $project['id'], $r['url'], $sig );
+		$out[]            = $facts;
 	}
 	$focuses = array();
 	foreach ( $ctx['focuses'] as $f ) {
@@ -627,9 +639,11 @@ add_filter( 'sap_ai_stage_postprocess', function ( $res, $project, $stage, $inpu
 	$g     = substr( $stage, 6 );
 	$pages = array();
 	foreach ( array_values( array_filter( (array) ( $res['pages'] ?? array() ), 'is_array' ) ) as $p ) {
-		$p = wp_parse_args( $p, array( 'url' => '', 'verdict' => 'improve', 'diagnosis' => '', 'keyword_fit' => array(), 'title' => '', 'meta' => '', 'actions' => array(), 'update_brief' => '' ) );
+		$p = wp_parse_args( $p, array( 'url' => '', 'verdict' => 'improve', 'diagnosis' => '', 'keyword_fit' => array(), 'title' => '', 'meta' => '', 'actions' => array(), 'needs_update' => false, 'update_brief' => '' ) );
 		$p['url']         = sap_full_url( $project, $p['url'] );
-		$p['actions']     = array_values( array_filter( (array) $p['actions'], 'is_array' ) );
+		$p['actions']     = sap_audit_keep_actions( (array) $p['actions'] );
+		$p['needs_update'] = (bool) $p['needs_update'] && '' !== trim( (string) $p['update_brief'] );
+		$p['v']           = 2;
 		$p['keyword_fit'] = array_values( array_filter( (array) $p['keyword_fit'], 'is_array' ) );
 		$pages[ sap_norm_url( $p['url'] ) ] = $p;
 	}
@@ -641,6 +655,66 @@ add_filter( 'sap_ai_stage_postprocess', function ( $res, $project, $stage, $inpu
 	$n = sap_audit_to_proposals( $project, $g, $pages + $old );
 	return array( 'pages' => array_values( $pages ), 'summary_line' => sprintf( 'تحلیل %s صفحه «%s» انجام شد؛ %s اقدام برای تأیید شما آماده است.', sap_num( count( $pages ) ), sap_content_groups()[ $g ][0] ?? $g, sap_num( $n ) ) );
 }, 10, 4 );
+
+/**
+ * Is a page worth a slot in the content calendar? null = no new-style analysis yet.
+ */
+function sap_audit_needs_update( $a ) {
+	if ( ! $a || empty( $a['v'] ) ) {
+		return null;
+	}
+	return ! empty( $a['needs_update'] );
+}
+
+/**
+ * The calendar reason of an analysed page: diagnosis, then the content work
+ * with its evidence and ready deliverables, then the update brief.
+ */
+function sap_audit_calendar_reason( $a ) {
+	if ( ! $a ) {
+		return '';
+	}
+	$lines = array( (string) $a['diagnosis'] );
+	foreach ( (array) $a['actions'] as $x ) {
+		if ( ! in_array( $x['type'] ?? '', array( 'content', 'faq', 'merge', 'links' ), true ) ) {
+			continue;
+		}
+		$lines[] = '• ' . ( $x['title'] ?? '' ) . ( ! empty( $x['evidence'] ) ? ' — ' . $x['evidence'] : '' ) . ( ! empty( $x['deliverable'] ) ? "\n  " . $x['deliverable'] : '' );
+	}
+	if ( '' !== trim( (string) $a['update_brief'] ) ) {
+		$lines[] = $a['update_brief'];
+	}
+	return trim( implode( "\n", array_filter( $lines ) ) );
+}
+
+/**
+ * Actions worth doing: drop the ones without evidence or with low impact that
+ * are not quick, order by impact then priority.
+ */
+function sap_audit_keep_actions( $actions ) {
+	$w    = array( 'high' => 3, 'medium' => 2, 'low' => 1 );
+	$keep = array();
+	foreach ( $actions as $a ) {
+		if ( ! is_array( $a ) ) {
+			continue;
+		}
+		$a = wp_parse_args( $a, array( 'type' => 'content', 'title' => '', 'detail' => '', 'evidence' => '', 'where' => '', 'deliverable' => '', 'impact' => 'medium', 'priority' => 'medium', 'hours' => 1 ) );
+		if ( '' === trim( $a['title'] ) ) {
+			continue;
+		}
+		if ( 'low' === $a['impact'] && (float) $a['hours'] > 1 ) {
+			continue; // Long work for a small effect.
+		}
+		if ( 'low' === $a['impact'] && '' === trim( $a['evidence'] ) ) {
+			continue;
+		}
+		$keep[] = $a;
+	}
+	usort( $keep, function ( $x, $y ) use ( $w ) {
+		return array( $w[ $y['impact'] ] ?? 2, $w[ $y['priority'] ] ?? 2 ) <=> array( $w[ $x['impact'] ] ?? 2, $w[ $x['priority'] ] ?? 2 );
+	} );
+	return array_slice( $keep, 0, 5 );
+}
 
 /**
  * Turn audit results into proposals.
@@ -670,13 +744,19 @@ function sap_audit_to_proposals( $project, $group, $pages ) {
 			if ( 'title_meta' === $a['type'] && ( $p['title'] || $p['meta'] ) ) {
 				continue; // Already above with the ready text.
 			}
+			$detail  = trim( implode( "\n", array_filter( array(
+				(string) ( $a['detail'] ?? '' ),
+				! empty( $a['evidence'] ) ? 'شاهد داده: ' . $a['evidence'] : '',
+				! empty( $a['where'] ) ? 'کجا: ' . $a['where'] : '',
+			) ) ) );
 			$items[] = array(
 				'key'      => md5( $p['url'] . '|' . $a['type'] . '|' . $a['title'] ),
 				'title'    => $a['title'] ?: ( $labels[ $ctx_of[ $a['type'] ] ?? 'content_update' ] ?? '' ) . ' «' . $name . '»',
-				'detail'   => $a['detail'] . ( $p['diagnosis'] ? "\n\nتشخیص: " . $p['diagnosis'] : '' ),
+				'detail'   => $detail . ( $p['diagnosis'] ? "\n\nتشخیص: " . $p['diagnosis'] : '' ),
+				'deliverable' => (string) ( $a['deliverable'] ?? '' ),
 				'context'  => $ctx_of[ $a['type'] ] ?? 'content_update',
 				'url'      => $p['url'],
-				'priority' => $a['priority'],
+				'priority' => 'high' === ( $a['impact'] ?? '' ) ? 'high' : $a['priority'],
 				'effort'   => (float) $a['hours'],
 				'section'  => $group,
 				'kind'     => $a['type'],
