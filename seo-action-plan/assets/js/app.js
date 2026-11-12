@@ -878,7 +878,9 @@
 			ev.preventDefault();
 			var btn = rev.querySelector('[type="submit"]');
 			btn.disabled = true;
-			post('revision/' + rev.getAttribute('data-sap-rev') + '/approve', { accepted: accepted() }).then(function (res) {
+			var prodBox = rev.querySelector('input[name="product_accept[]"]');
+			var product = prodBox ? Array.prototype.map.call(rev.querySelectorAll('input[name="product_accept[]"]:checked'), function (c) { return c.value; }) : null;
+			post('revision/' + rev.getAttribute('data-sap-rev') + '/approve', { accepted: accepted(), product: product === null ? undefined : (product.length ? product : ['none']) }).then(function (res) {
 				toast(res.msg);
 				setTimeout(function () { location.reload(); }, 900);
 			}).catch(function (e) { toast(e.message, true); btn.disabled = false; });

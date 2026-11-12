@@ -2548,3 +2548,15 @@ form:has(input[name="kind"][value="seo"]:checked) .sap-ops-only { display: none;
 .sap-follow.is-review { border-inline-start-color: #3B82F6; } .sap-follow.is-done { border-inline-start-color: var(--ok); opacity: .8; }
 .sap-follow-acts { margin-inline-start: auto; }
 .sap-follow-form { display: flex; gap: 6px; margin: 8px 0; } .sap-follow-form input { flex: 1; }
+
+/* ---------- 0.27 — product fields & quality check in the rewrite review ---------- */
+.sap-prodfields { border: 1px solid var(--line); border-radius: var(--radius); background: #fff; padding: 14px 16px; margin: 14px 0; display: flex; flex-direction: column; gap: 12px; }
+.sap-prodfields h3 { margin: 0; font-size: 15px; } .sap-prodfields h3 small { font-weight: 400; color: var(--muted); font-size: 12px; }
+.sap-prodfield { border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; }
+.sap-prodfield.is-off { opacity: .6; }
+.sap-prodfield.is-needs { background: #FFFBF3; border-color: #FCD9A8; } .sap-prodfield.is-needs ul { margin: 4px 0 0; }
+.sap-prodfield-cols { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 8px; }
+.sap-prodfield-box { border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; font-size: 13px; background: #F7FFF9; min-height: 60px; }
+.sap-prodfield-box.is-old { background: var(--soft); color: var(--ink-2); }
+.sap-attr-table { margin-top: 8px; } .sap-attr-table tr.is-same td { color: var(--muted); }
+@media (max-width: 700px) { .sap-prodfield-cols { grid-template-columns: 1fr; } }

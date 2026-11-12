@@ -54,6 +54,7 @@ foreach ( array(
 	'engine/kpi',
 	'engine/ai',
 	'engine/content',
+	'engine/content-pro',
 	'engine/ideas',
 	'engine/ideas-pool',
 	'engine/calendar',

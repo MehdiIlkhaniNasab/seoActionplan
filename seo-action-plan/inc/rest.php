@@ -945,7 +945,7 @@ add_action( 'rest_api_init', function () {
 				sap_revision_save( array( 'status' => 'rejected' ), $rev['id'] );
 				return array( 'ok' => true, 'msg' => 'رد شد' );
 			}
-			$n = sap_content_approve( $rev, (array) $req->get_param( 'accepted' ) );
+			$n = sap_content_approve( $rev, (array) $req->get_param( 'accepted' ), null !== $req->get_param( 'product' ) ? (array) $req->get_param( 'product' ) : null );
 			return array( 'ok' => true, 'msg' => sprintf( '%s تغییر تأیید شد و در لاگ اقدامات ثبت شد.', sap_num( $n ) ) );
 		},
 	) );
