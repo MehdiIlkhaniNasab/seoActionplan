@@ -149,10 +149,26 @@ function sap_client_request_add( $project_id, $data ) {
 	if ( '' === $title ) {
 		return new WP_Error( 'sap_title', 'عنوان درخواست الزامی است.', array( 'status' => 400 ) );
 	}
-	$ctx = sanitize_key( (string) ( $data['context'] ?? 'management' ) );
-	$id  = sap_task_save( array(
+	$ctx    = sanitize_key( (string) ( $data['context'] ?? 'management' ) );
+	$urgent = ! empty( $data['urgent'] );
+	$disp   = function_exists( 'sap_client_dispatcher' ) ? sap_client_dispatcher( $p['id'] ) : 0;
+	$pick   = absint( $data['assignee'] ?? 0 );
+	// Only a member of the project (or the dispatcher) can be chosen by the client.
+	if ( $pick && ! isset( sap_project_members( $p['id'] )[ $pick ] ) && $pick !== $disp ) {
+		$pick = 0;
+	}
+	$hours = max( 0.5, min( 80, (float) ( $data['effort'] ?? 1 ) ) );
+	$due   = sap_parse_date( (string) ( $data['due_date'] ?? '' ) );
+	$atts  = array();
+	foreach ( (array) ( $data['attachments'] ?? array() ) as $a ) {
+		$url = esc_url_raw( is_array( $a ) ? (string) ( $a['url'] ?? '' ) : (string) $a );
+		if ( '' !== $url ) {
+			$atts[] = array( 'url' => $url, 'name' => sanitize_text_field( is_array( $a ) ? (string) ( $a['name'] ?? '' ) : basename( (string) wp_parse_url( $url, PHP_URL_PATH ) ) ), 'type' => preg_match( '/\.(png|jpe?g|webp|gif)$/i', $url ) ? 'image' : 'file' );
+		}
+	}
+	$task = array(
 		'project_id'  => $p['id'],
-		'title'       => 0 === strpos( $title, 'درخواست کارفرما' ) ? $title : 'درخواست کارفرما: ' . $title,
+		'title'       => ( $urgent ? '🚨 ' : '' ) . ( 0 === strpos( $title, 'درخواست کارفرما' ) ? $title : 'درخواست کارفرما: ' . $title ),
 		'notes'       => (string) ( $data['notes'] ?? '' ),
 		'context'     => array_key_exists( $ctx, sap_contexts_all() ) ? $ctx : 'management',
 		'status'      => 'proposed',
@@ -162,7 +178,35 @@ function sap_client_request_add( $project_id, $data ) {
 		'client_link' => (string) ( $data['client_link'] ?? '' ),
 		'client_note' => trim( (string) ( $data['client_name'] ?? '' ) ),
 		'created_by'  => absint( $data['created_by'] ?? 0 ),
-	) );
+		'effort'      => $hours,
+		'score'       => $urgent ? 999 : 50,
+		'attachments' => $atts,
+	);
+	if ( $pick && $pick !== $disp ) {
+		// The client knows who does it: straight to that person, the dispatcher follows.
+		$task['assignee']     = $pick;
+		$task['status']       = 'next';
+		$task['coord_id']     = $disp;
+		$task['delegated_at'] = sap_now();
+		$task['due_date']     = $due ?: '';
+		$task['progress']     = array( array( 'u' => 0, 'at' => sap_now(), 'text' => '📤 کارفرما کار را مستقیم به ' . sap_user_name( $pick ) . ' سپرد', 'state' => 'progress', 'why' => '', 'kind' => 'delegate' ) );
+	} elseif ( $disp && 'coord' === sap_user_role( $disp ) ) {
+		// The coordinator's triage: hand on or keep.
+		$task['assignee'] = $disp;
+		$task['status']   = 'next';
+		$task['due_date'] = $urgent ? current_time( 'Y-m-d' ) : ( $due ?: '' );
+	}
+	if ( $urgent && empty( $task['due_date'] ) ) {
+		$task['due_date'] = current_time( 'Y-m-d' );
+	}
+	$id = sap_task_save( $task );
+	if ( $id && $urgent ) {
+		foreach ( array_unique( array_filter( array_merge( array( (int) $disp, (int) $pick ), array_map( function ( $u ) {
+			return (int) $u->ID;
+		}, sap_full_users() ) ) ) ) as $uid ) {
+			sap_notice_add( $uid, array( 'icon' => '🚨', 'title' => 'مشکل فوری از کارفرمای ' . $p['name'], 'text' => $title, 'url' => sap_url( 'desk' ) . '#client' ) );
+		}
+	}
 	return $id ? (int) $id : new WP_Error( 'sap_task', 'ثبت درخواست ناموفق بود.', array( 'status' => 500 ) );
 }
 
@@ -184,6 +228,7 @@ function sap_client_sync_payload( $project, $ids = array() ) {
 			'needs_client'  => (int) $t['needs_client'],
 			'client_status' => $t['client_status'],
 			'done_at'       => (string) $t['done_at'],
+			'stage'         => function_exists( 'sap_client_stage' ) ? sap_client_stage( $t ) : '',
 		);
 	};
 	$tasks = array();
