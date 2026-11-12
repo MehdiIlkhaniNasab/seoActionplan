@@ -55,6 +55,7 @@ foreach ( array(
 	'engine/ai',
 	'engine/content',
 	'engine/content-pro',
+	'engine/pm-assist',
 	'engine/ideas',
 	'engine/ideas-pool',
 	'engine/calendar',

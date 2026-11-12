@@ -2840,4 +2840,117 @@
 			p.then(function (res) { toast(res.msg); nextCard(card); }).catch(fail);
 		});
 	})();
+
+	/* ---- Project assistant (project manager chat about the tasks of a project) ---- */
+	(function () {
+		var box = document.querySelector('[data-sap-assist]');
+		if (!box) { return; }
+		var pid = box.getAttribute('data-sap-assist');
+		var log = box.querySelector('[data-sap-assist-log]');
+		var form = box.querySelector('[data-sap-assist-form]');
+		var starts = box.querySelector('[data-sap-assist-starts]');
+		var clear = box.querySelector('[data-sap-assist-clear]');
+		var tpl = box.querySelector('[data-sap-assist-users]');
+		var busy = false;
+		function e(t) { var d = document.createElement('div'); d.textContent = t == null ? '' : String(t); return d.innerHTML.replace(/"/g, '&quot;'); }
+		function bottom() { log.scrollTop = log.scrollHeight; }
+		function card(s) {
+			var users = tpl ? tpl.innerHTML : '';
+			var el = document.createElement('form');
+			el.className = 'sap-assist-sug';
+			el.innerHTML = '<p class="sap-assist-sug-tag">✨ پیشنهاد کار تازه</p>' +
+				'<input type="text" name="title" required maxlength="190" value="' + e(s.title) + '" aria-label="عنوان کار">' +
+				'<textarea name="notes" rows="2" placeholder="شرح کار" aria-label="شرح کار">' + e(s.notes) + '</textarea>' +
+				'<div class="sap-assist-sug-row"><label>مسئول<select name="assignee">' + users + '</select></label><label>ددلاین<input type="date" name="due_date" value="' + e(s.due) + '"></label></div>' +
+				(s.why ? '<p class="sap-assist-sug-why">' + e(s.why) + '</p>' : '') +
+				'<div class="sap-assist-sug-acts"><button type="submit" class="sap-btn is-primary is-small">+ ایجاد کار</button><button type="button" class="sap-btn is-ghost is-small" data-sap-assist-skip>لازم نیست</button></div>';
+			var sel = el.querySelector('select');
+			if (sel) { sel.value = String(s.assignee || 0); if (!sel.value) { sel.value = '0'; } }
+			return el;
+		}
+		function ask(q) {
+			q = (q || '').trim();
+			if (!q || busy) { return; }
+			busy = true;
+			if (starts) { starts.hidden = true; }
+			box.classList.add('is-open');
+			log.insertAdjacentHTML('beforeend', '<div class="sap-assist-msg is-me"><p>' + e(q) + '</p></div><div class="sap-assist-msg is-bot is-typing" data-sap-assist-typing><p class="sap-typing"><i></i><i></i><i></i> در حال بررسی کارهای پروژه…</p></div>');
+			bottom();
+			var btn = form.querySelector('button[type="submit"]');
+			btn.disabled = true;
+			post('pm-assist/' + pid, { question: q }).then(function (res) {
+				var typing = log.querySelector('[data-sap-assist-typing]');
+				var msg = document.createElement('div');
+				msg.className = 'sap-assist-msg is-bot';
+				msg.innerHTML = res.html || '<p>' + e(res.answer) + '</p>';
+				(res.suggest || []).forEach(function (s) { msg.appendChild(card(s)); });
+				if (res.followups && res.followups.length) {
+					var f = document.createElement('div');
+					f.className = 'sap-assist-starts is-follow';
+					f.innerHTML = res.followups.map(function (x) { return '<button type="button" class="sap-chip" data-sap-assist-ask="' + e(x) + '">' + e(x) + '</button>'; }).join('');
+					msg.appendChild(f);
+				}
+				typing.replaceWith(msg);
+				if (clear) { clear.hidden = false; }
+				bottom();
+			}).catch(function (err) {
+				var typing = log.querySelector('[data-sap-assist-typing]');
+				if (typing) { typing.outerHTML = '<div class="sap-assist-msg is-bot is-err"><p>⚠️ ' + e(err.message) + '</p></div>'; }
+			}).then(function () { busy = false; btn.disabled = false; });
+		}
+		form.addEventListener('submit', function (ev) {
+			ev.preventDefault();
+			var ta = form.querySelector('textarea');
+			ask(ta.value);
+			ta.value = '';
+			ta.style.height = '';
+		});
+		var ta = form.querySelector('textarea');
+		ta.addEventListener('keydown', function (ev) { if (ev.key === 'Enter' && !ev.shiftKey) { ev.preventDefault(); form.requestSubmit(); } });
+		ta.addEventListener('input', function () { ta.style.height = 'auto'; ta.style.height = Math.min(ta.scrollHeight, 140) + 'px'; });
+		box.addEventListener('click', function (ev) {
+			var a = ev.target.closest('[data-sap-assist-ask]');
+			var skip = ev.target.closest('[data-sap-assist-skip]');
+			var ref = ev.target.closest('[data-sap-assist-ref]');
+			if (a) { ask(a.getAttribute('data-sap-assist-ask')); return; }
+			if (skip) { fadeOut(skip.closest('.sap-assist-sug')); return; }
+			if (ref) {
+				var row = document.getElementById('t-' + ref.getAttribute('data-sap-assist-ref'));
+				if (!row) { return; }
+				ev.preventDefault();
+				if (row.hidden || row.closest('[hidden]')) { var all = document.querySelector('[data-sap-pm-tab="all"]'); if (all) { all.click(); } }
+				var done = row.closest('details[data-sap-pmp-done]');
+				if (done) { done.open = true; }
+				row.open = true;
+				row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+				row.classList.add('is-flash');
+				setTimeout(function () { row.classList.remove('is-flash'); }, 1800);
+			}
+			if (ev.target.closest('[data-sap-assist-clear]')) {
+				post('pm-assist/' + pid, { clear: true }).then(function () {
+					log.innerHTML = '';
+					clear.hidden = true;
+					if (starts) { starts.hidden = false; }
+					box.classList.remove('is-open');
+				});
+			}
+		});
+		box.addEventListener('submit', function (ev) {
+			var f = ev.target.closest('.sap-assist-sug');
+			if (!f) { return; }
+			ev.preventDefault();
+			var b = f.querySelector('button[type="submit"]');
+			b.disabled = true;
+			post('pm-assist/' + pid + '/create', {
+				title: f.elements.title.value, notes: f.elements.notes.value,
+				assignee: f.elements.assignee ? f.elements.assignee.value : 0, due_date: f.elements.due_date.value
+			}).then(function (res) {
+				toast(res.msg);
+				f.classList.add('is-done');
+				var tt = f.elements.title.value;
+				f.innerHTML = '<p>✓ ' + e(tt) + ' — ' + e(res.msg) + '</p>';
+			}).catch(function (err) { toast(err.message, true); b.disabled = false; });
+		}, true);
+		bottom();
+	})();
 })();

@@ -2560,3 +2560,48 @@ form:has(input[name="kind"][value="seo"]:checked) .sap-ops-only { display: none;
 .sap-prodfield-box.is-old { background: var(--soft); color: var(--ink-2); }
 .sap-attr-table { margin-top: 8px; } .sap-attr-table tr.is-same td { color: var(--muted); }
 @media (max-width: 700px) { .sap-prodfield-cols { grid-template-columns: 1fr; } }
+
+/* ---- Project assistant (project manager › projects) ---- */
+.sap-assist { margin: 12px 0 14px; border: 1px solid #D9E3F3; border-radius: 18px; background: linear-gradient(180deg, #F5F8FF 0%, #fff 70px); box-shadow: var(--shadow); padding: 14px 16px; }
+.sap-assist-head { display: flex; gap: 12px; align-items: flex-start; }
+.sap-assist-head > div { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.sap-assist-head b { font-size: 15px; }
+.sap-assist-head small { color: var(--muted); line-height: 1.8; font-size: 12.5px; }
+.sap-assist-icon { flex: none; width: 36px; height: 36px; border-radius: 12px; display: grid; place-items: center; color: #fff; background: linear-gradient(135deg, #2563EB, #7C3AED); box-shadow: 0 6px 16px rgba(76, 70, 230, .25); }
+.sap-assist-log { display: none; flex-direction: column; gap: 10px; max-height: 460px; overflow-y: auto; margin: 12px 0 0; padding: 2px; scroll-behavior: smooth; }
+.sap-assist.is-open .sap-assist-log { display: flex; }
+.sap-assist-msg { max-width: 92%; padding: 10px 14px; border-radius: 16px; line-height: 1.95; font-size: 13.5px; }
+.sap-assist-msg p { margin: 0 0 4px; } .sap-assist-msg p:last-child { margin-bottom: 0; }
+.sap-assist-msg ul { margin: 2px 0 6px; padding-inline-start: 20px; } .sap-assist-msg li { margin: 2px 0; }
+.sap-assist-msg.is-me { align-self: flex-start; background: var(--accent); color: #fff; border-end-start-radius: 6px; }
+.sap-assist-msg.is-bot { align-self: flex-end; background: #fff; border: 1px solid var(--line); border-end-end-radius: 6px; }
+.sap-assist-msg.is-err { border-color: #F3C9C9; background: #FFF6F6; }
+.sap-assist-refs { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--line); }
+.sap-assist-refs a { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; padding: 3px 4px 3px 10px; border-radius: 999px; border: 1px solid var(--line); background: var(--soft); color: var(--ink); text-decoration: none; font-size: 12px; }
+.sap-assist-refs a:hover { border-color: var(--accent); color: var(--accent-ink); }
+.sap-assist-refs a .sap-chip { font-size: 10.5px; padding: 1px 8px; }
+.sap-assist-starts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+.sap-assist-starts.is-follow { margin-top: 10px; }
+.sap-assist-starts .sap-chip { cursor: pointer; border: 1px solid var(--line-2); background: #fff; font: inherit; font-size: 12.5px; padding: 6px 12px; }
+.sap-assist-starts .sap-chip:hover { border-color: var(--accent); color: var(--accent); }
+.sap-assist-input { display: flex; gap: 8px; align-items: flex-end; margin-top: 12px; }
+.sap-assist-input textarea { flex: 1; resize: none; min-height: 46px; max-height: 140px; border-radius: 14px; }
+.sap-assist-input .sap-btn { flex: none; }
+.sap-assist-sug { margin-top: 10px; padding: 12px; border-radius: 14px; border: 1px dashed #A9C1F5; background: #F6F9FF; display: grid; gap: 8px; }
+.sap-assist-sug-tag { margin: 0 !important; font-size: 12px; font-weight: 700; color: var(--accent-ink); }
+.sap-assist-sug input[type="text"] { font-weight: 700; }
+.sap-assist-sug textarea { resize: vertical; min-height: 60px; }
+.sap-assist-sug-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.sap-assist-sug-row label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); }
+.sap-assist-sug-why { margin: 0 !important; font-size: 12px; color: var(--ink-2); }
+.sap-assist-sug-acts { display: flex; gap: 6px; }
+.sap-assist-sug.is-done { border-style: solid; border-color: #BFE5CD; background: #F2FBF5; color: #126B3A; }
+.sap-pm-row.is-flash { animation: sap-assist-flash 1.8s ease; }
+@keyframes sap-assist-flash { 0%, 60% { box-shadow: 0 0 0 3px rgba(37, 99, 235, .35); } 100% { box-shadow: none; } }
+@media (max-width: 640px) {
+	.sap-assist { padding: 12px; }
+	.sap-assist-msg { max-width: 100%; }
+	.sap-assist-sug-row { grid-template-columns: 1fr; }
+	.sap-assist-input .sap-btn span { display: none; }
+	.sap-assist-log { max-height: 60vh; }
+}
