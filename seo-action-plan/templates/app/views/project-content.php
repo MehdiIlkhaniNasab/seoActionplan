@@ -216,9 +216,10 @@ $locked = in_array( $rev['status'], array( 'approved', 'published', 'rejected' )
 				<?php if ( $rep ) : ?>
 					<div class="sap-edit<?php echo empty( $rep['accept'] ) ? ' is-off' : ''; ?>" data-edit="<?php echo esc_attr( $rep['id'] ); ?>">
 						<div class="sap-edit-head">
-							<label class="sap-check"><input type="checkbox" name="accepted[]" value="<?php echo esc_attr( $rep['id'] ); ?>" <?php checked( ! empty( $rep['accept'] ) ); ?> <?php disabled( $locked ); ?>> پذیرفتن</label>
+							<label class="sap-check"><input type="checkbox" name="accepted[]" value="<?php echo esc_attr( $rep['id'] ); ?>" <?php checked( ! empty( $rep['accept'] ) ); ?> <?php disabled( $locked || ! empty( $rep['qc'] ) ); ?>> پذیرفتن</label>
 							<span class="sap-chip is-type-<?php echo esc_attr( $rep['type'] ); ?>"><?php echo esc_html( $types[ $rep['type'] ] ?? $rep['type'] ); ?></span>
 							<span class="sap-small"><?php echo esc_html( $rep['reason'] ); ?></span>
+							<?php echo sap_content_qc_badge( $rep ); // phpcs:ignore ?>
 						</div>
 						<div class="sap-v is-diff" data-v="diff"><<?php echo esc_attr( 'delete' === $rep['op'] ? 'p' : 'div' ); ?> class="sap-diff"><?php echo 'delete' === $rep['op'] ? '<del>' . esc_html( $b['text'] ) . '</del>' : sap_word_diff( $b['text'], sap_block_text( $rep['html'] ) ); // phpcs:ignore ?></<?php echo esc_attr( 'delete' === $rep['op'] ? 'p' : 'div' ); ?>></div>
 						<div class="sap-v is-new" data-v="new" hidden><?php echo 'delete' === $rep['op'] ? '' : wp_kses( $rep['html'], sap_content_allowed_html() ); // phpcs:ignore ?></div>
@@ -234,9 +235,10 @@ $locked = in_array( $rev['status'], array( 'approved', 'published', 'rejected' )
 						<span class="sap-blk-n">+</span>
 						<div class="sap-edit<?php echo empty( $e['accept'] ) ? ' is-off' : ''; ?>" data-edit="<?php echo esc_attr( $e['id'] ); ?>">
 							<div class="sap-edit-head">
-								<label class="sap-check"><input type="checkbox" name="accepted[]" value="<?php echo esc_attr( $e['id'] ); ?>" <?php checked( ! empty( $e['accept'] ) ); ?> <?php disabled( $locked ); ?>> پذیرفتن</label>
+								<label class="sap-check"><input type="checkbox" name="accepted[]" value="<?php echo esc_attr( $e['id'] ); ?>" <?php checked( ! empty( $e['accept'] ) ); ?> <?php disabled( $locked || ! empty( $e['qc'] ) ); ?>> پذیرفتن</label>
 								<span class="sap-chip is-type-<?php echo esc_attr( $e['type'] ); ?>"><?php echo esc_html( $types[ $e['type'] ] ?? $e['type'] ); ?></span>
 								<span class="sap-small"><?php echo esc_html( $e['reason'] ); ?></span>
+								<?php echo sap_content_qc_badge( $e ); // phpcs:ignore ?>
 							</div>
 							<div class="sap-v is-insert-body" data-v="diff new"><?php echo wp_kses( $e['html'], sap_content_allowed_html() ); // phpcs:ignore ?></div>
 						</div>
@@ -245,6 +247,49 @@ $locked = in_array( $rev['status'], array( 'approved', 'published', 'rejected' )
 			<?php endforeach; ?>
 		<?php endforeach; ?>
 	</div>
+
+	<?php $pp = (array) ( $rev['audit']['product'] ?? array() ); ?>
+	<?php if ( $pp ) : ?>
+		<section class="sap-prodfields">
+			<h3>🛍️ فیلدهای محصول ووکامرس <small>هر بخش در جای خودش در وردپرس منتشر می‌شود</small></h3>
+			<?php if ( '' !== (string) ( $pp['short'] ?? '' ) ) : ?>
+				<div class="sap-prodfield<?php echo empty( $pp['short_accept'] ) ? ' is-off' : ''; ?>">
+					<label class="sap-check"><input type="checkbox" name="product_accept[]" value="short" <?php checked( ! empty( $pp['short_accept'] ) ); ?> <?php disabled( $locked || ! empty( $pp['short_qc'] ) ); ?>> <b>توضیح کوتاه</b> <small class="sap-muted">(کنار تصویر و دکمه خرید)</small></label>
+					<?php if ( ! empty( $pp['short_qc'] ) ) : ?><span class="sap-chip is-bad">⛔ کنترل کیفیت: <?php echo esc_html( implode( '، ', $pp['short_qc'] ) ); ?></span><?php endif; ?>
+					<div class="sap-prodfield-cols">
+						<div><span class="sap-label">فعلی</span><div class="sap-prodfield-box is-old"><?php echo '' !== trim( wp_strip_all_tags( (string) $pp['short_old'] ) ) ? wp_kses( (string) $pp['short_old'], sap_content_allowed_html() ) : '<em class="sap-muted">خالی</em>'; // phpcs:ignore ?></div></div>
+						<div><span class="sap-label">پیشنهادی</span><div class="sap-prodfield-box"><?php echo wp_kses( (string) $pp['short'], sap_content_allowed_html() ); // phpcs:ignore ?></div></div>
+					</div>
+				</div>
+			<?php endif; ?>
+			<?php if ( ! empty( $pp['attributes'] ) ) : ?>
+				<div class="sap-prodfield">
+					<b>ویژگی‌های محصول</b> <small class="sap-muted">(جدول «توضیحات تکمیلی»؛ فقط از ویژگی‌های فعلی و متن خود صفحه، بدون حدس — ویژگی‌ای حذف نمی‌شود)</small>
+					<table class="sap-table is-compact sap-attr-table">
+						<thead><tr><th></th><th>ویژگی</th><th>فعلی</th><th>پیشنهادی</th><th>منبع</th></tr></thead>
+						<tbody>
+							<?php foreach ( $pp['attributes'] as $ai => $a ) : ?>
+								<tr class="is-<?php echo esc_attr( $a['state'] ); ?>">
+									<td><?php if ( 'same' !== $a['state'] ) : ?><input type="checkbox" name="product_accept[]" value="attr:<?php echo esc_attr( $ai ); ?>" <?php checked( ! empty( $a['accept'] ) ); ?> <?php disabled( $locked ); ?>><?php else : ?>✓<?php endif; ?></td>
+									<td><b><?php echo esc_html( $a['name'] ); ?></b></td>
+									<td><?php echo null !== $a['old'] ? esc_html( implode( '، ', $a['old'] ) ) : '<em class="sap-muted">ندارد</em>'; // phpcs:ignore ?></td>
+									<td><?php echo esc_html( implode( '، ', $a['values'] ) ); ?><?php echo 'same' === $a['state'] ? ' <small class="sap-muted">(بدون تغییر)</small>' : ( 'new' === $a['state'] ? ' <span class="sap-chip is-good">جدید</span>' : ' <span class="sap-chip is-info">یکدست‌سازی</span>' ); // phpcs:ignore ?></td>
+									<td><small><?php echo 'text' === $a['source'] ? 'از متن صفحه' : 'ویژگی فعلی'; ?></small></td>
+								</tr>
+							<?php endforeach; ?>
+						</tbody>
+					</table>
+				</div>
+			<?php endif; ?>
+			<?php if ( ! empty( $pp['needs'] ) ) : ?>
+				<div class="sap-prodfield is-needs">
+					<b>📋 اطلاعاتی که باید از کارفرما گرفته شود</b>
+					<p class="sap-small sap-muted">خریدار این محصول معمولاً این‌ها را می‌پرسد ولی در اطلاعات محصول نیست؛ سکان آن‌ها را حدس نمی‌زند.</p>
+					<ul><?php foreach ( $pp['needs'] as $n ) : ?><li><?php echo esc_html( $n ); ?></li><?php endforeach; ?></ul>
+				</div>
+			<?php endif; ?>
+		</section>
+	<?php endif; ?>
 
 	<div class="sap-rev-foot">
 		<?php if ( ! $locked ) : ?>

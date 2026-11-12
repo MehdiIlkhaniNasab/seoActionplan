@@ -763,17 +763,32 @@ add_action( 'rest_api_init', function () {
 			if ( ! $urls ) {
 				return new WP_Error( 'sap_url', 'صفحه‌ای انتخاب نشده.', array( 'status' => 400 ) );
 			}
-			$audit = (array) ( sap_dataset_payload( $project['id'], 'ai_audit' )['groups'] ?? array() );
+			$audit  = (array) ( sap_dataset_payload( $project['id'], 'ai_audit' )['groups'] ?? array() );
+			$source = sanitize_key( (string) ( $req->get_param( 'source' ) ?: 'manual' ) );
+			$force  = rest_sanitize_boolean( $req->get_param( 'force' ) );
+			$added  = 0;
+			$skip   = array();
 			foreach ( $urls as $u ) {
 				$reason = (string) $req->get_param( 'reason' );
+				$a      = null;
 				foreach ( $audit as $g ) {
-					if ( ! $reason && ! empty( $g[ sap_norm_url( $u ) ] ) ) {
-						$reason = $g[ sap_norm_url( $u ) ]['diagnosis'] . ( $g[ sap_norm_url( $u ) ]['update_brief'] ? "\n" . $g[ sap_norm_url( $u ) ]['update_brief'] : '' );
-					}
+					$a = $a ?: ( $g[ sap_norm_url( $u ) ] ?? null );
 				}
-				sap_update_plan( $project, $u, $period, array( 'reason' => $reason, 'source' => sanitize_key( (string) ( $req->get_param( 'source' ) ?: 'manual' ) ) ) );
+				// From the analysis only pages that really need writing take a calendar slot.
+				if ( 'audit' === $source && ! $force && false === sap_audit_needs_update( $a ) ) {
+					$skip[] = sap_page_title( $project['id'], $u ) ?: sap_short_url( $u, 50 );
+					continue;
+				}
+				if ( ! $reason ) {
+					$reason = sap_audit_calendar_reason( $a );
+				}
+				sap_update_plan( $project, $u, $period, array( 'reason' => $reason, 'source' => $source ) );
+				++$added;
 			}
-			$msg = sprintf( '%s صفحه به بخش «آپدیت محتوا»ی تقویم %s اضافه شد', sap_num( count( $urls ) ), sap_period_label( $period ) );
+			if ( ! $added ) {
+				return new WP_Error( 'sap_update', 'طبق تحلیل، ' . ( 1 === count( $skip ) ? 'این صفحه' : 'این صفحات' ) . ' آپدیت محتوایی لازم ندارد؛ کارهای سریعش (تایتل، اسکیما، ویژگی‌ها…) در «پیشنهادها» است.' . ( 1 === count( $urls ) && ! $req->get_param( 'urls' ) ? ' اگر باز هم می‌خواهید، «به هر حال به تقویم اضافه شود» را بزنید.' : ' اگر باز هم می‌خواهید، تحلیل صفحه را باز کنید و «به هر حال به تقویم اضافه شود» را بزنید.' ), array( 'status' => 400 ) );
+			}
+			$msg = sprintf( '%s صفحه به بخش «آپدیت محتوا»ی تقویم %s اضافه شد', sap_num( $added ), sap_period_label( $period ) ) . ( $skip ? sprintf( '؛ %s صفحه رد شد چون طبق تحلیل آپدیت محتوایی لازم ندارد', sap_num( count( $skip ) ) ) : '' );
 			return array( 'ok' => true, 'msg' => $msg . sap_calendar_sync_sheet( sap_project( $project['id'] ) ) );
 		} ),
 	) );
@@ -945,7 +960,7 @@ add_action( 'rest_api_init', function () {
 				sap_revision_save( array( 'status' => 'rejected' ), $rev['id'] );
 				return array( 'ok' => true, 'msg' => 'رد شد' );
 			}
-			$n = sap_content_approve( $rev, (array) $req->get_param( 'accepted' ) );
+			$n = sap_content_approve( $rev, (array) $req->get_param( 'accepted' ), null !== $req->get_param( 'product' ) ? (array) $req->get_param( 'product' ) : null );
 			return array( 'ok' => true, 'msg' => sprintf( '%s تغییر تأیید شد و در لاگ اقدامات ثبت شد.', sap_num( $n ) ) );
 		},
 	) );

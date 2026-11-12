@@ -140,6 +140,8 @@ $tabs = array( 'all' => 'همه', 'open' => 'در جریان', 'late' => 'عقب
 				<div class="is-good"><b><?php echo esc_html( sap_num( $counts['done'] ) ); ?></b><span>انجام شده</span></div>
 			</div>
 
+			<?php sap_view( 'pm-assist', array( 'project' => $project ) ); ?>
+
 			<div class="sap-pm-track" data-sap-pm-track>
 				<div class="sap-seg-mini sap-pmp-tabs">
 					<?php foreach ( $tabs as $k => $l ) : ?>

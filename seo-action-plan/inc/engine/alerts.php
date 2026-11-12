@@ -30,7 +30,7 @@ function sap_alert_severities() {
  */
 function sap_alert_rules() {
 	return array(
-		'uptime'    => array( 'در دسترس بودن سایت', 'هر ساعت صفحه اصلی بررسی می‌شود؛ دو خطای پشت‌سرهم (خطای سرور یا عدم پاسخ) = بحرانی. پاسخ کندتر از آستانه = هشدار.', 'hourly', array( 'on' => 1, 'slow' => 8 ) ),
+		'uptime'    => array( 'در دسترس بودن و سرعت پاسخ سایت', 'روزی یک بار (ساعت خلاصه روزانه) صفحه اصلی با دو درخواست سبک بررسی می‌شود: هر دو بی‌پاسخ = بحرانی؛ میانگین کندتر از آستانه = هشدار. بررسی ساعتی قطعی اختیاری است.', 'daily', array( 'on' => 1, 'slow' => 8, 'hourly' => 0 ) ),
 		'ssl'       => array( 'گواهی SSL', 'روزهای باقی‌مانده تا انقضای گواهی HTTPS.', 'daily', array( 'on' => 1, 'days' => 14 ) ),
 		'traffic'   => array( 'افت ترافیک', '۷ روز اخیر سرچ کنسول در برابر ۷ روز قبل، برای کل سایت و صفحات پربازدید.', 'daily', array( 'on' => 1, 'drop' => 25, 'page_drop' => 40, 'min_clicks' => 50 ) ),
 		'index'     => array( 'خروج صفحه مهم از ایندکس', 'تغییر وضعیت URL Inspection صفحات مهم از «ایندکس‌شده» به حالت دیگر.', 'daily', array( 'on' => 1 ) ),
@@ -38,7 +38,7 @@ function sap_alert_rules() {
 		'robots'    => array( 'تغییر robots.txt', 'هر تغییر در robots.txt؛ مسدود شدن کل سایت = بحرانی.', 'daily', array( 'on' => 1 ) ),
 		'sitemap'   => array( 'خطای سایت‌مپ', 'خطاهای سایت‌مپ در سرچ کنسول، پیدا نشدن سایت‌مپ و خوانده نشدن طولانی.', 'daily', array( 'on' => 1 ) ),
 		'changes'   => array( 'تغییرات پرریسک خارج از سکان', 'noindex، تغییر نامک یا کنونیکال، خارج شدن صفحه از انتشار و تغییر تایتل صفحات مهم که در سایت (نه از سکان) انجام شده.', 'sync', array( 'on' => 1 ) ),
-		'ranks'     => array( 'افت رتبه کلمات هدف', 'افت چند پله‌ای یا خروج از صفحه اول/سه نتیجه اول برای کلمات ردیابی‌شده.', 'daily', array( 'on' => 1, 'drop' => 5 ) ),
+		'ranks'     => array( 'افت رتبه کلمات مهم', 'فقط افت تأییدشده: میانه ۳ روز اخیر در برابر میانه هفته قبل، دو روز پشت‌سرهم، برای کلمات Focus یا پرجستجو؛ همه در یک هشدار روزانه.', 'daily', array( 'on' => 1, 'drop' => 5, 'min_volume' => 100 ) ),
 		'cwv'       => array( 'افت سرعت (Core Web Vitals)', 'افت امتیاز موبایل یا رد شدن LCP از ۴ ثانیه در صفحات کلیدی.', 'daily', array( 'on' => 1, 'drop' => 15 ) ),
 		'stale'     => array( 'داده کهنه یا قطع اتصال', 'خزش قدیمی، همگام‌سازی انجام‌نشده، قطع افزونه رابط یا خطای سرچ کنسول.', 'daily', array( 'on' => 1, 'crawl_days' => 35 ) ),
 		'radar'     => array( 'رادار رقبا', 'جلو زدن رقیب روی کلمه هدف و صفحات تازه رقبا (تب رقبا).', 'daily', array( 'on' => 1 ) ),
@@ -249,27 +249,40 @@ function sap_alerts_resolve_rest( $project_id, $rule, $keep ) {
 /**
  * Site availability (hourly).
  */
-function sap_alert_rule_uptime( $project, $cfg ) {
+function sap_alert_rule_uptime( $project, $cfg, $hourly = false ) {
 	$base = sap_site_base( $project );
 	if ( '' === $base ) {
 		return null;
 	}
-	$t0   = microtime( true );
-	$res  = sap_http( $base, array( 'timeout' => 25, 'redirection' => 5, 'user-agent' => 'Mozilla/5.0 (compatible; SokanMonitor/1.0)' ) );
-	$ms   = (int) round( ( microtime( true ) - $t0 ) * 1000 );
-	$code = is_wp_error( $res ) ? 0 : (int) wp_remote_retrieve_response_code( $res );
-	$fail = 0 === $code || $code >= 500;
-	$cnt  = $fail ? (int) sap_alert_state( $project['id'], 'uptime_fails' ) + 1 : 0;
-	sap_alert_state( $project['id'], 'uptime_fails', $cnt );
-	$log   = (array) sap_alert_state( $project['id'], 'uptime_log' );
-	$log[] = array( current_time( 'mysql' ), $code, $ms );
-	sap_alert_state( $project['id'], 'uptime_log', array_slice( $log, -168 ) ); // A week of hourly checks.
+	$probe = function () use ( $base ) {
+		$t0   = microtime( true );
+		$res  = sap_http( $base, array( 'timeout' => 25, 'redirection' => 5, 'user-agent' => 'Mozilla/5.0 (compatible; SokanMonitor/1.0)' ) );
+		$code = is_wp_error( $res ) ? 0 : (int) wp_remote_retrieve_response_code( $res );
+		return array( 'code' => $code, 'ms' => (int) round( ( microtime( true ) - $t0 ) * 1000 ), 'fail' => 0 === $code || $code >= 500, 'err' => is_wp_error( $res ) ? $res->get_error_message() : 'HTTP ' . $code );
+	};
+	// Two light requests: a single slow or failed answer is often a network blip.
+	$one  = $probe();
+	$two  = $one['fail'] && ! $hourly ? ( sleep( 20 ) ?: $probe() ) : ( $hourly ? $one : $probe() );
+	$log  = (array) sap_alert_state( $project['id'], 'uptime_log' );
+	$log[] = array( current_time( 'mysql' ), $two['code'], $two['ms'] );
+	sap_alert_state( $project['id'], 'uptime_log', array_slice( $log, -90 ) );
+	if ( $hourly ) {
+		// Optional hourly check: only an outage (two failed checks in a row), never speed.
+		$cnt = $one['fail'] ? (int) sap_alert_state( $project['id'], 'uptime_fails' ) + 1 : 0;
+		sap_alert_state( $project['id'], 'uptime_fails', $cnt );
+		return $cnt >= 2 ? array( array( 'down', 'critical', 'سایت از دسترس خارج است', sprintf( 'صفحه اصلی در %s بررسی ساعتی پشت‌سرهم پاسخ نداد (%s). هاست، DNS و فایروال را بررسی کنید.', sap_num( $cnt ), $one['err'] ), $base ) ) : null;
+	}
 	$out = array();
-	if ( $cnt >= 2 ) {
-		$why   = is_wp_error( $res ) ? $res->get_error_message() : 'HTTP ' . $code;
-		$out[] = array( 'down', 'critical', 'سایت از دسترس خارج است', sprintf( 'صفحه اصلی در %s بررسی پشت‌سرهم پاسخ نداد (%s). گوگل در صورت ادامه، صفحات را کم‌کم از نتایج کنار می‌گذارد؛ هاست، DNS و فایروال را بررسی کنید.', sap_num( $cnt ), $why ), $base );
-	} elseif ( ! $fail && $ms > (int) $cfg['slow'] * 1000 ) {
-		$out[] = array( 'slow', 'warning', 'سایت خیلی کند پاسخ می‌دهد', sprintf( 'صفحه اصلی در %s ثانیه پاسخ داد (آستانه %s ثانیه). کندی سرور روی خزش گوگل و تجربه کاربر اثر دارد.', sap_num( $ms / 1000, 1 ), sap_num( $cfg['slow'] ) ), $base );
+	if ( $one['fail'] && $two['fail'] ) {
+		$out[] = array( 'down', 'critical', 'سایت از دسترس خارج است', sprintf( 'صفحه اصلی در دو بررسی با فاصله ۲۰ ثانیه پاسخ نداد (%s). گوگل در صورت ادامه، صفحات را کم‌کم از نتایج کنار می‌گذارد؛ هاست، DNS و فایروال را بررسی کنید.', $two['err'] ), $base );
+		return $out;
+	}
+	$ok  = array_filter( array( $one, $two ), function ( $x ) {
+		return ! $x['fail'];
+	} );
+	$avg = $ok ? array_sum( array_column( $ok, 'ms' ) ) / count( $ok ) : 0;
+	if ( $avg > (int) $cfg['slow'] * 1000 ) {
+		$out[] = array( 'slow', 'warning', 'سایت کند پاسخ می‌دهد', sprintf( 'میانگین پاسخ صفحه اصلی در بررسی روزانه %s ثانیه بود (آستانه %s ثانیه). کندی سرور روی خزش گوگل و تجربه کاربر اثر دارد؛ هاست، کش و افزونه‌های سنگین را بررسی کنید.', sap_num( $avg / 1000, 1 ), sap_num( $cfg['slow'] ) ), $base );
 	}
 	return $out;
 }
@@ -528,37 +541,83 @@ add_action( 'sap_site_change', function ( $project, $c ) {
  * Ranking drops of tracked keywords (daily, from the rank history).
  */
 function sap_alert_rule_ranks( $project, $cfg ) {
-	if ( ! function_exists( 'sap_rank_movers' ) ) {
+	if ( ! function_exists( 'sap_rank_history' ) ) {
 		return null;
 	}
-	$m = sap_rank_movers( $project['id'], 7 );
-	if ( null === $m ) {
+	$hist = sap_rank_history( $project['id'], 21 );
+	if ( ! $hist ) {
 		return null;
 	}
-	$out = array();
-	foreach ( $m['rows'] as $r ) {
-		if ( null === $r['now'] ) {
-			if ( null !== $r['then'] && $r['then'] <= 10 ) {
-				$out[] = array( 'kw:' . $r['keyword'], 'critical', sprintf( 'کلمه «%s» از نتایج ردیابی خارج شد', $r['keyword'] ), sprintf( 'هفته پیش جایگاه %s داشت و الان در نتایج ردیابی‌شده نیست.', sap_num( $r['then'], 1 ) ), $r['url'] );
+	$median = function ( $vals ) {
+		$vals = array_values( array_filter( $vals, 'is_numeric' ) );
+		if ( count( $vals ) < 2 ) {
+			return null; // One point is not a trend.
+		}
+		sort( $vals );
+		$n = count( $vals );
+		return $n % 2 ? $vals[ intdiv( $n, 2 ) ] : ( $vals[ $n / 2 - 1 ] + $vals[ $n / 2 ] ) / 2;
+	};
+	// Only keywords that matter: a Focus keyword, or enough search volume.
+	$important = array();
+	foreach ( sap_rank_keywords( $project ) as $info ) {
+		if ( '' !== $info['focus'] || (int) $info['volume'] >= (int) $cfg['min_volume'] ) {
+			$important[ sap_norm_text( $info['keyword'] ) ] = $info;
+		}
+	}
+	$today = current_time( 'Y-m-d' );
+	$seen  = (array) sap_alert_state( $project['id'], 'rank_drop_seen' );
+	$keep  = array();
+	$lines = array();
+	$worst = 'warning';
+	foreach ( $hist as $kw => $series ) {
+		if ( ! isset( $important[ $kw ] ) ) {
+			continue;
+		}
+		$recent = array();
+		$before = array();
+		foreach ( $series as $day => $pt ) {
+			$age = (int) round( ( strtotime( $today ) - strtotime( $day ) ) / DAY_IN_SECONDS );
+			$pos = null === $pt['pos'] ? 101 : $pt['pos']; // Not in the results = beyond 100.
+			if ( $age <= 3 ) {
+				$recent[] = $pos;
+			} elseif ( $age >= 8 && $age <= 14 ) {
+				$before[] = $pos;
 			}
+		}
+		$now  = $median( $recent );
+		$then = $median( $before );
+		if ( null === $now || null === $then || $then > 30 ) {
 			continue;
 		}
-		if ( null === $r['then'] ) {
-			continue;
-		}
-		$drop = $r['now'] - $r['then'];
-		if ( $r['then'] <= 3 && $r['now'] > 3 ) {
-			$out[] = array( 'kw:' . $r['keyword'], 'warning', sprintf( 'کلمه «%s» از سه نتیجه اول بیرون رفت', $r['keyword'] ), sprintf( 'جایگاه از %s به %s رسید (۷ روز).', sap_num( $r['then'], 1 ), sap_num( $r['now'], 1 ) ), $r['url'] );
-		} elseif ( $r['then'] <= 10 && $r['now'] > 10 ) {
-			$out[] = array( 'kw:' . $r['keyword'], 'warning', sprintf( 'کلمه «%s» از صفحه اول گوگل خارج شد', $r['keyword'] ), sprintf( 'جایگاه از %s به %s رسید (۷ روز).', sap_num( $r['then'], 1 ), sap_num( $r['now'], 1 ) ), $r['url'] );
+		$drop  = $now - $then;
+		$label = '';
+		if ( $then <= 10 && $now > 10 && $drop >= 3 ) {
+			$label = $now > 100 ? 'از نتایج خارج شد' : 'از صفحه اول خارج شد';
+		} elseif ( $then <= 3 && $now > 3 && $drop >= 2 ) {
+			$label = 'از سه نتیجه اول بیرون رفت';
 		} elseif ( $drop >= (float) $cfg['drop'] ) {
-			$out[] = array( 'kw:' . $r['keyword'], 'warning', sprintf( 'افت %s پله‌ای کلمه «%s»', sap_num( $drop, 0 ), $r['keyword'] ), sprintf( 'جایگاه از %s به %s رسید (۷ روز).', sap_num( $r['then'], 1 ), sap_num( $r['now'], 1 ) ), $r['url'] );
+			$label = sap_num( $drop, 0 ) . ' پله افت';
 		}
-		if ( ! empty( $r['url_changed'] ) ) {
-			$out[] = array( 'url:' . $r['keyword'], 'info', sprintf( 'صفحه رتبه‌گیرنده کلمه «%s» عوض شد', $r['keyword'] ), sprintf( 'گوگل به‌جای %s صفحه %s را نشان می‌دهد؛ نشانه احتمالی کنیبالیزیشن.', sap_short_url( $r['url_then'], 50 ), sap_short_url( $r['url'], 50 ) ), $r['url'] );
+		if ( '' === $label ) {
+			continue;
 		}
+		// Confirmed only when the drop holds on two daily checks in a row.
+		$days        = ( $seen[ $kw ]['day'] ?? '' ) === gmdate( 'Y-m-d', strtotime( $today . ' -1 day' ) ) ? (int) $seen[ $kw ]['n'] + 1 : ( ( $seen[ $kw ]['day'] ?? '' ) === $today ? (int) $seen[ $kw ]['n'] : 1 );
+		$keep[ $kw ] = array( 'day' => $today, 'n' => $days );
+		if ( $days < 2 ) {
+			continue;
+		}
+		if ( $then <= 3 && $now > 10 ) {
+			$worst = 'critical';
+		}
+		$lines[] = sprintf( '«%s»: %s (از حدود %s به %s)%s', $important[ $kw ]['keyword'], $label, sap_num( $then, 0 ), $now > 100 ? 'بیرون از ۱۰۰' : sap_num( $now, 0 ), '' !== $important[ $kw ]['focus'] ? ' · Focus: ' . $important[ $kw ]['focus'] : '' );
 	}
-	return array_slice( $out, 0, 12 );
+	sap_alert_state( $project['id'], 'rank_drop_seen', $keep );
+	if ( ! $lines ) {
+		return array();
+	}
+	// One alert a day for all confirmed drops, not one per keyword.
+	return array( array( 'ranks:' . $today, $worst, sprintf( 'افت تأییدشده رتبه %s کلمه مهم', sap_num( count( $lines ) ) ), implode( "\n", array_slice( $lines, 0, 10 ) ) . ( count( $lines ) > 10 ? "\n…" : '' ) . "\n(میانه ۳ روز اخیر در برابر هفته قبل، دو روز پشت‌سرهم تأیید شده)" ) );
 }
 
 /**
@@ -699,10 +758,21 @@ function sap_alerts_digest() {
 add_action( 'sap_hourly', function () {
 	foreach ( sap_seo_projects() as $p ) {
 		sap_alerts_run( $p, 'hourly' );
+		// Optional hourly outage check (off by default: one daily request is enough for most sites).
+		$ucfg = sap_alert_rule_cfg( $p, 'uptime' );
+		if ( ! empty( $ucfg['on'] ) && ! empty( $ucfg['hourly'] ) && (int) current_time( 'G' ) !== (int) sap_setting( 'alert_hour', 9 ) ) {
+			$out = sap_alert_rule_uptime( $p, $ucfg, true );
+			if ( $out ) {
+				list( $row, $fresh ) = sap_alert_raise( $p['id'], 'uptime', $out[0][0], $out[0][1], $out[0][2], $out[0][3], $out[0][4] );
+				if ( $fresh ) {
+					sap_alerts_notify( $p, array( $row ) );
+				}
+			}
+		}
 	}
-	// Daily rules once a day, at the first run after 06:00 site time.
+	// Daily rules and the digest once a day, at the set hour (default 09:00 site time).
 	$today = current_time( 'Y-m-d' );
-	if ( (int) current_time( 'G' ) >= 6 && get_option( 'sap_alerts_daily_on' ) !== $today ) {
+	if ( (int) current_time( 'G' ) >= (int) sap_setting( 'alert_hour', 9 ) && get_option( 'sap_alerts_daily_on' ) !== $today ) {
 		update_option( 'sap_alerts_daily_on', $today, false );
 		foreach ( sap_seo_projects() as $p ) {
 			sap_alerts_run( $p, 'daily' );

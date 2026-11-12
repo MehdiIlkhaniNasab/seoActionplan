@@ -69,6 +69,7 @@ function sap_settings_defaults() {
 		'alert_critical'         => 'sms,tg,bale,email',
 		'alert_warning'          => 'tg,bale,email',
 		'alert_info'             => 'digest',
+		'alert_hour'             => 9, // Daily checks (speed, ranks, …) and the digest run at this hour.
 		'reminder_hours'         => '8,14',
 		'reminder_sms'           => 1,
 		'done_sms_hour'          => 21, // Nightly thank-you SMS (0 = off).

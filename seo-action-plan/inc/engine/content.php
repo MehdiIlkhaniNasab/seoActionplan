@@ -178,7 +178,12 @@ function sap_content_step( $rev ) {
 	if ( ! empty( $rev['original']['site'] ) ) {
 		$site              = $rev['original']['site'];
 		$facts['wordpress'] = sap_site_ai_facts( array( 'type' => $site['type'] ?? '', 'seo' => $site['seo'] ?? array(), 'details' => array( 'images' => $site['images'] ?? array(), 'product' => $site['product'] ?? null, 'term' => $site['term'] ?? null ) ) );
+		// Price and stock change over time: the model never sees them, so they never land in the text.
+		unset( $facts['wordpress']['product']['price'], $facts['wordpress']['product']['stock'] );
 	}
+	$kind      = sap_content_kind( $rev, $facts );
+	$kind_note = array_merge( array( 'نوع صفحه: ' . sap_content_kind_labels()[ $kind ] . '.' ), sap_content_kind_rules( $kind ), sap_content_global_rules() );
+	$is_prod   = 'product' === $kind && ! empty( $rev['original']['site']['product'] );
 	$cost    = $rev['cost'];
 	$types   = array_keys( sap_content_edit_types() );
 
@@ -219,6 +224,9 @@ function sap_content_step( $rev ) {
 			'- لحن (یکدست، مناسب مخاطب و نوع صفحه)، واژه‌گزینی (تکرار، کلمات مبهم یا غیرطبیعی، انباشت کلمه کلیدی)، نگارش (نیم‌فاصله، علائم، جمله‌های طولانی و مجهول، غلط املایی)، ساختار (تیترها، پاراگراف‌های طولانی)، اطلاعات قدیمی، اعتماد و تخصص.',
 			'- در issues هر مشکل را با شماره بلوک دقیق و توضیح کوتاه بنویس؛ مشکلات جزئی و سلیقه‌ای را نیاور.',
 			'- اگر محتوا خوب است، صادقانه verdict=keep بده؛ تغییر برای تغییر پیشنهاد نکن.',
+			'- قیمت، موجودی، زمان ارسال یا تاریخ گذرا در متن فعلی را به‌عنوان outdated در issues بیاور (باید حذف شود).',
+			'',
+			implode( "\n", $kind_note ),
 			'',
 			'اطلاعات صفحه: ' . wp_json_encode( array( 'url' => $rev['url'], 'title' => $rev['original']['title'] ?? '', 'h1' => $rev['original']['h1'] ?? '', 'meta' => $rev['original']['meta'] ?? '' ) + $facts, JSON_UNESCAPED_UNICODE ),
 			'',
@@ -232,9 +240,10 @@ function sap_content_step( $rev ) {
 		$cost  += (float) ( sap_ai_usage()['last_cost'] ?? 0 );
 		$audit  = sap_content_normalize_audit( $res );
 		$chunks = 'keep' === $audit['verdict'] && ! $audit['issues'] && ! $audit['missing_sections'] ? array() : sap_content_chunks( $blocks );
-		$prog   = array( 'step' => $chunks ? 'rewrite' : 'done', 'chunk' => 0, 'chunks' => $chunks );
-		sap_revision_save( array( 'audit' => $audit, 'progress' => $prog, 'cost' => $cost, 'status' => $chunks ? 'analyzing' : 'review' ), $rev['id'] );
-		return array( 'more' => (bool) $chunks, 'msg' => $chunks ? sprintf( 'ممیزی انجام شد (%s). بازنویسی بخش ۱ از %s…', sap_content_verdicts()[ $audit['verdict'] ], sap_num( count( $chunks ) ) ) : 'ممیزی انجام شد؛ تغییری لازم نیست.', 'pct' => $chunks ? 15 : 100 );
+		$next   = $chunks ? 'rewrite' : ( $is_prod ? 'product' : 'done' );
+		$prog   = array( 'step' => $next, 'chunk' => 0, 'chunks' => $chunks, 'kind' => $kind );
+		sap_revision_save( array( 'audit' => $audit, 'progress' => $prog, 'cost' => $cost, 'status' => 'done' === $next ? 'review' : 'analyzing' ), $rev['id'] );
+		return array( 'more' => 'done' !== $next, 'msg' => $chunks ? sprintf( 'ممیزی انجام شد (%s). بازنویسی بخش ۱ از %s…', sap_content_verdicts()[ $audit['verdict'] ], sap_num( count( $chunks ) ) ) : ( $is_prod ? 'ممیزی انجام شد؛ ساخت توضیح کوتاه و ویژگی‌های محصول…' : 'ممیزی انجام شد؛ تغییری لازم نیست.' ), 'pct' => 'done' === $next ? 100 : 15 );
 	}
 
 	if ( 'rewrite' === ( $prog['step'] ?? '' ) ) {
@@ -268,13 +277,15 @@ function sap_content_step( $rev ) {
 		$prompt = implode( "\n", array(
 			'تو ویراستار ارشد محتوای سئوی فارسی هستی. بخشی از محتوای یک صفحه به صورت بلوک‌های HTML (با id) آمده، همراه با نتیجه ممیزی (لحن هدف، مشکلات همین بلوک‌ها، بخش‌های جاافتاده‌ای که باید در این قسمت اضافه شوند) و کلمات کلیدی صفحه.',
 			'فقط بلوک‌هایی را که واقعاً نیاز به تغییر دارند برگردان:',
-			'- replace: بلوک بازنویسی‌شده؛ معنی، اعداد، نام برند و محصول، قیمت‌ها و لینک‌های موجود (<a href>) را حفظ کن. تگ اصلی بلوک (p، h2، ul…) را نگه دار.',
+			'- replace: بلوک بازنویسی‌شده؛ معنی، مشخصات، نام برند و محصول و لینک‌های موجود (<a href>) را حفظ کن (اما قیمت، موجودی و تاریخ گذرا را حذف کن). تگ اصلی بلوک (p، h2، ul…) را نگه دار.',
 			'- insert_after: بخش جدید بعد از همان بلوک (یک یا چند تگ: تیتر h2/h3 و پاراگراف یا فهرست) برای missing_sections؛ اطلاعات عمومی و درست بنویس و عدد و ادعای ساختگی ننویس.',
 			'- delete: فقط برای تکرار یا مطلب کاملاً بی‌ربط.',
 			'- قواعد نگارش: نیم‌فاصله درست (می‌شود، کتاب‌ها)، علائم فارسی (، ؛ ؟)، جمله‌های کوتاه و فعال، بدون انباشت کلمه کلیدی؛ کلمه اصلی و فرعی را طبیعی و در جای مناسب (تیترها و جمله اول) به کار ببر.',
 			'- فقط از تگ‌های p, h2, h3, h4, ul, ol, li, strong, em, a, table, thead, tbody, tr, td, th, blockquote, section, details, summary استفاده کن. ساختار معنایی و خوانا: تیترهای سلسله‌مراتبی، پاراگراف‌های کوتاه، فهرست برای مراحل و ویژگی‌ها، جدول با thead برای مقایسه.',
 			'- سوالات متداول را آکاردئونی بنویس: <section class="sokan-faq-list"><h2>سوالات متداول</h2><details class="sokan-faq"><summary>سوال</summary><p>پاسخ کوتاه و دقیق</p></details>…</section> (اسکیمای FAQ خودکار اضافه می‌شود). نکات کلیدی را در <blockquote class="sokan-box"> بگذار.',
 			'- اگر این بخش مشکلی ندارد، edits را خالی برگردان.',
+			'',
+			implode( "\n", $kind_note ),
 			'',
 			wp_json_encode( array(
 				'tone_guide' => $audit['tone_guide'],
@@ -290,6 +301,7 @@ function sap_content_step( $rev ) {
 		}
 		$cost   += (float) ( sap_ai_usage()['last_cost'] ?? 0 );
 		$edits   = $rev['edits'];
+		$from    = $edits ? max( array_column( $edits, 'id' ) ) : 0;
 		$allowed = sap_content_allowed_html();
 		foreach ( (array) ( $res['edits'] ?? array() ) as $e ) {
 			if ( ! is_array( $e ) || ! isset( $in[ (int) ( $e['block'] ?? 0 ) ] ) ) {
@@ -310,8 +322,16 @@ function sap_content_step( $rev ) {
 				'accept' => true,
 			);
 		}
+		// Quality check: price, stock, notes to the writer, placeholders, empty tables, dated phrases.
+		$edits = sap_content_qc_pass( $edits, $from, $kind );
+		$cost += (float) ( sap_ai_usage()['last_cost'] ?? 0 );
 		++$prog['chunk'];
 		$done = $prog['chunk'] >= count( $prog['chunks'] );
+		if ( $done && $is_prod ) {
+			$prog['step'] = 'product';
+			sap_revision_save( array( 'edits' => $edits, 'progress' => $prog, 'cost' => $cost ), $rev['id'] );
+			return array( 'more' => true, 'msg' => 'متن بازنویسی شد؛ ساخت توضیح کوتاه و ویژگی‌های محصول…', 'pct' => 92 );
+		}
 		if ( $done ) {
 			$prog['step'] = 'done';
 		}
@@ -322,6 +342,18 @@ function sap_content_step( $rev ) {
 			'msg'  => $done ? sprintf( 'تمام شد: %s پیشنهاد تغییر آماده بررسی است.', sap_num( count( $edits ) ) ) : sprintf( 'بازنویسی بخش %s از %s…', sap_num( $prog['chunk'] + 1 ), sap_num( $n ) ),
 			'pct'  => (int) round( 15 + 85 * $prog['chunk'] / max( 1, $n ) ),
 		);
+	}
+	if ( 'product' === ( $prog['step'] ?? '' ) ) {
+		$pp = sap_content_product_step( $rev, $facts );
+		if ( is_wp_error( $pp ) ) {
+			return $pp;
+		}
+		$cost         += (float) ( sap_ai_usage()['last_cost'] ?? 0 );
+		$audit         = $rev['audit'];
+		$audit['product'] = $pp;
+		$prog['step']  = 'done';
+		sap_revision_save( array( 'audit' => $audit, 'progress' => $prog, 'cost' => $cost, 'status' => 'review' ), $rev['id'] );
+		return array( 'more' => false, 'msg' => sprintf( 'تمام شد: %s تغییر متن، توضیح کوتاه و %s ویژگی محصول آماده بررسی است.', sap_num( count( $rev['edits'] ) ), sap_num( count( $pp['attributes'] ) ) ), 'pct' => 100 );
 	}
 	return array( 'more' => false, 'msg' => 'تحلیل این صفحه کامل است.', 'pct' => 100 );
 }
@@ -454,14 +486,26 @@ function sap_block_text( $html ) {
 /**
  * Approve a revision with the chosen edits; log it for the monthly report.
  */
-function sap_content_approve( $rev, $accepted ) {
+function sap_content_approve( $rev, $accepted, $product = null ) {
 	$accepted = array_map( 'intval', (array) $accepted );
 	$edits    = $rev['edits'];
 	foreach ( $edits as &$e ) {
-		$e['accept'] = in_array( (int) $e['id'], $accepted, true );
+		// An edit that failed the quality check cannot be approved as is.
+		$e['accept'] = in_array( (int) $e['id'], $accepted, true ) && empty( $e['qc'] );
 	}
 	unset( $e );
-	sap_revision_save( array( 'edits' => $edits, 'status' => 'approved' ), $rev['id'] );
+	$save = array( 'edits' => $edits, 'status' => 'approved' );
+	if ( null !== $product && ! empty( $rev['audit']['product'] ) ) {
+		$audit = $rev['audit'];
+		$keys  = array_map( 'strval', $product );
+		$audit['product']['short_accept'] = in_array( 'short', $keys, true ) && empty( $audit['product']['short_qc'] );
+		foreach ( $audit['product']['attributes'] as $i => &$a ) {
+			$a['accept'] = in_array( 'attr:' . $i, $keys, true );
+		}
+		unset( $a );
+		$save['audit'] = $audit;
+	}
+	sap_revision_save( $save, $rev['id'] );
 	sap_update_from_revision( sap_revision( $rev['id'] ), 'approved' );
 	$on     = array_filter( $edits, function ( $e ) {
 		return $e['accept'];
@@ -519,7 +563,13 @@ function sap_content_site_action( $rev, $do, $extra = array() ) {
 			if ( ! in_array( $rev['status'], array( 'approved', 'published' ), true ) ) {
 				return new WP_Error( 'sap_rev_state', 'اول تغییرات را تأیید کنید.' );
 			}
-			$changes = array( 'content' => sap_content_enhance( sap_content_final_raw( $rev ) ) );
+			$held = array_filter( $rev['edits'], function ( $e ) {
+				return ! empty( $e['accept'] ) && ! empty( $e['qc'] );
+			} );
+			if ( $held ) {
+				return new WP_Error( 'sap_qc', 'بعضی تغییرهای پذیرفته‌شده در کنترل کیفیت رد شده‌اند (قیمت، جای خالی یا یادداشت در متن). آن‌ها را از انتخاب خارج یا تحلیل را دوباره اجرا کنید.' );
+			}
+			$changes = array( 'content' => sap_content_enhance( sap_content_final_raw( $rev ) ) ) + sap_content_product_changes( $rev );
 			if ( ! empty( $extra['seo'] ) ) {
 				if ( '' !== ( $rev['audit']['title'] ?? '' ) ) {
 					$changes['seo_title'] = $rev['audit']['title'];

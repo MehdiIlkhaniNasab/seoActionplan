@@ -118,9 +118,15 @@ $base = sap_project_url( $pid, 'alerts' );
 					<label class="sap-check"><input type="checkbox" name="rules[<?php echo esc_attr( $rk ); ?>][on]" value="1" <?php checked( ! empty( $cfg['on'] ) ); ?>> <b><?php echo esc_html( $r[0] ); ?></b> <small class="sap-muted"><?php echo esc_html( 'hourly' === $r[2] ? 'هر ساعت' : ( 'sync' === $r[2] ? 'همزمان با لاگ سایت' : 'روزانه' ) ); ?></small></label>
 					<p class="sap-small sap-muted"><?php echo esc_html( $r[1] ); ?></p>
 					<?php
-					$labels = array( 'slow' => 'آستانه کندی (ثانیه)', 'days' => 'هشدار قبل از انقضا (روز)', 'drop' => 'آستانه افت', 'page_drop' => 'افت صفحه (٪)', 'min_clicks' => 'حداقل کلیک ۷ روزه', 'min' => 'حداقل افزایش خطا', 'crawl_days' => 'کهنگی خزش (روز)' );
+					$labels = array( 'slow' => 'آستانه کندی (ثانیه)', 'days' => 'هشدار قبل از انقضا (روز)', 'drop' => 'آستانه افت', 'page_drop' => 'افت صفحه (٪)', 'min_clicks' => 'حداقل کلیک ۷ روزه', 'min' => 'حداقل افزایش خطا', 'crawl_days' => 'کهنگی خزش (روز)', 'min_volume' => 'حداقل حجم جستجوی کلمه (کلمات Focus همیشه)' );
 					foreach ( $cfg as $ck => $cv ) :
 						if ( 'on' === $ck ) {
+							continue;
+						}
+						if ( 'hourly' === $ck ) {
+							?>
+							<label class="sap-check sap-small"><input type="checkbox" name="rules[<?php echo esc_attr( $rk ); ?>][hourly]" value="1" <?php checked( ! empty( $cv ) ); ?>> بررسی ساعتی قطعی سایت هم انجام شود (هر ساعت یک درخواست سبک؛ فقط برای قطعی، نه کندی)</label>
+							<?php
 							continue;
 						}
 						?>

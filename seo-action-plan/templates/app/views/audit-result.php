@@ -10,6 +10,7 @@
  * @var array      $row     Inventory row (sap_content_inventory).
  * @var array|null $a       AI audit result of the page.
  * @var array|null $wp      Connector resolve answer (details: images, product, term).
+ * @var array      $sig     Page signals (sap_page_signals).
  */
 
 defined( 'ABSPATH' ) || exit;
@@ -34,6 +35,10 @@ if ( '' === $cur_m && $page_rd ) {
 if ( '' === $cur_t || false !== strpos( $cur_t, '%' ) ) {
 	$cur_t = (string) $row['title'];
 }
+$sig    = $sig ?? array( 'queries' => array(), 'opps' => array(), 'potential' => 0, 'value' => 'low', 'intents' => array(), 'serp' => null, 'read' => false );
+$need   = sap_audit_needs_update( $a );
+$val_l  = array( 'high' => array( 'ارزش بالا', 'is-good' ), 'medium' => array( 'ارزش متوسط', 'is-warn' ), 'low' => array( 'ارزش پایین', 'is-mute' ) );
+$opp_i  = array( 'snippet' => '🔎', 'content' => '✍️', 'structure' => '🧭' );
 $len = function ( $s, $min, $max ) {
 	$n = mb_strlen( (string) $s );
 	return '<small class="sap-len ' . ( $n >= $min && $n <= $max ? 'is-good' : 'is-warn' ) . '">' . esc_html( sap_num( $n ) ) . ' کاراکتر</small>';
@@ -67,13 +72,60 @@ $len = function ( $s, $min, $max ) {
 		<div class="sap-ar-diag is-empty"><p>این صفحه هنوز با هوش مصنوعی تحلیل نشده؛ پایین، نتیجه چک‌لیست خودکار را می‌بینید. دکمه «تحلیل هوشمند» را بزنید.</p></div>
 	<?php endif; ?>
 
+	<section class="sap-ar-sec sap-ar-value">
+		<div class="sap-ar-value-head">
+			<h4>فرصت‌ها از داده واقعی</h4>
+			<span class="sap-chip <?php echo esc_attr( $val_l[ $sig['value'] ][1] ); ?>"><?php echo esc_html( $val_l[ $sig['value'] ][0] ); ?></span>
+			<?php if ( $sig['potential'] ) : ?><span class="sap-ar-gain" title="کلیک اضافه تخمینی در ماه اگر کوئری‌ها به جایگاه بهتر یا CTR معمول برسند">تا +<?php echo esc_html( sap_num( $sig['potential'] ) ); ?> کلیک در ماه</span><?php endif; ?>
+		</div>
+		<?php if ( $sig['opps'] ) : ?>
+			<ul class="sap-ar-opps">
+				<?php foreach ( $sig['opps'] as $o ) : ?><li><span aria-hidden="true"><?php echo esc_html( $opp_i[ $o['kind'] ] ?? '•' ); ?></span><?php echo esc_html( $o['text'] ); ?></li><?php endforeach; ?>
+			</ul>
+		<?php else : ?>
+			<p class="sap-muted sap-small"><?php echo $sig['queries'] ? 'فرصت عددی قابل توجهی در داده سرچ کنسول این صفحه دیده نشد.' : 'برای این صفحه داده کوئری سرچ کنسول نیست؛ تحلیل فقط بر اساس محتوا و ساختار است.'; ?></p>
+		<?php endif; ?>
+		<?php if ( $sig['intents'] ) : ?>
+			<div class="sap-ar-intent" title="سهم نمایش‌ها بر اساس نیت جستجو">
+				<i class="is-buy" style="width:<?php echo esc_attr( $sig['intents']['transactional'] ); ?>%"></i><i class="is-cmp" style="width:<?php echo esc_attr( $sig['intents']['commercial'] ); ?>%"></i><i class="is-info" style="width:<?php echo esc_attr( $sig['intents']['informational'] ); ?>%"></i>
+			</div>
+			<p class="sap-ar-intent-l"><span class="is-buy">خرید <?php echo esc_html( sap_num( $sig['intents']['transactional'] ) ); ?>٪</span><span class="is-cmp">مقایسه <?php echo esc_html( sap_num( $sig['intents']['commercial'] ) ); ?>٪</span><span class="is-info">اطلاعاتی <?php echo esc_html( sap_num( $sig['intents']['informational'] ) ); ?>٪</span></p>
+		<?php endif; ?>
+		<?php if ( $sig['serp'] && ( $sig['serp']['missing'] || $sig['serp']['faq'] ) ) : ?>
+			<div class="sap-ar-serp">
+				<b>در مقایسه با ۱۰ نتیجه اول «<?php echo esc_html( $row['kw'] ); ?>»</b>
+				<?php if ( $sig['serp']['missing'] ) : ?><p class="sap-small">موضوعات جاافتاده:</p><div class="sap-chips"><?php foreach ( $sig['serp']['missing'] as $t ) : ?><span class="sap-chip is-warn"><?php echo esc_html( $t ); ?></span><?php endforeach; ?></div><?php endif; ?>
+				<?php if ( $sig['serp']['words'] ) : ?><p class="sap-small sap-muted">میانه طول نتایج برتر: <?php echo esc_html( sap_num( $sig['serp']['words'] ) ); ?> کلمه<?php echo null !== $row['words'] ? ' · این صفحه: ' . esc_html( sap_num( $row['words'] ) ) : ''; ?></p><?php endif; ?>
+			</div>
+		<?php endif; ?>
+	</section>
+
 	<section class="sap-ar-sec">
 		<h4>کلمات کلیدی صفحه</h4>
 		<div class="sap-ar-kw">
 			<div><span class="sap-muted sap-small">کلمه اصلی</span><b><?php echo '' !== $row['kw'] ? esc_html( $row['kw'] ) : '—'; ?></b><?php if ( 'seo' === $row['kw_src'] ) : ?><small class="sap-chip">از افزونه سئو</small><?php endif; ?></div>
 			<?php if ( $row['secondary'] ) : ?><div><span class="sap-muted sap-small">کلمات فرعی</span><div class="sap-chips"><?php foreach ( array_slice( $row['secondary'], 0, 12 ) as $s ) : ?><span class="sap-chip"><?php echo esc_html( $s ); ?></span><?php endforeach; ?></div></div><?php endif; ?>
 		</div>
-		<?php if ( $row['queries'] ) : ?>
+		<?php if ( $sig['queries'] ) : ?>
+			<div class="sap-table-wrap">
+				<table class="sap-table is-compact sap-ar-q">
+					<thead><tr><th>کوئری واقعی سرچ کنسول</th><th>جایگاه</th><th>نمایش</th><th>CTR</th><th title="آیا در تایتل / متن صفحه آمده؟">تایتل · متن</th><th title="کلیک اضافه تخمینی در ماه">پتانسیل</th></tr></thead>
+					<tbody>
+						<?php foreach ( array_slice( $sig['queries'], 0, 12 ) as $q ) : ?>
+							<tr class="<?php echo $q['low_ctr'] || $q['striking'] ? 'is-opp' : ''; ?>">
+								<td><?php echo esc_html( $q['q'] ); ?></td>
+								<td><?php echo esc_html( sap_num( $q['pos'], 1 ) ); ?></td>
+								<td><?php echo esc_html( sap_num( $q['impr'] ) ); ?></td>
+								<td class="<?php echo $q['low_ctr'] ? 'sap-bad' : ''; ?>"><?php echo esc_html( sap_num( $q['ctr'], 1 ) ); ?>٪</td>
+								<td class="sap-nowrap"><span class="sap-ar-flag <?php echo $q['in_title'] ? 'is-y' : 'is-n'; ?>"><?php echo $q['in_title'] ? '✓' : '✗'; ?></span> <span class="sap-ar-flag <?php echo null === $q['in_text'] ? '' : ( $q['in_text'] ? 'is-y' : 'is-n' ); ?>"><?php echo null === $q['in_text'] ? '؟' : ( $q['in_text'] ? '✓' : '✗' ); ?></span></td>
+								<td><?php echo $q['gain'] ? '<b class="sap-ar-gain is-small">+' . esc_html( sap_num( $q['gain'] ) ) . '</b>' : '<span class="sap-muted">—</span>'; // phpcs:ignore ?></td>
+							</tr>
+						<?php endforeach; ?>
+					</tbody>
+				</table>
+			</div>
+			<?php if ( ! $sig['read'] ) : ?><p class="sap-small sap-muted">متن صفحه هنوز خوانده نشده؛ ستون «متن» با «؟» است. بعد از «تحلیل هوشمند» کامل می‌شود.</p><?php endif; ?>
+		<?php elseif ( $row['queries'] ) : ?>
 			<table class="sap-table is-compact sap-ar-q">
 				<thead><tr><th>کوئری واقعی سرچ کنسول</th><th>جایگاه</th><th>نمایش</th><th>کلیک</th></tr></thead>
 				<tbody><?php foreach ( $row['queries'] as $q ) : ?><tr><td><?php echo esc_html( $q[0] ); ?></td><td><?php echo esc_html( sap_num( $q[1], 1 ) ); ?></td><td><?php echo esc_html( sap_num( $q[2] ) ); ?></td><td><?php echo esc_html( sap_num( $q[3] ) ); ?></td></tr><?php endforeach; ?></tbody>
@@ -116,10 +168,13 @@ $len = function ( $s, $min, $max ) {
 						<div class="sap-ar-act-head">
 							<span class="sap-chip"><?php echo esc_html( $act_lbl[ $act['type'] ?? '' ] ?? ( $act['type'] ?? '' ) ); ?></span>
 							<b><?php echo esc_html( $act['title'] ?? '' ); ?></b>
-							<span class="sap-chip is-prio-<?php echo esc_attr( $act['priority'] ?? 'medium' ); ?>"><?php echo esc_html( $prio[ $act['priority'] ?? 'medium' ] ?? '' ); ?></span>
+							<?php if ( ! empty( $act['impact'] ) ) : ?><span class="sap-chip is-impact-<?php echo esc_attr( $act['impact'] ); ?>">اثر <?php echo esc_html( array( 'high' => 'زیاد', 'medium' => 'متوسط', 'low' => 'کم' )[ $act['impact'] ] ?? '' ); ?></span><?php else : ?><span class="sap-chip is-prio-<?php echo esc_attr( $act['priority'] ?? 'medium' ); ?>"><?php echo esc_html( $prio[ $act['priority'] ?? 'medium' ] ?? '' ); ?></span><?php endif; ?>
 							<?php if ( ! empty( $act['hours'] ) ) : ?><small class="sap-muted"><?php echo esc_html( sap_num( (float) $act['hours'], 1 ) ); ?> ساعت</small><?php endif; ?>
 						</div>
 						<?php if ( ! empty( $act['detail'] ) ) : ?><p><?php echo esc_html( $act['detail'] ); ?></p><?php endif; ?>
+						<?php if ( ! empty( $act['evidence'] ) ) : ?><p class="sap-ar-ev"><span>📊 شاهد</span><?php echo esc_html( $act['evidence'] ); ?></p><?php endif; ?>
+						<?php if ( ! empty( $act['where'] ) ) : ?><p class="sap-ar-ev"><span>📍 کجا</span><?php echo esc_html( $act['where'] ); ?></p><?php endif; ?>
+						<?php if ( ! empty( $act['deliverable'] ) ) : ?><div class="sap-ar-deliv" data-sap-copy title="برای کپی بزنید"><?php echo nl2br( esc_html( $act['deliverable'] ) ); // phpcs:ignore ?></div><?php endif; ?>
 					</li>
 				<?php endforeach; ?>
 			</ol>
@@ -128,7 +183,7 @@ $len = function ( $s, $min, $max ) {
 
 	<?php if ( $a && '' !== $a['update_brief'] ) : ?>
 		<section class="sap-ar-sec">
-			<h4>بریف آپدیت</h4>
+			<h4>بریف آپدیت <?php echo true === $need ? '<small class="sap-chip is-good">برای تقویم محتوا</small>' : ''; ?></h4>
 			<div class="sap-ar-brief"><?php echo sap_rich_text( $a['update_brief'] ); // phpcs:ignore ?></div>
 		</section>
 	<?php endif; ?>
@@ -176,7 +231,12 @@ $len = function ( $s, $min, $max ) {
 	<?php endif; ?>
 
 	<footer class="sap-ar-foot">
-		<button type="button" class="sap-btn is-primary" data-sap-update-add="<?php echo esc_attr( $row['url'] ); ?>" data-project="<?php echo esc_attr( $pid ); ?>"><?php echo sap_icon( 'content_update', 16 ); // phpcs:ignore ?>افزودن به تقویم آپدیت</button>
+		<?php if ( false === $need ) : ?>
+			<p class="sap-ar-noneed">این صفحه طبق تحلیل آپدیت محتوایی لازم ندارد؛ اقدامات سریعش در «پیشنهادها» است و جای تقویم محتوا را نمی‌گیرد.</p>
+			<button type="button" class="sap-btn is-ghost" data-sap-update-add="<?php echo esc_attr( $row['url'] ); ?>" data-project="<?php echo esc_attr( $pid ); ?>" data-force="1">به هر حال به تقویم اضافه شود</button>
+		<?php else : ?>
+			<button type="button" class="sap-btn is-primary" data-sap-update-add="<?php echo esc_attr( $row['url'] ); ?>" data-project="<?php echo esc_attr( $pid ); ?>"><?php echo sap_icon( 'content_update', 16 ); // phpcs:ignore ?>افزودن به تقویم آپدیت</button>
+		<?php endif; ?>
 		<a class="sap-btn is-soft" href="<?php echo esc_url( sap_project_url( $pid, 'content', array( 'url' => $row['url'] ) ) ); ?>"><?php echo sap_icon( 'spark', 16 ); // phpcs:ignore ?>بازنویسی متن با هایلایت تغییرات</a>
 		<?php if ( ! empty( $row['wp']['id'] ) ) : ?>
 			<?php $site = (string) ( $project['options']['site_url'] ?? '' ) ?: ( $project['site_url'] ?: 'https://' . sap_project_domain( $project ) . '/' ); ?>
