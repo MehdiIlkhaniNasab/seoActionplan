@@ -182,29 +182,25 @@ function sap_client_request_add( $project_id, $data ) {
 		'score'       => $urgent ? 999 : 50,
 		'attachments' => $atts,
 	);
-	if ( $pick && $pick !== $disp ) {
-		// The client knows who does it: straight to that person, the dispatcher follows.
-		$task['assignee']     = $pick;
-		$task['status']       = 'next';
-		$task['coord_id']     = $disp;
-		$task['delegated_at'] = sap_now();
-		$task['due_date']     = $due ?: '';
-		$task['progress']     = array( array( 'u' => 0, 'at' => sap_now(), 'text' => '📤 کارفرما کار را مستقیم به ' . sap_user_name( $pick ) . ' سپرد', 'state' => 'progress', 'why' => '', 'kind' => 'delegate' ) );
-	} elseif ( $disp && 'coord' === sap_user_role( $disp ) ) {
-		// The coordinator's triage: hand on or keep.
-		$task['assignee'] = $disp;
-		$task['status']   = 'next';
-		$task['due_date'] = $urgent ? current_time( 'Y-m-d' ) : ( $due ?: '' );
-	}
-	if ( $urgent && empty( $task['due_date'] ) ) {
-		$task['due_date'] = current_time( 'Y-m-d' );
-	}
+	// Every client request waits on the SEO manager's desk until it is approved
+	// there; the person the client chose and Pilot's delivery estimate are only
+	// suggestions the manager can change.
+	$task['assignee'] = $pick ?: 0;
+	$task['due_date'] = $due ?: '';
+	$task['progress'] = array( array( 'u' => 0, 'at' => sap_now(), 'text' => '📥 کارفرما' . ( '' !== $task['client_note'] ? ' (' . $task['client_note'] . ')' : '' ) . ' این کار را در پایلوت ثبت کرد' . ( $pick ? ' و پیشنهاد داد ' . sap_user_name( $pick ) . ' انجام دهد' : '' ) . '؛ منتظر تأیید مدیر سئو.', 'state' => 'progress', 'why' => '', 'kind' => 'client' ) );
 	$id = sap_task_save( $task );
 	if ( $id && $urgent ) {
 		foreach ( array_unique( array_filter( array_merge( array( (int) $disp, (int) $pick ), array_map( function ( $u ) {
 			return (int) $u->ID;
 		}, sap_full_users() ) ) ) ) as $uid ) {
 			sap_notice_add( $uid, array( 'icon' => '🚨', 'title' => 'مشکل فوری از کارفرمای ' . $p['name'], 'text' => $title, 'url' => sap_url( 'desk' ) . '#client' ) );
+		}
+	}
+	if ( $id && ! $urgent ) {
+		foreach ( array_unique( array_filter( array_merge( array( (int) $disp ), array_map( function ( $u ) {
+			return (int) $u->ID;
+		}, sap_full_users() ) ) ) ) as $uid ) {
+			sap_notice_add( $uid, array( 'icon' => '🧑‍💼', 'title' => 'درخواست تازه از کارفرمای ' . $p['name'], 'text' => $title . ' · منتظر تأیید شما', 'url' => sap_url( 'desk' ) . '#client' ) );
 		}
 	}
 	return $id ? (int) $id : new WP_Error( 'sap_task', 'ثبت درخواست ناموفق بود.', array( 'status' => 500 ) );
@@ -229,6 +225,10 @@ function sap_client_sync_payload( $project, $ids = array() ) {
 			'client_status' => $t['client_status'],
 			'done_at'       => (string) $t['done_at'],
 			'stage'         => function_exists( 'sap_client_stage' ) ? sap_client_stage( $t ) : '',
+			'last_msg'      => function_exists( 'sap_client_messages' ) ? ( function ( $m ) {
+				$m = $m ? end( $m ) : null;
+				return $m ? array( 'id' => $m['id'], 'side' => $m['side'], 'who' => $m['who'], 'text' => mb_substr( $m['text'], 0, 280 ) ) : null;
+			} )( sap_client_messages( $t['id'] ) ) : null,
 		);
 	};
 	$tasks = array();

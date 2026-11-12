@@ -32,8 +32,8 @@ function sap_client_stage( $t ) {
 	if ( in_array( $t['status'], array( 'doing', 'waiting' ), true ) ) {
 		return 'doing';
 	}
-	// Proposed, or still with the coordinator / manager who has to hand it on.
-	if ( 'proposed' === $t['status'] || ! $t['assignee'] || ( sap_client_is_dispatcher( $t['assignee'], $t['project_id'] ) && ! $t['coord_id'] && '' === (string) $t['start_date'] ) ) {
+	// Waiting on the SEO manager's desk, or nobody holds it yet.
+	if ( 'proposed' === $t['status'] || ! $t['assignee'] ) {
 		return 'assign';
 	}
 	return 'assigned';
@@ -44,7 +44,7 @@ function sap_client_stage( $t ) {
  */
 function sap_client_stage_labels() {
 	return array(
-		'assign'   => 'در مرحله واگذاری',
+		'assign'   => 'بررسی و واگذاری',
 		'assigned' => 'واگذار شد',
 		'doing'    => 'در حال انجام',
 		'review'   => 'در حال بازبینی نهایی',
@@ -194,6 +194,7 @@ function sap_client_task_row( $t, $full = false ) {
 		'attachments'   => $full ? array_values( array_map( function ( $a ) {
 			return array( 'url' => (string) ( $a['url'] ?? '' ), 'name' => (string) ( $a['name'] ?? '' ), 'type' => (string) ( $a['type'] ?? '' ) );
 		}, (array) $t['attachments'] ) ) : array(),
+		'messages'      => $full && function_exists( 'sap_client_messages' ) ? sap_client_messages( $t['id'] ) : array(),
 		'reports_count' => count( $reports ),
 		'reports'       => $full ? $reports : array_slice( $reports, -1 ),
 		'updated_at'    => (string) $t['updated_at'],

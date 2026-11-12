@@ -244,6 +244,7 @@ function sap_install() {
 		object_type varchar(20) NOT NULL DEFAULT '',
 		object_id bigint(20) unsigned NOT NULL DEFAULT 0,
 		user_id bigint(20) unsigned NOT NULL DEFAULT 0,
+		author varchar(120) NOT NULL DEFAULT '',
 		body text NULL,
 		created_at datetime NOT NULL DEFAULT '0000-00-00 00:00:00',
 		PRIMARY KEY  (id),

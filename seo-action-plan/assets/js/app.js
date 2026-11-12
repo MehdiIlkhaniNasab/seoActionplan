@@ -2838,4 +2838,72 @@
 			p.then(function (res) { toast(res.msg); nextCard(card); }).catch(fail);
 		});
 	})();
+
+	/* ---- Conversation with the client on a task (shown to the client in Pilot) ---- */
+	document.addEventListener('input', function (ev) {
+		var ta = ev.target.closest && ev.target.closest('[data-sap-ct-text]');
+		if (!ta) { return; }
+		ta.style.height = 'auto';
+		ta.style.height = Math.min(200, ta.scrollHeight) + 'px';
+		var b = ta.parentNode.querySelector('[data-sap-ct-send]');
+		if (b) { b.disabled = !ta.value.trim(); }
+	});
+	document.addEventListener('keydown', function (ev) {
+		var ta = ev.target.closest && ev.target.closest('[data-sap-ct-text]');
+		if (ta && 'Enter' === ev.key && (ev.ctrlKey || ev.metaKey)) {
+			ev.preventDefault();
+			var b = ta.parentNode.querySelector('[data-sap-ct-send]');
+			if (b && !b.disabled) { b.click(); }
+		}
+	});
+	document.addEventListener('click', function (ev) {
+		var b = ev.target.closest('[data-sap-ct-send]');
+		if (!b) { return; }
+		ev.preventDefault();
+		var box = b.closest('[data-sap-ct]');
+		var ta = box.querySelector('[data-sap-ct-text]');
+		var text = ta.value.trim();
+		if (!text) { ta.focus(); return; }
+		b.disabled = true;
+		post('client-talk/' + box.getAttribute('data-sap-ct'), { text: text }).then(function (res) {
+			var list = box.querySelector('[data-sap-ct-list]');
+			var empty = list.querySelector('[data-sap-ct-empty]');
+			if (empty) { empty.remove(); }
+			list.insertAdjacentHTML('beforeend', res.html);
+			ta.value = '';
+			ta.style.height = 'auto';
+			var warn = box.querySelector('summary .is-warn');
+			if (warn) { warn.remove(); }
+			toast(res.msg);
+		}).catch(function (e) { toast(e.message, true); b.disabled = false; });
+	});
+
+	/* ---- Desk: approve or decline a client's request ---- */
+	document.addEventListener('click', function (ev) {
+		var b = ev.target.closest('[data-sap-creq="approve"], [data-sap-creq="decline"]');
+		if (!b) { return; }
+		ev.preventDefault();
+		var card = b.closest('article[data-sap-creq]');
+		var data = { do: b.getAttribute('data-sap-creq') };
+		card.querySelectorAll('[data-sap-creq-field]').forEach(function (f) { data[f.getAttribute('data-sap-creq-field')] = f.value; });
+		if ('approve' === data.do && (!data.assignee || '0' === data.assignee)) {
+			toast('مسئول کار را انتخاب کنید.', true);
+			card.querySelector('[data-sap-creq-field="assignee"]').focus();
+			return;
+		}
+		if ('decline' === data.do) {
+			if (!String(data.note || '').trim()) {
+				toast('دلیل رد را در «پیام به کارفرما» بنویسید؛ کارفرما همین را می‌بیند.', true);
+				card.querySelector('[data-sap-creq-field="note"]').focus();
+				return;
+			}
+			if (!window.confirm('این درخواست رد شود؟ پیام شما برای کارفرما فرستاده می‌شود.')) { return; }
+		}
+		b.disabled = true;
+		post('client-request/' + card.getAttribute('data-sap-creq'), data).then(function (res) {
+			toast(res.msg);
+			fadeOut(card);
+			setTimeout(function () { card.remove(); }, 420);
+		}).catch(function (e) { toast(e.message, true); b.disabled = false; });
+	});
 })();

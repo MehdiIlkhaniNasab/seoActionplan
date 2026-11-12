@@ -76,8 +76,12 @@ $flow    = array( 'next' => 'اقدام بعدی', 'doing' => 'در حال ان�
 			<?php $cs = sap_client_statuses()[ $t['client_status'] ] ?? sap_client_statuses()['']; ?>
 			<p class="sap-tnote sap-tclient">
 				<?php if ( $t['needs_client'] || '' !== $t['client_status'] ) : ?><b><?php echo esc_html( $cs[2] . ' تأیید کارفرما: ' . $cs[0] ); ?></b><?php echo 'changes' === $t['client_status'] && '' !== $t['client_note'] ? ' — «' . esc_html( $t['client_note'] ) . '»' : ''; ?><?php endif; ?>
-				<?php if ( '' !== $t['client_link'] ) : ?> <a href="<?php echo esc_url( $t['client_link'] ); ?>" target="_blank" rel="noopener">💬 گفتگو در پایلوت</a><?php endif; ?>
+				<?php if ( '' !== $t['client_link'] ) : ?> <a href="<?php echo esc_url( $t['client_link'] ); ?>" target="_blank" rel="noopener">نمای کارفرما در پایلوت</a><?php endif; ?>
 			</p>
+		<?php endif; ?>
+
+		<?php if ( sap_is_client_request( $t ) || $t['needs_client'] || sap_comments( 'client', $t['id'] ) ) : ?>
+			<?php sap_view( 'client-thread', array( 't' => $t ) ); ?>
 		<?php endif; ?>
 
 		<div class="sap-tdesc">

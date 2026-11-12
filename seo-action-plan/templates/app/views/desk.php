@@ -164,28 +164,40 @@ $att   = function ( $list ) {
 
 <?php if ( $d['client'] ) : ?>
 	<section class="sap-desk-sec" id="client">
-		<h2>🧑‍💼 درخواست‌های کارفرما (پایلوت) <small><?php echo esc_html( sap_num( count( $d['client'] ) ) ); ?> منتظر واگذاری</small></h2>
-		<p class="sap-muted sap-small">کارفرما این‌ها را در پورتال پایلوت ثبت کرده و الان در مرحله «واگذاری» می‌بیند. با «تأیید و واگذاری» کار به مسئول می‌رسد و کارفرما پیام «کار شروع شد 🚀» می‌گیرد؛ «رد» درخواست را در پایلوت می‌بندد.</p>
+		<h2>🧑‍💼 درخواست‌های کارفرما (پایلوت) <small><?php echo esc_html( sap_num( count( $d['client'] ) ) ); ?> منتظر تأیید شما</small></h2>
+		<p class="sap-muted sap-small">هر کاری که کارفرما در پایلوت ثبت می‌کند اول اینجا می‌آید و تا شما تأیید نکنید به کسی سپرده نمی‌شود. مسئول، موعد، ساعت و فوریت را تنظیم کنید و «تأیید و واگذاری» بزنید؛ کارفرما پیامک «کار شروع شد» می‌گیرد. اگر سؤالی دارید، در گفتگو بپرسید.</p>
 		<div class="sap-desk-list">
 			<?php foreach ( $d['client'] as $t ) : ?>
-				<article class="sap-desk-card is-client" data-sap-desk-card>
+				<?php
+				$sugg   = (int) $t['assignee'];
+				$urgent = false !== strpos( (string) $t['title'], '🚨' );
+				$clean  = preg_replace( '/^(🚨\s*)?(درخواست کارفرما:\s*)?/u', '', (string) $t['title'] );
+				?>
+				<article class="sap-desk-card is-client" data-sap-desk-card data-sap-creq="<?php echo esc_attr( $t['id'] ); ?>">
 					<header>
-						<span class="sap-chip is-warn">🧑‍💼 درخواست کارفرما</span>
-						<?php if ( '' !== $t['client_note'] ) : ?><span class="sap-small"><?php echo esc_html( $t['client_note'] ); ?></span><?php endif; ?>
+						<span class="sap-chip <?php echo $urgent ? 'is-bad' : 'is-warn'; ?>"><?php echo $urgent ? '🚨 مشکل فوری' : '🧑‍💼 درخواست کارفرما'; ?></span>
+						<?php if ( '' !== $t['client_note'] ) : ?><b class="sap-small"><?php echo esc_html( $t['client_note'] ); ?></b><?php endif; ?>
 						<?php echo $ptag( $t['project_id'] ); // phpcs:ignore ?>
-						<?php echo sap_context_chip( $t['context'] ); // phpcs:ignore ?>
-						<span class="sap-small sap-muted"><?php echo esc_html( sap_jdate( substr( $t['created_at'], 0, 10 ), 'day' ) ); ?></span>
+						<span class="sap-small sap-muted"><?php echo esc_html( sap_jdate( substr( $t['created_at'], 0, 10 ), 'day' ) . ' · ' . substr( (string) $t['created_at'], 11, 5 ) ); ?></span>
 					</header>
-					<h3><?php echo esc_html( preg_replace( '/^درخواست کارفرما:\s*/u', '', $t['title'] ) ); ?></h3>
+					<label class="sap-creq-title">عنوان کار<input type="text" data-sap-creq-field="title" value="<?php echo esc_attr( $clean ); ?>"></label>
 					<?php if ( '' !== trim( $t['notes'] ) ) : ?><details class="sap-desk-brief" open><summary>توضیحات کارفرما</summary><div class="sap-notes"><?php echo sap_rich_text( $t['notes'], sap_task_site_base( $t ) ); // phpcs:ignore ?></div></details><?php endif; ?>
-					<div class="sap-desk-assign">
-						<label>مسئول<select data-sap-prop-assignee><option value="0">—</option><?php foreach ( sap_team_users() as $u ) : ?><option value="<?php echo esc_attr( $u->ID ); ?>" <?php selected( (int) $u->ID, $t['assignee'] ); ?>><?php echo esc_html( $u->display_name ); ?></option><?php endforeach; ?></select></label>
-						<label>ددلاین<input type="date" data-sap-prop-due value="<?php echo esc_attr( (string) $t['due_date'] ); ?>"></label>
+					<?php if ( $sugg || $t['due_date'] ) : ?>
+						<p class="sap-creq-sugg"><?php echo esc_html( 'پیشنهاد کارفرما: ' . ( $sugg ? sap_user_name( $sugg ) . ' انجام دهد' : 'مسئول را شما تعیین کنید' ) . ( $t['due_date'] ? ' · تخمین پایلوت برای تحویل ' . sap_jdate( $t['due_date'] ) : '' ) . ( (float) $t['effort'] ? ' · حدود ' . sap_num( (float) $t['effort'] ) . ' ساعت' : '' ) ); ?></p>
+					<?php endif; ?>
+					<div class="sap-creq-grid">
+						<label>مسئول<select data-sap-creq-field="assignee"><option value="0">انتخاب کنید</option><?php foreach ( sap_client_assignable( $t['project_id'], $sugg ) as $u ) : ?><option value="<?php echo esc_attr( $u->ID ); ?>" <?php selected( (int) $u->ID, $sugg ); ?>><?php echo esc_html( $u->display_name . ( (int) $u->ID === $sugg ? ' (پیشنهاد کارفرما)' : '' ) ); ?></option><?php endforeach; ?></select></label>
+						<label>موعد تحویل<input type="date" data-sap-creq-field="due_date" value="<?php echo esc_attr( (string) $t['due_date'] ); ?>"></label>
+						<label>ساعت کار<input type="number" min="0.25" step="0.25" data-sap-creq-field="effort" value="<?php echo esc_attr( (float) $t['effort'] ?: 1 ); ?>" dir="ltr"></label>
+						<label>فوریت<select data-sap-creq-field="urgent"><option value="0">عادی</option><option value="1" <?php selected( $urgent ); ?>>فوری</option></select></label>
+						<label>نوع کار<select data-sap-creq-field="context"><?php foreach ( sap_contexts_all() as $k => $c ) : ?><option value="<?php echo esc_attr( $k ); ?>" <?php selected( $k, $t['context'] ); ?>><?php echo esc_html( is_array( $c ) ? ( $c['label'] ?? $k ) : $c ); ?></option><?php endforeach; ?></select></label>
 					</div>
+					<label class="sap-creq-note">پیام به کارفرما <small class="sap-muted">(اختیاری برای تأیید؛ برای رد لازم است)</small><textarea rows="2" data-sap-creq-field="note" placeholder="مثلاً: سلام، کار به سارا سپرده شد و تا پنجشنبه تحویل می‌شود."></textarea></label>
+					<?php sap_view( 'client-thread', array( 't' => $t ) ); ?>
 					<footer>
-						<button type="button" class="sap-btn is-primary is-small" data-sap-proposal="approve" data-id="<?php echo esc_attr( $t['id'] ); ?>"><?php echo sap_icon( 'check', 14 ); // phpcs:ignore ?>تأیید و واگذاری</button>
-						<?php if ( '' !== $t['client_link'] ) : ?><a class="sap-btn is-ghost is-small" href="<?php echo esc_url( $t['client_link'] ); ?>" target="_blank" rel="noopener">💬 گفتگو با کارفرما در پایلوت</a><?php endif; ?>
-						<button type="button" class="sap-btn is-ghost is-danger is-small" data-sap-proposal="reject" data-id="<?php echo esc_attr( $t['id'] ); ?>">رد</button>
+						<button type="button" class="sap-btn is-primary is-small" data-sap-creq="approve"><?php echo sap_icon( 'check', 14 ); // phpcs:ignore ?>تأیید و واگذاری</button>
+						<?php if ( '' !== $t['client_link'] ) : ?><a class="sap-btn is-ghost is-small" href="<?php echo esc_url( $t['client_link'] ); ?>" target="_blank" rel="noopener">نمای کارفرما</a><?php endif; ?>
+						<button type="button" class="sap-btn is-ghost is-danger is-small" data-sap-creq="decline">رد درخواست</button>
 					</footer>
 				</article>
 			<?php endforeach; ?>
