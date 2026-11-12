@@ -224,6 +224,9 @@ $auth  = sap_google_auth_url();
 				</div>
 			<?php endforeach; ?>
 		</div>
+		<div class="sap-grid-3">
+			<label>ساعت بررسی‌های روزانه و خلاصه هشدارها<input type="number" name="alert_hour" min="0" max="23" value="<?php echo esc_attr( (int) ( $s['alert_hour'] ?? 9 ) ); ?>"><small>سرعت سایت، رتبه کلمات، SSL و… روزی یک بار در این ساعت بررسی و خلاصه ارسال می‌شود.</small></label>
+		</div>
 		<h3 class="sap-h3">یادآوری کارهای تیم</h3>
 		<div class="sap-grid-3">
 			<label>ساعت‌های یادآوری (به وقت سایت)<input type="text" name="reminder_hours" dir="ltr" value="<?php echo esc_attr( $s['reminder_hours'] ); ?>" placeholder="8,14"><small>مثلاً 8,14 یعنی ۸ صبح و ۲ بعدازظهر</small></label>

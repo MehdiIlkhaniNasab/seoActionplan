@@ -107,6 +107,9 @@ add_action( 'admin_post_sap_save_settings', function () {
 	foreach ( array( 'critical', 'warning', 'info' ) as $sv ) {
 		$changes[ 'alert_' . $sv ] = implode( ',', array_intersect( array_map( 'sanitize_key', (array) sap_post( 'alert_' . $sv, array() ) ), array_keys( sap_notify_channels() ) ) );
 	}
+	if ( null !== sap_post( 'alert_hour', null ) ) {
+		$changes['alert_hour'] = min( 23, absint( sap_norm_text( (string) sap_post( 'alert_hour' ) ) ) );
+	}
 	$hours = array_filter( array_map( 'absint', explode( ',', sap_norm_text( (string) sap_post( 'reminder_hours' ) ) ) ), function ( $h ) {
 		return $h >= 0 && $h <= 23;
 	} );
@@ -642,7 +645,9 @@ add_action( 'admin_post_sap_alert_rules', function () {
 	foreach ( sap_alert_rules() as $rk => $def ) {
 		$rules[ $rk ] = array( 'on' => empty( $in[ $rk ]['on'] ) ? 0 : 1 );
 		foreach ( $def[3] as $ck => $cv ) {
-			if ( 'on' !== $ck && isset( $in[ $rk ][ $ck ] ) ) {
+			if ( 'hourly' === $ck ) {
+				$rules[ $rk ][ $ck ] = empty( $in[ $rk ][ $ck ] ) ? 0 : 1; // Checkbox.
+			} elseif ( 'on' !== $ck && isset( $in[ $rk ][ $ck ] ) ) {
 				$rules[ $rk ][ $ck ] = max( 0, (float) sap_norm_text( (string) $in[ $rk ][ $ck ] ) );
 			}
 		}
