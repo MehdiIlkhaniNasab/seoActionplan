@@ -274,6 +274,7 @@ add_action( 'rest_api_init', function () {
 					return array( 'ok' => true, 'msg' => 'از تقویم خارج شد' );
 				case 'published':
 					sap_idea_save( array( 'status' => 'published', 'published_url' => (string) $req->get_param( 'url' ) ), $idea['id'] );
+					sap_track_published( $idea['project_id'], $idea['id'] );
 					return array( 'ok' => true, 'msg' => 'منتشرشده ثبت شد' );
 				case 'delete':
 					sap_idea_delete( $idea['id'] );
@@ -723,6 +724,11 @@ add_action( 'rest_api_init', function () {
 			}
 			$idea = sap_idea( $id );
 			$warn = array_slice( (array) $idea['evidence'], 1 );
+			if ( rest_sanitize_boolean( $req->get_param( 'as_idea' ) ) ) {
+				// Only an idea for now: it waits in «ایده‌های محتوا» until approved into a month.
+				sap_idea_save( array( 'status' => 'new', 'period' => '', 'slot' => 0, 'origin' => 'manual' ), $id );
+				return array( 'ok' => true, 'id' => $id, 'msg' => sprintf( 'ایده «%s» با بریف ساخته شد؛ بعد از بررسی، «تأیید و افزودن به تقویم» را بزنید', $idea['title'] ?: $idea['keyword'] ) . ( $warn ? ' — هشدار: ' . implode( ' ', $warn ) : '' ) );
+			}
 			return array( 'ok' => true, 'id' => $id, 'msg' => sprintf( 'مقاله «%s» با بریف، تیترها و لینک‌ها به تقویم %s اضافه شد', $idea['title'] ?: $idea['keyword'], sap_period_label( $period ) ) . ( $warn ? ' — هشدار: ' . implode( ' ', $warn ) : '' ) . sap_calendar_sync_sheet( sap_project( $project['id'] ) ) );
 		} ),
 	) );

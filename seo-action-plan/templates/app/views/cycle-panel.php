@@ -66,10 +66,17 @@ $who = function ( $name, $label ) use ( $c, $users ) {
 					<span><?php echo esc_html( $x['label'] ); ?></span>
 					<b><?php echo esc_html( sap_num( $x['done'] ) ); ?><small> / <?php echo esc_html( sap_num( $x['target'] ?: $x['made'] ) ); ?></small></b>
 					<i style="--p:<?php echo esc_attr( $tgt ? round( 100 * $x['done'] / $tgt ) : 0 ); ?>%"></i>
-					<small><?php echo esc_html( sprintf( '%s کار ساخته شده', sap_num( $x['made'] ) ) ); ?></small>
+					<small><?php echo esc_html( in_array( $k, array( 'new', 'upd' ), true ) ? sprintf( '%s در برنامه (دستی یا خودکار)', sap_num( $x['made'] ) ) : sprintf( '%s کار ساخته شده', sap_num( $x['made'] ) ) ); ?></small>
 				</div>
 			<?php endforeach; ?>
 		</div>
+		<?php $short = (array) ( $project['options'][ 'cycle_short_' . $P ] ?? array() ); ?>
+		<?php if ( ! empty( $short['new'] ) || ! empty( $short['upd'] ) ) : ?>
+			<p class="sap-alert is-warn sap-small">
+				<?php if ( ! empty( $short['new'] ) ) : ?><?php echo esc_html( sprintf( '%s محتوای جدید از سهم تا این هفته در تقویم نیست؛ ', sap_num( $short['new'] ) ) ); ?><a href="<?php echo esc_url( sap_project_url( $pid, 'ideas' ) ); ?>">از ایده‌های محتوا تأیید کنید</a>. <?php endif; ?>
+				<?php if ( ! empty( $short['upd'] ) ) : ?><?php echo esc_html( sprintf( '%s آپدیت از سهم تا این هفته در تقویم نیست؛ ', sap_num( $short['upd'] ) ) ); ?><a href="<?php echo esc_url( sap_project_url( $pid, 'updates' ) ); ?>">از تب آپدیت محتوا تأیید کنید</a>.<?php endif; ?>
+			</p>
+		<?php endif; ?>
 		<div class="sap-cycle-week">
 			<div class="sap-panel-head">
 				<h3>کارهای این هفته <small class="sap-muted"><?php echo esc_html( sap_jdate( $loc['week']['from'], 'day' ) . ' تا ' . sap_jdate( $loc['week']['to'], 'day' ) ); ?></small></h3>

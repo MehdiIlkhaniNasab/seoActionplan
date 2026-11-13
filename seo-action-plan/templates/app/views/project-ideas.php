@@ -42,6 +42,16 @@ $base     = sap_project_url( $pid, 'ideas' );
 	</div>
 </section>
 
+<details class="sap-panel sap-kwidea" open>
+	<summary><?php echo sap_icon( 'plus', 16 ); // phpcs:ignore ?><b>ایده دستی با کلمه کلیدی خودتان</b><small class="sap-muted">کلمه اصلی و فرعی را بدهید؛ هوش مصنوعی عنوان، بریف، تیترها و لینک‌های داخلی را می‌سازد و ایده در فهرست زیر منتظر تأیید شما می‌ماند</small></summary>
+	<form data-sap-kwidea="<?php echo esc_attr( $pid ); ?>" data-period="<?php echo esc_attr( sap_period_current( $pid ) ); ?>" data-as-idea="1">
+		<label class="sap-field"><span>کلمه کلیدی اصلی</span><input type="text" name="keyword" required placeholder="مثلاً روش بستن بند کفش"></label>
+		<label class="sap-field"><span>کلمات فرعی (اختیاری، با ، جدا کنید)</span><input type="text" name="secondary" placeholder="بستن بند کفش ورزشی، گره بند کفش"></label>
+		<label class="sap-field is-wide"><span>توضیح و نکات (اختیاری)</span><textarea name="notes" rows="2" placeholder="مخاطب، زاویه، صفحه‌ای که باید تقویت شود، چیزهایی که حتماً باشد…"></textarea></label>
+		<button type="submit" class="sap-btn is-primary" <?php disabled( ! sap_ai_connected() ); ?>><?php echo sap_icon( 'spark', 16 ); // phpcs:ignore ?>ساخت ایده با بریف</button>
+	</form>
+</details>
+
 <?php $pool = sap_dataset_payload( $pid, 'ideas_pool' ); ?>
 <details class="sap-panel sap-pool" <?php echo $pool ? '' : 'open'; ?>>
 	<summary><b>کاندیداهای تأییدشده برای محتوای جدید</b>
@@ -145,7 +155,7 @@ $base     = sap_project_url( $pid, 'ideas' );
 				<?php if ( in_array( $i['status'], array( 'new', 'approved', 'rejected' ), true ) ) : ?>
 					<select data-sap-idea-month>
 						<?php foreach ( $months as $k => $label ) : ?>
-							<option value="<?php echo esc_attr( $k ); ?>" <?php selected( $k, sap_period_current() ); ?>><?php echo esc_html( $label ); ?></option>
+							<option value="<?php echo esc_attr( $k ); ?>" <?php selected( $k, sap_period_current( $pid ) ); ?>><?php echo esc_html( $label ); ?></option>
 						<?php endforeach; ?>
 					</select>
 					<button type="button" class="sap-btn is-small is-primary" data-sap-idea-do="schedule"><?php echo sap_icon( 'check', 14 ); // phpcs:ignore ?>تأیید و افزودن به تقویم</button>

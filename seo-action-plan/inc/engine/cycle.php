@@ -119,6 +119,71 @@ function sap_cycle_due( $week, $cycle_end = '' ) {
 }
 
 /**
+ * Kind of content work a task is: «upd», «new» or ''. The title decides first
+ * («آپدیت 3 محتوا» filed under content is still an update).
+ */
+function sap_cycle_task_kind( $t ) {
+	$rec   = (string) $t['recurring'];
+	$title = (string) $t['title'];
+	if ( 0 === strpos( $rec, 'cyc_upd_' ) ) {
+		return 'upd';
+	}
+	if ( 0 === strpos( $rec, 'cyc_new_' ) ) {
+		return 'new';
+	}
+	if ( preg_match( '/تولید محتوا|محتوای جدید|مقاله جدید|نوشتن مقاله|نوشتن محتوا/u', $title ) ) {
+		return 'new';
+	}
+	if ( preg_match( '/آپدیت|به‌روزرسانی محتوا|بروزرسانی محتوا|بازنویسی/u', $title ) ) {
+		return 'upd';
+	}
+	return '';
+}
+
+/**
+ * What a period already covers of the content commitments: planned (made) and
+ * done, for new content and for updates. Any content task counts — made by the
+ * cycle or by hand — a checklist counts one per item; published calendar items
+ * and done updates without a task count too.
+ *
+ * @return array {new:{planned,done}, upd:{planned,done}}
+ */
+function sap_cycle_coverage( $project_id, $period ) {
+	$out  = array( 'new' => array( 'planned' => 0, 'done' => 0 ), 'upd' => array( 'planned' => 0, 'done' => 0 ) );
+	$live = array();
+	foreach ( sap_tasks( array( 'project_id' => $project_id, 'period' => $period ) ) as $t ) {
+		if ( 'dropped' === $t['status'] || 0 === strpos( (string) $t['recurring'], 'cyc_side_' ) ) {
+			continue;
+		}
+		$kind = sap_cycle_task_kind( $t );
+		if ( ! $kind ) {
+			continue;
+		}
+		$live[ $t['id'] ]           = true;
+		$items                      = (array) $t['checklist'];
+		$w                          = max( 1, count( $items ) );
+		$d                          = 'done' === $t['status'] ? $w : count( array_filter( $items, function ( $i ) {
+			return ! empty( $i['d'] );
+		} ) );
+		$out[ $kind ]['planned'] += $w;
+		$out[ $kind ]['done']    += $d;
+	}
+	foreach ( sap_calendar_items( $project_id, $period ) as $it ) {
+		if ( 'published' === $it['status'] && ! isset( $live[ $it['task_id'] ] ) ) {
+			++$out['new']['planned'];
+			++$out['new']['done'];
+		}
+	}
+	foreach ( sap_updates( $project_id, array( 'period' => $period, 'status' => array( 'done' ) ) ) as $u ) {
+		if ( ! isset( $live[ $u['task_id'] ] ) ) {
+			++$out['upd']['planned'];
+			++$out['upd']['done'];
+		}
+	}
+	return $out;
+}
+
+/**
  * Build the tasks of the week a date falls in. Safe to run again: every task has
  * a key, so nothing is made twice.
  *
@@ -158,72 +223,60 @@ function sap_cycle_build_week( $project, $ymd = '' ) {
 	}
 	$period_label = sap_period_label( $P ) . ' (' . sap_period_dates( $P, $pid ) . ')';
 
-	// 1. New content: calendar articles of the period without a task, in slot order.
-	$q = sap_cycle_quota( $c['content_new'], $n, $W );
-	if ( $q ) {
+	// 1–2. Content: the week's cumulative share of the month minus what the period
+	// already covers (cycle tasks, manual content tasks — a checklist counts per
+	// item — and published / done items). Only real calendar items become tasks;
+	// a shortfall is reported on the overview instead of a placeholder task.
+	// Placeholder tasks of older versions («تولید محتوای جدید (۱ از تعهد …)»): dropped
+	// when nobody started them; real calendar items replace them.
+	foreach ( $have as $key => $t ) {
+		if ( preg_match( '/^cyc_(new|upd)_.+_w\d+_\d+$/', $key ) && in_array( $t['status'], array( 'inbox', 'next' ), true ) && ! sap_progress_own( $t ) ) {
+			sap_task_save( array( 'status' => 'dropped' ), $t['id'] );
+			unset( $have[ $key ] );
+		}
+	}
+	$cov   = sap_cycle_coverage( $pid, $P );
+	$short = array( 'new' => 0, 'upd' => 0 );
+	$need  = (int) ceil( $c['content_new'] * $n / max( 1, $W ) ) - $cov['new']['planned'];
+	if ( $need > 0 ) {
 		$free = array_values( array_filter( sap_calendar_items( $pid, $P ), function ( $it ) {
 			return 'published' !== $it['status'] && ( ! $it['task_id'] || ! sap_task( $it['task_id'] ) );
 		} ) );
-		for ( $i = 0; $i < $q; $i++ ) {
-			$it = $free[ $i ] ?? null;
-			if ( $it ) {
-				$tid = $make( 'cyc_new_' . $P . '_i' . $it['id'], array(
-					'title'   => 'نوشتن محتوای جدید: «' . ( $it['title'] ?: $it['keyword'] ) . '»',
-					'notes'   => trim( 'کلمه اصلی: ' . $it['keyword'] . "\n" . ( $it['brief'] ?? '' ) . ( ! empty( $it['outline'] ) ? "\n\nسرفصل‌ها:\n- " . implode( "\n- ", (array) $it['outline'] ) : '' ) ),
-					'keyword' => $it['keyword'],
-					'context' => 'content',
-					'effort'  => 3,
-				), 'content' );
-				if ( $tid ) {
-					sap_idea_save( array( 'task_id' => $tid ), $it['id'] );
-				}
-			} else {
-				$make( 'cyc_new_' . $P . '_w' . $n . '_' . $i, array(
-					'title'   => sprintf( 'تولید محتوای جدید (%s از تعهد %s مقاله در ماه)', sap_num( $i + 1 ), sap_num( $c['content_new'] ) ),
-					'notes'   => 'برای این هفته هنوز موضوعی در تقویم محتوا نیست. از «ایده‌های محتوا» یک ایده با کلمه کلیدی و بریف انتخاب و به تقویم اضافه کنید، بعد بنویسید.',
-					'context' => 'content',
-					'effort'  => 3,
-				), 'content' );
+		foreach ( array_slice( $free, 0, $need ) as $it ) {
+			$tid = $make( 'cyc_new_' . $P . '_i' . $it['id'], array(
+				'title'   => 'نوشتن محتوای جدید: «' . ( $it['title'] ?: $it['keyword'] ) . '»',
+				'notes'   => trim( 'کلمه اصلی: ' . $it['keyword'] . "\n" . ( $it['brief'] ?? '' ) . ( ! empty( $it['outline'] ) ? "\n\nسرفصل‌ها:\n- " . implode( "\n- ", (array) $it['outline'] ) : '' ) ),
+				'keyword' => $it['keyword'],
+				'context' => 'content',
+				'effort'  => 3,
+			), 'content' );
+			if ( $tid ) {
+				sap_idea_save( array( 'task_id' => $tid ), $it['id'] );
 			}
 		}
+		$short['new'] = max( 0, $need - count( $free ) );
 	}
-
-	// 2. Content updates: planned updates of the period without a task, else the best candidates.
-	$q = sap_cycle_quota( $c['content_upd'], $n, $W );
-	if ( $q ) {
+	$need = (int) ceil( $c['content_upd'] * $n / max( 1, $W ) ) - $cov['upd']['planned'];
+	if ( $need > 0 ) {
 		$ups = array_values( array_filter( sap_updates( $pid, array( 'period' => $P, 'status' => array( 'planned' ) ) ), function ( $u ) {
 			return ! $u['task_id'] || ! sap_task( $u['task_id'] );
 		} ) );
-		if ( count( $ups ) < $q && function_exists( 'sap_update_pick_best' ) ) {
-			sap_update_pick_best( $project, $P, $q - count( $ups ) );
-			$ups = array_values( array_filter( sap_updates( $pid, array( 'period' => $P, 'status' => array( 'planned' ) ) ), function ( $u ) {
-				return ! $u['task_id'] || ! sap_task( $u['task_id'] );
-			} ) );
-		}
-		for ( $i = 0; $i < $q; $i++ ) {
-			$u = $ups[ $i ] ?? null;
-			if ( $u ) {
-				$tid = $make( 'cyc_upd_' . $P . '_u' . $u['id'], array(
-					'title'   => 'آپدیت محتوا: «' . $u['title'] . '»',
-					'notes'   => trim( ( $u['keyword'] ? 'کلمه اصلی: ' . $u['keyword'] . "\n" : '' ) . $u['reason'] ),
-					'url'     => $u['url'],
-					'keyword' => $u['keyword'],
-					'context' => 'content_update',
-					'effort'  => 2,
-				), 'update' );
-				if ( $tid ) {
-					sap_update_save( array( 'task_id' => $tid ), $u['id'] );
-				}
-			} else {
-				$make( 'cyc_upd_' . $P . '_w' . $n . '_' . $i, array(
-					'title'   => sprintf( 'آپدیت محتوا (%s از تعهد %s صفحه در ماه)', sap_num( $i + 1 ), sap_num( $c['content_upd'] ) ),
-					'notes'   => 'از تب «آپدیت محتوا» در سئو محتوا، صفحه با بیشترین امتیاز را انتخاب و آپدیت کنید.',
-					'context' => 'content_update',
-					'effort'  => 2,
-				), 'update' );
+		foreach ( array_slice( $ups, 0, $need ) as $u ) {
+			$tid = $make( 'cyc_upd_' . $P . '_u' . $u['id'], array(
+				'title'   => 'آپدیت محتوا: «' . $u['title'] . '»',
+				'notes'   => trim( ( $u['keyword'] ? 'کلمه اصلی: ' . $u['keyword'] . "\n" : '' ) . $u['reason'] ),
+				'url'     => $u['url'],
+				'keyword' => $u['keyword'],
+				'context' => 'content_update',
+				'effort'  => 2,
+			), 'update' );
+			if ( $tid ) {
+				sap_update_save( array( 'task_id' => $tid ), $u['id'] );
 			}
 		}
+		$short['upd'] = max( 0, $need - count( $ups ) );
 	}
+	sap_project_set_option( $pid, 'cycle_short_' . $P, $short );
 
 	// 3. Full technical analysis in the first and the last week.
 	$first = 1 === $n && $c['tech_first'];
@@ -318,9 +371,14 @@ function sap_cycle_progress( $project, $period ) {
 		'report' => array( 'label' => 'گزارش ماهانه', 'target' => $c['report'] ? 1 : 0, 'made' => 0, 'done' => 0 ),
 		'side'   => array( 'label' => 'کارهای فرعی (تحلیل‌ها)', 'target' => 0, 'made' => 0, 'done' => 0 ),
 	);
+	$cov = sap_cycle_coverage( $project['id'], $period );
+	foreach ( array( 'new', 'upd' ) as $kk ) {
+		$out[ $kk ]['made'] = $cov[ $kk ]['planned'];
+		$out[ $kk ]['done'] = $cov[ $kk ]['done'];
+	}
 	foreach ( sap_cycle_tasks( $project['id'], $period ) as $key => $t ) {
 		$kind = explode( '_', $key )[1] ?? '';
-		if ( ! isset( $out[ $kind ] ) || 'dropped' === $t['status'] ) {
+		if ( ! isset( $out[ $kind ] ) || in_array( $kind, array( 'new', 'upd' ), true ) || 'dropped' === $t['status'] ) {
 			continue;
 		}
 		++$out[ $kind ]['made'];

@@ -1116,7 +1116,7 @@
 			ev.preventDefault();
 			var bt = f.querySelector('[type=submit]');
 			busy(bt, 'در حال ساخت بریف… (۱۵ تا ۴۰ ثانیه)');
-			post('ideas/' + f.getAttribute('data-sap-kwidea') + '/keyword', { keyword: f.keyword.value, secondary: f.secondary.value, notes: f.notes.value, period: f.getAttribute('data-period') }).then(function (res) {
+			post('ideas/' + f.getAttribute('data-sap-kwidea') + '/keyword', { keyword: f.keyword.value, secondary: f.secondary.value, notes: f.notes.value, period: f.getAttribute('data-period'), as_idea: f.hasAttribute('data-as-idea') ? 1 : 0 }).then(function (res) {
 				toast(res.msg, /هشدار/.test(res.msg || ''));
 				setTimeout(function () { location.reload(); }, 2200);
 			}).catch(function (e) { toast(e.message, true); idle(bt); });
@@ -3147,39 +3147,55 @@
 		}
 	})();
 
-	/* ---- Content updates: refresh the strategies, add a page, deep AI analysis ---- */
+	/* ---- Content updates: refresh, approve a page into the calendar, deep AI plan ---- */
 	(function () {
 		var root = document.querySelector('[data-sap-upd]');
 		if (!root) { return; }
 		var pid = root.getAttribute('data-sap-upd');
 		document.addEventListener('click', function (ev) {
 			var ref = ev.target.closest('[data-sap-upd-refresh]');
-			var add = ev.target.closest('[data-sap-upd-add]');
 			var ai = ev.target.closest('[data-sap-upd-ai]');
 			if (ref) {
 				ref.disabled = true;
 				ref.lastChild.textContent = ' در حال خواندن داده و تحلیل… (تا ۹۰ ثانیه)';
 				post('upd/' + pid + '/refresh', {}).then(function (r) { toast(r.msg); setTimeout(function () { location.reload(); }, 700); }).catch(function (e) { toast(e.message, true); ref.disabled = false; ref.lastChild.textContent = ' تحلیل دوباره'; });
 			}
-			if (add) {
-				add.disabled = true;
-				post('upd/' + pid + '/add', { url: add.getAttribute('data-sap-upd-add'), s: add.getAttribute('data-s') || '' }).then(function (r) {
-					toast(r.msg);
-					add.outerHTML = '<span class="sap-chip is-good">✓ در آپدیت‌های این دوره</span>';
-				}).catch(function (e) { toast(e.message, true); add.disabled = false; });
-			}
 			if (ai) {
-				var box = ai.closest('.sap-upd-c').querySelector('[data-sap-upd-ai-box]');
+				var card = ai.closest('.sap-upd-c');
+				var box = card.querySelector('[data-sap-upd-ai-box]');
 				ai.disabled = true;
-				box.innerHTML = '<p class="sap-typing"><i></i><i></i><i></i> تحلیل صفحه با این استراتژی…</p>';
-				post('upd/' + pid + '/ai', { url: ai.getAttribute('data-sap-upd-ai'), s: ai.getAttribute('data-s') }).then(function (r) {
+				box.innerHTML = '<p class="sap-typing"><i></i><i></i><i></i> هوش مصنوعی برنامه این صفحه را دقیق می‌کند…</p>';
+				post('upd/' + pid + '/ai', { url: ai.getAttribute('data-sap-upd-ai') }).then(function (r) {
 					box.innerHTML = r.html;
+					var ta = card.querySelector('[data-sap-upd-todo]');
+					if (ta && r.lines && r.lines.length) { ta.value = ta.value.replace(/\s+$/, '') + '\n' + r.lines.join('\n'); }
 					ai.disabled = false;
-					ai.lastChild.textContent = 'تحلیل دوباره';
 				}).catch(function (e) { box.innerHTML = ''; toast(e.message, true); ai.disabled = false; });
 			}
 			var cp = ev.target.closest('.sap-upd-ai [data-sap-copy]');
 			if (cp && navigator.clipboard) { navigator.clipboard.writeText(cp.textContent.trim()).then(function () { toast('کپی شد'); }); }
 		});
+		document.addEventListener('submit', function (ev) {
+			var f = ev.target.closest('[data-sap-upd-form]');
+			if (!f) { return; }
+			ev.preventDefault();
+			var d = {};
+			Array.prototype.forEach.call(f.elements, function (el) { if (el.name) { d[el.name] = el.value; } });
+			var b = f.querySelector('button[type="submit"]');
+			b.disabled = true;
+			post('upd/' + pid + '/add', d).then(function (r) {
+				toast(r.msg);
+				var wrap = f.closest('.sap-upd-approve') || f.closest('.sap-upd-manual');
+				if (wrap && wrap.classList.contains('sap-upd-approve')) { wrap.outerHTML = '<div class="sap-upd-c-acts"><span class="sap-chip is-good">✓ در تقویم محتوا</span></div>'; } else { f.reset(); b.disabled = false; }
+			}).catch(function (e) { toast(e.message, true); b.disabled = false; });
+		});
 	})();
+
+	/* ---- Content calendar: refresh results from Search Console ---- */
+	document.addEventListener('click', function (ev) {
+		var b = ev.target.closest('[data-sap-track]');
+		if (!b) { return; }
+		b.disabled = true;
+		post('track/' + b.getAttribute('data-sap-track'), { period: b.getAttribute('data-period') }).then(function (r) { toast(r.msg); setTimeout(function () { location.reload(); }, 900); }).catch(function (e) { toast(e.message, true); b.disabled = false; });
+	});
 })();

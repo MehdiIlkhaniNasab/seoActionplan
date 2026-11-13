@@ -121,12 +121,18 @@ $by_page = sap_proposals_by_page( $props );
 			<?php endif; ?>
 		</div>
 		<?php if ( ! empty( $GLOBALS['sap_content_hidden'][ $pid ] ) ) : ?><p class="sap-small sap-muted"><?php echo esc_html( sap_num( $GLOBALS['sap_content_hidden'][ $pid ] ) ); ?> آدرس ریدایرکت‌شده، حذف‌شده از وردپرس، خطادار در خزش یا هرس‌شده در نقشه کلمات در این فهرست نمی‌آید.</p><?php endif; ?>
-		<div class="sap-actions">
-			<button type="button" class="sap-btn is-primary" data-sap-step="audit_<?php echo esc_attr( $group ); ?>" data-project="<?php echo esc_attr( $pid ); ?>" data-force <?php disabled( ! sap_ai_connected() || ! $all ); ?>><?php echo sap_icon( 'spark' ); // phpcs:ignore ?>تحلیل هوشمند <?php echo esc_html( sap_num( min( 15, count( $all ) ) ) ); ?> صفحه پربازدید «<?php echo esc_html( $groups[ $group ][0] ); ?>»</button>
-			<button type="button" class="sap-btn is-soft" data-sap-cluster-sheet="<?php echo esc_attr( $pid ); ?>" <?php disabled( ! $project['sheet_id'] ); ?>>نوشتن کلاسترینگ و فهرست محتوا در شیت</button>
-			<a class="sap-btn is-ghost" href="<?php echo esc_url( sap_project_url( $pid, 'keywords' ) ); ?>">نقشه کلمات</a>
-		</div>
-		<?php if ( ! $project['sheet_id'] ) : ?><p class="sap-small sap-muted">برای نوشتن در شیت، اول در تب تقویم محتوا گوگل شیت پروژه را بسازید یا وصل کنید.</p><?php endif; ?>
+		<p class="sap-small sap-muted">هر صفحه را در جدول زیر با «تحلیل» بررسی کنید؛ صفحه‌هایی که آپدیت لازم دارند در تب <a href="<?php echo esc_url( sap_project_url( $pid, 'updates' ) ); ?>">آپدیت محتوا</a> اولویت‌بندی و به تقویم اضافه می‌شوند.</p>
+		<details class="sap-audit-adv">
+			<summary>ابزارهای پیشرفته</summary>
+			<div class="sap-audit-adv-row">
+				<button type="button" class="sap-btn is-small is-soft" data-sap-step="audit_<?php echo esc_attr( $group ); ?>" data-project="<?php echo esc_attr( $pid ); ?>" data-force <?php disabled( ! sap_ai_connected() || ! $all ); ?>><?php echo sap_icon( 'spark', 14 ); // phpcs:ignore ?>تحلیل گروهی <?php echo esc_html( sap_num( min( 15, count( $all ) ) ) ); ?> صفحه پربازدید</button>
+				<span class="sap-small sap-muted">به‌جای تحلیل تک‌تک، ۱۵ صفحه پربازدید «<?php echo esc_html( $groups[ $group ][0] ); ?>» را یکجا با هوش مصنوعی تحلیل می‌کند و اقدامات را در «پیشنهادها» می‌گذارد (هزینه هوش مصنوعی بیشتری دارد).</span>
+			</div>
+			<div class="sap-audit-adv-row">
+				<button type="button" class="sap-btn is-small is-soft" data-sap-cluster-sheet="<?php echo esc_attr( $pid ); ?>" <?php disabled( ! $project['sheet_id'] ); ?>>نوشتن کلاسترینگ در شیت</button>
+				<span class="sap-small sap-muted">یک تب «کلاسترینگ» در گوگل شیت می‌سازد: هر صفحه با کلمه اصلی و فرعی‌هایش، دسته‌بندی‌شده در خوشه‌ها (برای دیدن ساختار موضوعی سایت در شیت؛ لازم نیست هر ماه اجرا شود).<?php echo $project['sheet_id'] ? '' : ' اول در تقویم محتوا گوگل شیت را بسازید یا وصل کنید.'; ?></span>
+			</div>
+		</details>
 	</div>
 </section>
 
