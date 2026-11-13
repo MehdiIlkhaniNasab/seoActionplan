@@ -326,24 +326,49 @@ add_action( 'admin_post_sap_save_focus', function () {
 	$pid  = absint( sap_post( 'project_id' ) );
 	$fid  = absint( sap_post( 'focus_id' ) );
 	$data = array();
-	foreach ( array( 'name', 'url_patterns', 'clusters', 'keywords', 'goal', 'kpi_metric', 'kpi_baseline', 'kpi_target', 'deadline', 'weight', 'status' ) as $k ) {
+	foreach ( array( 'name', 'url_patterns', 'clusters', 'keywords', 'goal', 'kpi_metric', 'kpi_baseline', 'kpi_target', 'deadline', 'weight', 'status', 'started_on' ) as $k ) {
 		$data[ $k ] = sap_post( $k );
 	}
 	if ( '' === trim( (string) $data['name'] ) ) {
 		sap_back( sap_project_url( $pid, 'focuses' ), 'نام Focus الزامی است.', false );
 	}
-	$fid   = sap_focus_save( $pid, $data, $fid );
-	$focus = sap_focus( $fid );
-	// A new focus without baseline starts from today's value.
-	if ( $focus && ! $focus['kpi_baseline'] ) {
-		$k = sap_focus_kpis( $focus, $pid );
+	$data['scope'] = sap_focus_scope_from_post();
+	$fid           = sap_focus_save( $pid, $data, $fid );
+	sap_focus_after_save( $pid, $fid );
+	sap_back( sap_project_url( $pid, 'focuses' ) . '#focus-' . $fid, 'Focus ذخیره شد و با داده سرچ کنسول سنجیده شد.' );
+} );
+
+/**
+ * Pages and categories chosen in the focus form.
+ */
+function sap_focus_scope_from_post() {
+	$with = array_flip( array_map( 'strval', (array) sap_post( 'scope_withp', array() ) ) );
+	$cats = array();
+	foreach ( (array) sap_post( 'scope_cats', array() ) as $u ) {
+		$cats[ (string) $u ] = isset( $with[ (string) $u ] );
+	}
+	return array( 'cats' => $cats, 'pages' => (array) sap_post( 'scope_pages', array() ) );
+}
+
+/**
+ * After a focus is saved: measure it; without Search Console history the
+ * baseline is today's value (with history it is the 28 days before the start).
+ */
+function sap_focus_after_save( $pid, $fid ) {
+	$project = sap_project( $pid );
+	$focus   = sap_focus( $fid );
+	if ( ! $project || ! $focus ) {
+		return;
+	}
+	$m = sap_focus_measure_refresh( $project, $focus );
+	if ( ! $focus['kpi_baseline'] && empty( $m['base'] ) ) {
+		$k = sap_focus_kpis( sap_focus( $fid ), $pid );
 		if ( $k ) {
 			global $wpdb;
 			$wpdb->update( sap_table( 'focuses' ), array( 'kpi_baseline' => $k[ $focus['kpi_metric'] ] ), array( 'id' => $fid ) );
 		}
 	}
-	sap_back( sap_project_url( $pid, 'focuses' ), 'Focus ذخیره شد. برای اعمال روی یافته‌ها، تحلیل را دوباره اجرا کنید.' );
-} );
+}
 
 add_action( 'admin_post_sap_quick_focus', function () {
 	sap_guard( 'sap_quick_focus' );
@@ -364,12 +389,7 @@ add_action( 'admin_post_sap_quick_focus', function () {
 		'weight'       => 1.5,
 		'status'       => 'active',
 	) );
-	$focus = sap_focus( $fid );
-	$k     = $focus ? sap_focus_kpis( $focus, $pid ) : null;
-	if ( $k ) {
-		global $wpdb;
-		$wpdb->update( sap_table( 'focuses' ), array( 'kpi_baseline' => $k[ $focus['kpi_metric'] ] ), array( 'id' => $fid ) );
-	}
+	sap_focus_after_save( $pid, $fid );
 	sap_back( sap_return_url( sap_project_url( $pid ) ), sprintf( 'Focus «%s» اضافه شد. با «تحلیل کامل» یافته‌ها و اکشن پلن در راستای آن چیده می‌شوند.', $name ) );
 } );
 
@@ -594,7 +614,7 @@ add_action( 'admin_post_sap_ai_focus_apply', function () {
 		'name'         => $rec['name'],
 		'goal'         => $rec['goal'],
 		'kpi_metric'   => $rec['metric'],
-		'kpi_baseline' => null !== $rec['current'] ? $rec['current'] : 0,
+		'kpi_baseline' => 0, // Measured from Search Console: the 28 days before the start.
 		'kpi_target'   => $rec['target'],
 		'deadline'     => gmdate( 'Y-m-d', strtotime( '+' . (int) $rec['months'] . ' months' ) ),
 		'weight'       => $rec['weight'],
@@ -610,9 +630,11 @@ add_action( 'admin_post_sap_ai_focus_apply', function () {
 	if ( $old ) {
 		$data += array( 'url_patterns' => implode( "\n", $old['url_patterns'] ), 'clusters' => implode( "\n", $old['clusters'] ), 'keywords' => implode( "\n", $old['keywords'] ) );
 		sap_focus_save( $pid, $data, $old['id'] );
+		sap_focus_after_save( $pid, $old['id'] );
 		sap_back( $back, sprintf( 'هدف و اولویت «%s» بروز شد.', $rec['name'] ) );
 	}
-	sap_focus_save( $pid, $data + (array) ( $rec['def'] ?? array() ) );
+	$data['started_on'] = current_time( 'Y-m-d' );
+	sap_focus_after_save( $pid, sap_focus_save( $pid, $data + (array) ( $rec['def'] ?? array() ) ) );
 	sap_back( $back, sprintf( 'Focus «%s» با هدف و شاخص پیشنهادی ساخته شد. برای اعمال روی یافته‌ها، تحلیل را دوباره اجرا کنید.', $rec['name'] ) );
 } );
 

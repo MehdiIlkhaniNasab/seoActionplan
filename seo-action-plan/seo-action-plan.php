@@ -15,7 +15,7 @@
 defined( 'ABSPATH' ) || exit;
 
 const SAP_VERSION    = '0.29.0';
-const SAP_DB_VERSION = '16';
+const SAP_DB_VERSION = '17';
 const SAP_CAP        = 'sap_manage'; // Full access: projects, settings, plans.
 const SAP_CAP_WORK   = 'sap_work';   // Team members: their own tasks.
 
@@ -57,6 +57,8 @@ foreach ( array(
 	'engine/content-pro',
 	'engine/pm-assist',
 	'engine/page-signals',
+	'engine/focus-measure',
+	'engine/focus-view',
 	'engine/ideas',
 	'engine/ideas-pool',
 	'engine/calendar',

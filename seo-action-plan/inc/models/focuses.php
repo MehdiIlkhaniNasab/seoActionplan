@@ -38,6 +38,16 @@ function sap_focus_hydrate( $row ) {
 	$row['kpi_baseline'] = (float) $row['kpi_baseline'];
 	$row['kpi_target']   = (float) $row['kpi_target'];
 	$row['ai_meta']      = json_decode( (string) ( $row['ai_meta'] ?? '' ), true ) ?: array();
+	$scope               = json_decode( (string) ( $row['scope'] ?? '' ), true ) ?: array();
+	$row['scope']        = array(
+		'cats'  => array_map( 'boolval', (array) ( $scope['cats'] ?? array() ) ), // url => with products
+		'pages' => array_values( array_filter( array_map( 'strval', (array) ( $scope['pages'] ?? array() ) ) ) ),
+	);
+	$row['measure']      = json_decode( (string) ( $row['measure'] ?? '' ), true ) ?: array();
+	$row['started_on']   = (string) ( $row['started_on'] ?? '' );
+	if ( '' === $row['started_on'] || 0 === strpos( $row['started_on'], '0000' ) ) {
+		$row['started_on'] = substr( (string) ( $row['created_at'] ?? '' ), 0, 10 );
+	}
 	return $row;
 }
 
@@ -82,6 +92,20 @@ function sap_focus_save( $project_id, $data, $id = 0 ) {
 		'weight'       => min( 3, max( 1, (float) ( $data['weight'] ?? 1.5 ) ) ),
 		'status'       => in_array( $data['status'] ?? '', array( 'active', 'paused', 'done' ), true ) ? $data['status'] : 'active',
 	);
+	if ( isset( $data['scope'] ) && is_array( $data['scope'] ) ) {
+		$cats = array();
+		foreach ( (array) ( $data['scope']['cats'] ?? array() ) as $u => $with ) {
+			$u = esc_url_raw( (string) $u );
+			if ( '' !== $u ) {
+				$cats[ $u ] = (bool) $with;
+			}
+		}
+		$pages = array_values( array_unique( array_filter( array_map( 'esc_url_raw', array_map( 'strval', (array) ( $data['scope']['pages'] ?? array() ) ) ) ) ) );
+		$fields['scope'] = wp_json_encode( array( 'cats' => $cats, 'pages' => array_slice( $pages, 0, 500 ) ), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES );
+	}
+	if ( array_key_exists( 'started_on', $data ) ) {
+		$fields['started_on'] = sap_parse_date( (string) $data['started_on'] ) ?: null;
+	}
 	if ( isset( $data['ai_meta'] ) && is_array( $data['ai_meta'] ) ) {
 		$fields['ai_meta'] = wp_json_encode( $data['ai_meta'], JSON_UNESCAPED_UNICODE );
 	} elseif ( $id ) {

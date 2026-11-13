@@ -226,6 +226,7 @@ function sap_step_gsc_pages( $project ) {
 		return $prev;
 	}
 	sap_dataset_put( $project['id'], 'gsc_pages', array( 'cur' => $cur, 'prev' => $prev ), array( 'cur' => $w['cur'], 'prev' => $w['prev'] ) );
+	sap_focus_measure_all( $project ); // Focus goals measured on the fresh numbers.
 	return array( 'msg' => sprintf( '%s صفحه در ۲۸ روز اخیر، %s صفحه در ۲۸ روز قبل.', sap_num( count( $cur ) ), sap_num( count( $prev ) ) ) );
 }
 

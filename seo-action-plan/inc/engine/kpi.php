@@ -38,6 +38,13 @@ function sap_focus_kpis( $focus, $project_id ) {
 			$best[ $k ] = $r['position'];
 		}
 	}
+	// Clicks / impressions of the focus pages: the exact page-level numbers (the query ×
+	// page data above misses anonymised queries). Keyword-only focuses keep the sum above.
+	$m = $focus['measure'] ?? array();
+	if ( ! empty( $m['cur'] ) && ! empty( $m['pages'] ) ) {
+		$clicks = (int) $m['cur']['c'];
+		$impr   = (int) $m['cur']['i'];
+	}
 	$top10 = count( array_filter( $best, function ( $p ) {
 		return $p <= 10;
 	} ) );
@@ -59,7 +66,7 @@ function sap_focus_kpis( $focus, $project_id ) {
  */
 function sap_focus_progress( $focus, $current ) {
 	$t = (float) $focus['kpi_target'];
-	$b = (float) $focus['kpi_baseline'];
+	$b = (float) sap_focus_baseline( $focus )['value'];
 	if ( $t <= 0 || null === $current || abs( $t - $b ) < 1e-9 ) {
 		return null;
 	}

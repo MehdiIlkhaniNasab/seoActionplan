@@ -3021,4 +3021,129 @@
 		}, true);
 		bottom();
 	})();
+
+	/* ---- Focus form: pages picker, live counter; measure refresh; «my view» ---- */
+	(function () {
+		function e(t) { var d = document.createElement('div'); d.textContent = t == null ? '' : String(t); return d.innerHTML.replace(/"/g, '&quot;'); }
+		var fa = function (n) { return Number(n || 0).toLocaleString('fa-IR'); };
+		document.querySelectorAll('[data-sap-ff]').forEach(function (form) {
+			var pid = form.getAttribute('data-sap-ff');
+			var live = form.querySelector('[data-sap-ff-live]');
+			var box = form.querySelector('[data-sap-ff-pages]');
+			var q = form.querySelector('[data-sap-ff-q]');
+			var res = form.querySelector('[data-sap-ff-results]');
+			var filt = form.querySelector('[data-sap-ff-filter]');
+			var hint = form.querySelector('[data-sap-ff-hint]');
+			var tgt = form.querySelector('[data-sap-ff-target]');
+			var timer, qtimer, lastClicks = null;
+			function collect() {
+				var cats = {};
+				form.querySelectorAll('input[name="scope_cats[]"]:checked').forEach(function (c) { cats[c.value] = false; });
+				form.querySelectorAll('input[name="scope_withp[]"]:checked').forEach(function (c) { if (c.value in cats) { cats[c.value] = true; } });
+				var pages = Array.prototype.map.call(form.querySelectorAll('input[name="scope_pages[]"]'), function (i) { return i.value; });
+				var pat = form.querySelector('[data-sap-ff-pat]');
+				return { cats: cats, pages: pages, patterns: pat ? pat.value : '' };
+			}
+			function refresh() {
+				clearTimeout(timer);
+				timer = setTimeout(function () {
+					var d = collect();
+					if (!Object.keys(d.cats).length && !d.pages.length && !d.patterns.trim()) {
+						live.innerHTML = '<span class="sap-muted">صفحه‌ها را انتخاب کنید تا تعداد و کلیک فعلی‌شان اینجا دیده شود.</span>';
+						return;
+					}
+					live.innerHTML = '<span class="sap-muted">در حال شمارش…</span>';
+					post('focus-preview/' + pid, d).then(function (r) {
+						lastClicks = r.clicks;
+						live.innerHTML = '<b>' + fa(r.pages) + ' صفحه</b> · ' + fa(r.clicks) + ' کلیک و ' + fa(r.impr) + ' نمایش در ۲۸ روز' + (r.range ? ' <span class="sap-muted">(' + e(r.range) + '، آخرین همگام‌سازی)</span>' : '');
+						suggest();
+					}).catch(function (er) { live.textContent = er.message; });
+				}, 350);
+			}
+			function suggest() {
+				if (!hint || lastClicks === null) { return; }
+				var m = form.querySelector('input[name="kpi_metric"]:checked');
+				if (m && m.value !== 'clicks') { hint.textContent = ''; return; }
+				hint.innerHTML = lastClicks ? 'پیشنهاد واقع‌بینانه برای ۳ ماه: <a href="#" data-sap-ff-use="' + Math.round(lastClicks * 1.3) + '">' + fa(Math.round(lastClicks * 1.3)) + '</a> (۳۰٪ رشد)' : '';
+			}
+			form.addEventListener('change', function (ev) {
+				var t = ev.target;
+				if (t.name === 'scope_withp[]' && t.checked) {
+					var main = t.closest('.sap-ff-cat').querySelector('input[name="scope_cats[]"]');
+					if (main) { main.checked = true; }
+				}
+				if (t.name === 'scope_cats[]' && !t.checked) {
+					var w = t.closest('.sap-ff-cat').querySelector('input[name="scope_withp[]"]');
+					if (w) { w.checked = false; }
+				}
+				if (/^scope_|url_patterns/.test(t.name || '') || t.hasAttribute('data-sap-ff-pat')) { refresh(); }
+				if (t.name === 'kpi_metric') { suggest(); }
+			});
+			form.addEventListener('input', function (ev) { if (ev.target.hasAttribute('data-sap-ff-pat')) { refresh(); } });
+			form.addEventListener('click', function (ev) {
+				var rm = ev.target.closest('[data-sap-ff-rm]');
+				var add = ev.target.closest('[data-sap-ff-add]');
+				var use = ev.target.closest('[data-sap-ff-use]');
+				if (rm) { rm.parentNode.remove(); refresh(); }
+				if (use) { ev.preventDefault(); tgt.value = use.getAttribute('data-sap-ff-use'); }
+				if (add) {
+					var u = add.getAttribute('data-sap-ff-add');
+					if (!box.querySelector('input[value="' + u.replace(/"/g, '\\"') + '"]')) {
+						box.insertAdjacentHTML('beforeend', '<span class="sap-ff-page"><input type="hidden" name="scope_pages[]" value="' + e(u) + '">' + e(add.getAttribute('data-title')) + '<button type="button" data-sap-ff-rm aria-label="حذف">×</button></span>');
+						refresh();
+					}
+					add.classList.add('is-added');
+				}
+			});
+			if (filt) {
+				filt.addEventListener('input', function () {
+					var v = filt.value.trim().replace(/ي/g, 'ی').replace(/ك/g, 'ک').toLowerCase();
+					form.querySelectorAll('.sap-ff-cat').forEach(function (c) { c.hidden = v && c.getAttribute('data-name').indexOf(v) < 0; });
+				});
+			}
+			if (q) {
+				q.addEventListener('input', function () {
+					clearTimeout(qtimer);
+					var v = q.value.trim();
+					if (v.length < 2) { res.hidden = true; return; }
+					qtimer = setTimeout(function () {
+						api('focus-pages/' + pid + '?q=' + encodeURIComponent(v)).then(function (r) {
+							res.hidden = false;
+							res.innerHTML = r.items.length ? r.items.map(function (it) {
+								return '<button type="button" data-sap-ff-add="' + e(it.url) + '" data-title="' + e(it.title) + '"><b>' + e(it.title) + '</b><small>' + e(it.type) + (it.clicks ? ' · ' + fa(it.clicks) + ' کلیک' : '') + '</small></button>';
+							}).join('') : '<p class="sap-muted sap-small">صفحه‌ای پیدا نشد.</p>';
+						});
+					}, 300);
+				});
+				q.addEventListener('keydown', function (ev) { if (ev.key === 'Enter') { ev.preventDefault(); } });
+				document.addEventListener('click', function (ev) { if (!ev.target.closest('.sap-ff-search')) { res.hidden = true; } });
+			}
+			refresh();
+		});
+		document.addEventListener('click', function (ev) {
+			var b = ev.target.closest('[data-sap-focus-measure]');
+			if (!b) { return; }
+			b.disabled = true;
+			b.lastChild.textContent = ' در حال سنجش…';
+			post('focus-measure/' + b.getAttribute('data-sap-focus-measure'), {}).then(function (r) { toast(r.msg); setTimeout(function () { location.reload(); }, 600); }).catch(function (er) { toast(er.message, true); b.disabled = false; });
+		});
+		var fv = document.querySelector('[data-sap-fv]');
+		if (fv) {
+			var f = fv.querySelector('[data-sap-fv-form]');
+			f.addEventListener('submit', function (ev) {
+				ev.preventDefault();
+				var ta = f.querySelector('textarea'), btn = f.querySelector('button');
+				btn.disabled = true;
+				var list = fv.querySelector('[data-sap-fv-list]');
+				list.insertAdjacentHTML('afterbegin', '<div class="sap-fv is-typing" data-sap-fv-wait><p class="sap-typing"><i></i><i></i><i></i> در حال سنجیدن دیدگاه با داده پروژه…</p></div>');
+				post('focus-view/' + fv.getAttribute('data-sap-fv'), { text: ta.value }).then(function (r) {
+					fv.querySelector('[data-sap-fv-wait]').outerHTML = r.html;
+					ta.value = '';
+				}).catch(function (er) {
+					var w = fv.querySelector('[data-sap-fv-wait]'); if (w) { w.remove(); }
+					toast(er.message, true);
+				}).then(function () { btn.disabled = false; });
+			});
+		}
+	})();
 })();
