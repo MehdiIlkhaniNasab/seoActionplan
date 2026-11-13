@@ -997,9 +997,7 @@ function sap_alt_plan( $project, $url, $all = false ) {
 	}
 	// The heading each content image sits under.
 	$html  = (string) $obj['content'];
-	// A real FAQ accordion is the FAQ: section headings that happen to be questions are
-	// not added (Google wants the schema to match the visible question/answer list).
-	$parts = $out ? array() : preg_split( '#(<h[2-4]\b[^>]*>.*?</h[2-4]>)#is', $html, -1, PREG_SPLIT_DELIM_CAPTURE );
+	$parts = preg_split( '#(<h[2-4]\b[^>]*>.*?</h[2-4]>)#is', $html, -1, PREG_SPLIT_DELIM_CAPTURE );
 	$under = array();
 	$head  = '';
 	foreach ( $parts as $p ) {

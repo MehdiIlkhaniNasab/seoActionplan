@@ -3146,4 +3146,40 @@
 			});
 		}
 	})();
+
+	/* ---- Content updates: refresh the strategies, add a page, deep AI analysis ---- */
+	(function () {
+		var root = document.querySelector('[data-sap-upd]');
+		if (!root) { return; }
+		var pid = root.getAttribute('data-sap-upd');
+		document.addEventListener('click', function (ev) {
+			var ref = ev.target.closest('[data-sap-upd-refresh]');
+			var add = ev.target.closest('[data-sap-upd-add]');
+			var ai = ev.target.closest('[data-sap-upd-ai]');
+			if (ref) {
+				ref.disabled = true;
+				ref.lastChild.textContent = ' در حال خواندن داده و تحلیل… (تا ۹۰ ثانیه)';
+				post('upd/' + pid + '/refresh', {}).then(function (r) { toast(r.msg); setTimeout(function () { location.reload(); }, 700); }).catch(function (e) { toast(e.message, true); ref.disabled = false; ref.lastChild.textContent = ' تحلیل دوباره'; });
+			}
+			if (add) {
+				add.disabled = true;
+				post('upd/' + pid + '/add', { url: add.getAttribute('data-sap-upd-add'), s: add.getAttribute('data-s') || '' }).then(function (r) {
+					toast(r.msg);
+					add.outerHTML = '<span class="sap-chip is-good">✓ در آپدیت‌های این دوره</span>';
+				}).catch(function (e) { toast(e.message, true); add.disabled = false; });
+			}
+			if (ai) {
+				var box = ai.closest('.sap-upd-c').querySelector('[data-sap-upd-ai-box]');
+				ai.disabled = true;
+				box.innerHTML = '<p class="sap-typing"><i></i><i></i><i></i> تحلیل صفحه با این استراتژی…</p>';
+				post('upd/' + pid + '/ai', { url: ai.getAttribute('data-sap-upd-ai'), s: ai.getAttribute('data-s') }).then(function (r) {
+					box.innerHTML = r.html;
+					ai.disabled = false;
+					ai.lastChild.textContent = 'تحلیل دوباره';
+				}).catch(function (e) { box.innerHTML = ''; toast(e.message, true); ai.disabled = false; });
+			}
+			var cp = ev.target.closest('.sap-upd-ai [data-sap-copy]');
+			if (cp && navigator.clipboard) { navigator.clipboard.writeText(cp.textContent.trim()).then(function () { toast('کپی شد'); }); }
+		});
+	})();
 })();

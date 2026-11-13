@@ -58,6 +58,7 @@ function sap_project_tabs_all() {
 		'content'  => array( 'بازنویسی محتوا', 'log' ),
 		'plan'     => array( 'اکشن پلن ماهانه', 'list' ),
 		'calendar' => array( 'تقویم محتوا', 'clock' ),
+		'updates'  => array( 'آپدیت محتوا', 'refresh' ),
 		'ideas'    => array( 'ایده‌های محتوا', 'spark' ),
 		'activity' => array( 'لاگ اقدامات', 'log' ),
 		'impact'   => array( 'ارزیابی اثر اقدامات', 'target' ),
@@ -90,7 +91,7 @@ function sap_project_groups() {
 	return array(
 		'home'      => array( 'نمای کلی', 'grid', array( 'overview', 'chat', 'alerts', 'insights', 'memory', 'focuses' ) ),
 		'technical' => array( 'سئو تکنیکال', 'settings', array( 'technical' ) ),
-		'content'   => array( 'سئو محتوا', 'log', array( 'audit', 'serp', 'keywords', 'calendar', 'ideas', 'content' ) ),
+		'content'   => array( 'سئو محتوا', 'log', array( 'audit', 'updates', 'serp', 'keywords', 'calendar', 'ideas', 'content' ) ),
 		'offpage'   => array( 'آف‌پیج', 'link', array( 'offpage' ) ),
 		'keywords'  => array( 'رتبه و رقبا', 'chart', array( 'ranks', 'competitors', 'geo', 'seosignal', 'graph' ) ),
 		'work'      => array( 'برنامه و اجرا', 'list', array( 'plan', 'automate', 'experiments', 'impact', 'findings', 'activity', 'report' ) ),
