@@ -176,6 +176,7 @@ function sap_resolve_route( $route ) {
 		case 'project':
 			$project = sap_project( absint( $parts[1] ?? 0 ) );
 			if ( $project ) {
+				sap_period_project( $project['id'] ); // «This month» = this project's reporting cycle.
 				$tabs = sap_project_tabs();
 				$tab  = sanitize_key( $parts[2] ?? 'overview' );
 				$all  = sap_project_tabs_all(); // Tabs hidden in simple mode still open by URL.

@@ -114,6 +114,9 @@ foreach ( $tasks as $t ) {
 	</div>
 </section>
 
+<?php sap_view( 'cycle-panel', array( 'project' => $project ) ); ?>
+
+
 <?php
 // «Start here»: only the three most important open tasks, so a beginner is not lost in the analysis.
 $today = current_time( 'Y-m-d' );
@@ -167,6 +170,8 @@ $top3 = array_slice( $open, 0, 3 );
 		</div>
 		<p class="sap-ai-summary"><?php echo esc_html( $ai['summary'] ); ?></p>
 		<p><a href="<?php echo esc_url( sap_project_url( $pid, 'insights' ) ); ?>">جزئیات تحلیل: صفحات و محتوا، لینک داخلی، کنیبالیزیشن، تکنیکال و سرعت ←</a></p>
+		<details class="sap-ai-more">
+			<summary>سلامت بخش‌ها، نقاط قوت و ریسک‌ها</summary>
 		<?php if ( $ai['health'] ) : ?>
 			<div class="sap-health">
 				<?php
@@ -194,37 +199,36 @@ $top3 = array_slice( $open, 0, 3 );
 			<p class="sap-ai-focus"><?php echo sap_icon( 'target', 14 ); // phpcs:ignore ?><b><?php echo esc_html( $fi['focus'] ); ?>:</b> <?php echo esc_html( $fi['insight'] ); ?></p>
 		<?php endforeach; ?>
 
-		<div class="sap-panel-head sap-ai-plan-head">
-			<h3>اکشن پلن پیشنهادی (<?php echo esc_html( sap_num( count( $ai['plan'] ) ) ); ?> کار · <?php echo esc_html( sap_num( array_sum( array_column( $ai['plan'], 'effort_hours' ) ), 1 ) ); ?> ساعت)</h3>
-			<?php if ( count( array_intersect_key( array_flip( array_column( $ai['plan'], 'ref' ) ), $ai_refs ) ) < count( $ai['plan'] ) ) : ?>
-				<form method="post" action="<?php echo $post; // phpcs:ignore ?>">
-					<?php sap_form_fields( 'sap_plan_generate', array( 'project_id' => $pid, 'period' => $period ) ); ?>
-					<button class="sap-btn is-primary is-small" type="submit"><?php echo sap_icon( 'plus', 14 ); // phpcs:ignore ?>افزودن به اکشن پلن <?php echo esc_html( sap_period_label( $period ) ); ?></button>
-				</form>
-			<?php else : ?>
-				<a class="sap-btn is-small" href="<?php echo esc_url( sap_project_url( $pid, 'plan' ) ); ?>">در اکشن پلن است ←</a>
+		</details>
+		<?php
+		$todo = array_values( array_filter( $ai['plan'], function ( $item ) use ( $ai_refs ) {
+			return ! isset( $ai_refs[ $item['ref'] ] );
+		} ) );
+		$top  = array_slice( array_values( array_filter( $todo, function ( $item ) {
+			return 'high' === $item['impact'];
+		} ) ), 0, 3 );
+		?>
+		<div class="sap-ai-plan-mini">
+			<div class="sap-panel-head">
+				<h3>پیشنهاد هوش مصنوعی برای اکشن پلن</h3>
+				<?php if ( $todo ) : ?>
+					<form method="post" action="<?php echo $post; // phpcs:ignore ?>">
+						<?php sap_form_fields( 'sap_plan_generate', array( 'project_id' => $pid, 'period' => $period ) ); ?>
+						<button class="sap-btn is-soft is-small" type="submit"><?php echo sap_icon( 'plus', 14 ); // phpcs:ignore ?>افزودن <?php echo esc_html( sap_num( count( $todo ) ) ); ?> کار به اکشن پلن</button>
+					</form>
+				<?php endif; ?>
+			</div>
+			<?php if ( $top ) : ?>
+				<ul>
+					<?php foreach ( $top as $item ) : ?>
+						<li><span class="sap-impact is-high">اثر بالا</span><b><?php echo esc_html( $item['title'] ); ?></b><small class="sap-muted"><?php echo esc_html( sap_num( $item['effort_hours'], 1 ) ); ?> ساعت</small></li>
+					<?php endforeach; ?>
+				</ul>
 			<?php endif; ?>
+			<p class="sap-small sap-muted"><?php echo $todo ? esc_html( sprintf( '%s کار پیشنهادی (%s با اثر بالا) هنوز در برنامه نیست؛ کارهای فرعی هفتگی هم خودکار از همین تحلیل‌ها انتخاب می‌شوند.', sap_num( count( $todo ) ), sap_num( count( array_filter( $todo, function ( $x ) {
+				return 'high' === $x['impact'];
+			} ) ) ) ) ) : 'همه پیشنهادهای هوش مصنوعی در اکشن پلن است.'; ?> <a href="<?php echo esc_url( sap_project_url( $pid, 'insights' ) ); ?>">جزئیات کامل ←</a></p>
 		</div>
-		<ol class="sap-ai-plan">
-			<?php foreach ( $ai['plan'] as $item ) : ?>
-				<li class="<?php echo isset( $ai_refs[ $item['ref'] ] ) ? 'is-added' : ''; ?>">
-					<details>
-						<summary>
-							<span class="sap-impact is-<?php echo esc_attr( $item['impact'] ); ?>"><?php echo esc_html( array( 'high' => 'اثر بالا', 'medium' => 'اثر متوسط', 'low' => 'اثر کم' )[ $item['impact'] ] ?? '' ); ?></span>
-							<b><?php echo esc_html( $item['title'] ); ?></b>
-							<span class="sap-muted sap-small">هفته <?php echo esc_html( sap_fa( max( 1, (int) $item['week'] ) ) ); ?> · <?php echo esc_html( sap_num( $item['effort_hours'], 1 ) ); ?> ساعت<?php echo isset( $ai_refs[ $item['ref'] ] ) ? ' · ✓ در برنامه' : ''; ?></span>
-						</summary>
-						<p><b>چرا:</b> <?php echo esc_html( $item['why'] ); ?></p>
-						<?php if ( $item['steps'] ) : ?>
-							<ol class="sap-steps-list"><?php foreach ( $item['steps'] as $st ) : ?><li><?php echo esc_html( $st ); ?></li><?php endforeach; ?></ol>
-						<?php endif; ?>
-						<?php if ( '' !== trim( $item['deliverable'] ) ) : ?>
-							<div class="sap-ai-output"><div class="sap-ai-output-head">خروجی آماده<button type="button" class="sap-icon-btn" data-sap-copy-target title="کپی"><?php echo sap_icon( 'log', 14 ); // phpcs:ignore ?></button></div><pre><?php echo esc_html( $item['deliverable'] ); ?></pre></div>
-						<?php endif; ?>
-					</details>
-				</li>
-			<?php endforeach; ?>
-		</ol>
 	</section>
 <?php elseif ( ! sap_ai_connected() && 'connect' !== $path['current'] ) : ?>
 	<section class="sap-panel sap-ai is-empty">

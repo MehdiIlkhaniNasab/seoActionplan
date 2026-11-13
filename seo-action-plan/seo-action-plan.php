@@ -59,6 +59,7 @@ foreach ( array(
 	'engine/page-signals',
 	'engine/focus-measure',
 	'engine/focus-view',
+	'engine/cycle',
 	'engine/ideas',
 	'engine/ideas-pool',
 	'engine/calendar',

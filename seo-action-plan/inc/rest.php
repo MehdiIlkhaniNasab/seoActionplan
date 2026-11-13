@@ -391,6 +391,7 @@ add_action( 'rest_api_init', function () {
 				return new WP_Error( 'sap_project', 'پروژه یافت نشد.', array( 'status' => 404 ) );
 			}
 			$GLOBALS['sap_ai_project'] = $project; // Memory and playbook in the AI prompts.
+			sap_period_project( $project['id'] );
 			return $cb( $project, $req );
 		};
 	};

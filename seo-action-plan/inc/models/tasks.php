@@ -220,7 +220,7 @@ function sap_task_save( $data, $id = 0 ) {
 			$fields['created_by'] = get_current_user_id();
 		}
 		if ( ! array_key_exists( 'period', $data ) ) {
-			$fields['period'] = sap_period_current(); // Visible in this month's plan.
+			$fields['period'] = sap_period_current( (int) ( $fields['project_id'] ?? $data['project_id'] ?? 0 ) ); // Visible in this month's plan.
 		}
 		$wpdb->insert( $table, $fields );
 		$id = (int) $wpdb->insert_id;

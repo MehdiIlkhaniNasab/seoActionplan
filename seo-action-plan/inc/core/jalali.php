@@ -116,11 +116,53 @@ function sap_jnow() {
 }
 
 /**
- * Current planning period key, e.g. "1405-08".
+ * Day of the month a project's reporting cycle starts on (1 = calendar month).
+ * A cycle day of 18 means «آبان» runs from 18 Aban to 17 Azar.
  */
-function sap_period_current() {
-	list( $jy, $jm ) = sap_jnow();
+function sap_cycle_day( $project_id ) {
+	static $cache = array();
+	$project_id = (int) $project_id;
+	if ( ! $project_id ) {
+		return 1;
+	}
+	if ( ! isset( $cache[ $project_id ] ) ) {
+		$p                    = function_exists( 'sap_project' ) ? sap_project( $project_id ) : null;
+		$cache[ $project_id ] = max( 1, min( 28, (int) ( $p['options']['cycle_day'] ?? 1 ) ) );
+	}
+	return $cache[ $project_id ];
+}
+
+/**
+ * Project whose cycle «current period» refers to when no project is given: the
+ * project screen or REST request being served (0 elsewhere = calendar months).
+ */
+function sap_period_project( $project_id = null ) {
+	if ( null !== $project_id ) {
+		$GLOBALS['sap_period_project'] = (int) $project_id;
+	}
+	return (int) ( $GLOBALS['sap_period_project'] ?? 0 );
+}
+
+/**
+ * Period key of Jalali y/m/d for a cycle day.
+ */
+function sap_period_of_j( $jy, $jm, $jd, $day ) {
+	if ( $day > 1 && $jd < $day ) {
+		--$jm;
+		if ( $jm < 1 ) {
+			$jm = 12;
+			--$jy;
+		}
+	}
 	return sprintf( '%04d-%02d', $jy, $jm );
+}
+
+/**
+ * Current planning period key, e.g. "1405-08" (in the project's cycle).
+ */
+function sap_period_current( $project_id = null ) {
+	list( $jy, $jm, $jd ) = sap_jnow();
+	return sap_period_of_j( $jy, $jm, $jd, sap_cycle_day( null === $project_id ? sap_period_project() : $project_id ) );
 }
 
 /**
@@ -152,26 +194,42 @@ function sap_period_label( $key ) {
 }
 
 /**
- * Gregorian [start, end] (Y-m-d) of a period.
+ * Gregorian [start, end] (Y-m-d) of a period (in the project's cycle).
  */
-function sap_period_range( $key ) {
-	list( $jy, $jm )      = array_map( 'intval', explode( '-', sap_period_sanitize( $key ) ) );
-	list( $gy, $gm, $gd ) = sap_j2g( $jy, $jm, 1 );
-	$start                = sprintf( '%04d-%02d-%02d', $gy, $gm, $gd );
-	$end                  = gmdate( 'Y-m-d', strtotime( $start ) + ( sap_jmonth_days( $jy, $jm ) - 1 ) * DAY_IN_SECONDS );
+function sap_period_range( $key, $project_id = null ) {
+	list( $jy, $jm ) = array_map( 'intval', explode( '-', sap_period_sanitize( $key ) ) );
+	$day             = sap_cycle_day( null === $project_id ? sap_period_project() : $project_id );
+	$day             = min( $day, sap_jmonth_days( $jy, $jm ) );
+	list( $gy, $gm, $gd ) = sap_j2g( $jy, $jm, $day );
+	$start           = sprintf( '%04d-%02d-%02d', $gy, $gm, $gd );
+	if ( 1 === $day ) {
+		$end = gmdate( 'Y-m-d', strtotime( $start ) + ( sap_jmonth_days( $jy, $jm ) - 1 ) * DAY_IN_SECONDS );
+	} else {
+		list( $ny, $nm ) = 12 === $jm ? array( $jy + 1, 1 ) : array( $jy, $jm + 1 );
+		list( $gy, $gm, $gd ) = sap_j2g( $ny, $nm, min( $day, sap_jmonth_days( $ny, $nm ) ) );
+		$end = gmdate( 'Y-m-d', strtotime( sprintf( '%04d-%02d-%02d', $gy, $gm, $gd ) ) - DAY_IN_SECONDS );
+	}
 	return array( $start, $end );
 }
 
 /**
- * Period key of a Gregorian date.
+ * Period key of a Gregorian date (in the project's cycle).
  */
-function sap_period_of( $ymd ) {
+function sap_period_of( $ymd, $project_id = null ) {
 	$ts = strtotime( (string) $ymd );
 	if ( ! $ts ) {
-		return sap_period_current();
+		return sap_period_current( $project_id );
 	}
-	list( $jy, $jm ) = sap_g2j( (int) gmdate( 'Y', $ts ), (int) gmdate( 'n', $ts ), (int) gmdate( 'j', $ts ) );
-	return sprintf( '%04d-%02d', $jy, $jm );
+	list( $jy, $jm, $jd ) = sap_g2j( (int) gmdate( 'Y', $ts ), (int) gmdate( 'n', $ts ), (int) gmdate( 'j', $ts ) );
+	return sap_period_of_j( $jy, $jm, $jd, sap_cycle_day( null === $project_id ? sap_period_project() : $project_id ) );
+}
+
+/**
+ * «۱۸ آبان تا ۱۷ آذر» — the dates of a period in a project's cycle.
+ */
+function sap_period_dates( $key, $project_id = null ) {
+	list( $a, $b ) = sap_period_range( $key, $project_id );
+	return sap_jdate( $a, 'day' ) . ' تا ' . sap_jdate( $b, 'day' );
 }
 
 /**
