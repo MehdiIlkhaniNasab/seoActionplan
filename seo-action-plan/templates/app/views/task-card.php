@@ -56,15 +56,15 @@ $flow    = array( 'next' => 'اقدام بعدی', 'doing' => 'در حال ان�
 			<?php if ( null !== $odays && $odays >= sap_long_days() ) : ?><span class="sap-chip is-warn" title="روز از شروع کار"><?php echo esc_html( sap_num( $odays ) ); ?> روز باز</span><?php endif; ?>
 			<?php if ( $psum['count'] ) : ?><span class="sap-chip is-soft" title="گزارش روزانه">🗒️ <?php echo esc_html( sap_num( $psum['count'] ) ); ?></span><?php endif; ?>
 			<?php if ( $prog ) : ?><span class="sap-mini-prog<?php echo $prog['done'] === $prog['total'] ? ' is-full' : ''; ?>" title="پیشرفت چک‌لیست"><i style="width:<?php echo esc_attr( $prog['pct'] ); ?>%"></i><em><?php echo esc_html( sap_num( $prog['done'] ) . '/' . sap_num( $prog['total'] ) ); ?></em></span><?php endif; ?>
-			<?php if ( $t['assignee'] ) : ?><?php echo sap_avatar( $t['assignee'], 22 ); // phpcs:ignore ?><?php endif; ?>
+			<span data-sap-ti="avatar"><?php if ( $t['assignee'] ) : ?><?php echo sap_avatar( $t['assignee'], 22 ); // phpcs:ignore ?><?php endif; ?></span>
 		</span>
 	</summary>
 	<div class="sap-task-body">
 		<div class="sap-tinfo">
-			<div><span>مسئول</span><b><?php echo $t['assignee'] ? sap_person( $t['assignee'], 20 ) : '<em class="sap-muted">تعیین نشده</em>'; // phpcs:ignore ?></b></div>
-			<div><span>ددلاین</span><b class="sap-due <?php echo esc_attr( $due_cls ); ?>"><?php echo esc_html( $t['due_date'] ? sap_jdate( $t['due_date'] ) : '—' ); ?></b></div>
+			<div><span>مسئول</span><b data-sap-ti="assignee"><?php echo $t['assignee'] ? sap_person( $t['assignee'], 20 ) : '<em class="sap-muted">تعیین نشده</em>'; // phpcs:ignore ?></b></div>
+			<div><span>ددلاین</span><b class="sap-due <?php echo esc_attr( $due_cls ); ?>" data-sap-ti="due"><?php echo esc_html( $t['due_date'] ? sap_jdate( $t['due_date'] ) : '—' ); ?></b></div>
 			<div><span>نوع کار</span><b><?php echo esc_html( sap_context_label( $t['context'] ) ); ?></b></div>
-			<div><span>وضعیت</span><b><?php echo esc_html( sap_task_statuses()[ $t['status'] ] ?? $t['status'] ); ?></b></div>
+			<div><span>وضعیت</span><b data-sap-ti="status"><?php echo esc_html( sap_task_statuses()[ $t['status'] ] ?? $t['status'] ); ?></b></div>
 			<?php if ( $t['url'] ) : ?><div class="is-wide"><span>صفحه</span><b><?php echo sap_page_link( $t['url'], sap_page_title( $t['project_id'], $t['url'] ) ?: sap_short_url( $t['url'], 60 ) ); // phpcs:ignore ?></b></div><?php endif; ?>
 		</div>
 
@@ -134,17 +134,31 @@ $flow    = array( 'next' => 'اقدام بعدی', 'doing' => 'در حال ان�
 				<form class="sap-desk-fb" data-sap-desk-feedback hidden><textarea name="note" rows="2" placeholder="چه چیزی باید اصلاح شود؟"></textarea></form>
 			</div>
 		<?php elseif ( 'proposed' !== $t['status'] ) : ?>
-			<form method="post" action="<?php echo $post; // phpcs:ignore ?>" class="sap-tactions">
-				<?php sap_form_fields( 'sap_task_save', array( 'task_id' => $t['id'], '_return' => $ret ) ); ?>
-				<span class="sap-tactions-label">وضعیت:</span>
-				<div class="sap-seg-mini">
-					<?php foreach ( $flow as $k => $label ) : ?>
-						<button class="<?php echo $k === $t['status'] ? 'is-active' : ''; ?>" name="status" value="<?php echo esc_attr( $k ); ?>" <?php disabled( $k === $t['status'] ); ?>><?php echo esc_html( $label ); ?></button>
-					<?php endforeach; ?>
+			<?php /* Staged: picking a status or a person changes nothing until «ذخیره» — saved in place, no reload. */ ?>
+			<form class="sap-tactions sap-tquick" data-sap-tquick="<?php echo esc_attr( $t['id'] ); ?>" data-status="<?php echo esc_attr( $t['status'] ); ?>">
+				<input type="hidden" name="status" value="<?php echo esc_attr( $t['status'] ); ?>">
+				<div class="sap-tquick-row">
+					<span class="sap-tactions-label">وضعیت</span>
+					<div class="sap-seg-mini" role="radiogroup" aria-label="وضعیت کار">
+						<?php foreach ( $flow as $k => $label ) : ?>
+							<button type="button" role="radio" aria-checked="<?php echo $k === $t['status'] ? 'true' : 'false'; ?>" class="<?php echo $k === $t['status'] ? 'is-active' : ''; ?>" data-v="<?php echo esc_attr( $k ); ?>"><?php echo esc_html( $label ); ?></button>
+						<?php endforeach; ?>
+						<?php if ( $manager ) : ?>
+							<button type="button" role="radio" aria-checked="<?php echo 'someday' === $t['status'] ? 'true' : 'false'; ?>" class="<?php echo 'someday' === $t['status'] ? 'is-active' : ''; ?>" data-v="someday" title="به فهرست «شاید بعداً»">شاید بعداً</button>
+						<?php endif; ?>
+					</div>
 				</div>
 				<?php if ( $manager ) : ?>
-					<button class="sap-btn is-ghost is-small" name="status" value="someday" title="به فهرست «شاید بعداً»">شاید بعداً</button>
+					<div class="sap-tquick-row">
+						<label class="sap-tquick-f"><span>مسئول</span><select name="assignee"><option value="0">— تعیین نشده —</option><?php foreach ( sap_team_users() as $u ) : ?><option value="<?php echo esc_attr( $u->ID ); ?>" <?php selected( (int) $u->ID, $t['assignee'] ); ?>><?php echo esc_html( $u->display_name ); ?></option><?php endforeach; ?></select></label>
+						<label class="sap-tquick-f"><span>ددلاین</span><input type="date" name="due_date" value="<?php echo esc_attr( (string) $t['due_date'] ); ?>"></label>
+					</div>
 				<?php endif; ?>
+				<div class="sap-tquick-save" hidden>
+					<span class="sap-small">تغییرات ذخیره نشده</span>
+					<button type="button" class="sap-btn is-ghost is-small" data-sap-tquick-undo>انصراف</button>
+					<button type="submit" class="sap-btn is-primary is-small"><?php echo sap_icon( 'check', 14 ); // phpcs:ignore ?>ذخیره</button>
+				</div>
 			</form>
 		<?php endif; ?>
 
@@ -159,6 +173,7 @@ $flow    = array( 'next' => 'اقدام بعدی', 'doing' => 'در حال ان�
 					<?php sap_form_fields( 'sap_task_save', array( 'task_id' => $t['id'], '_return' => $ret ) ); ?>
 					<label>عنوان<input type="text" name="title" value="<?php echo esc_attr( $t['title'] ); ?>"></label>
 					<div class="sap-grid-3">
+						<label>وضعیت<select name="status" data-sap-tedit-status><?php foreach ( array_diff_key( sap_task_statuses(), array( 'proposed' => 1, 'review' => 1 ) ) as $k => $label ) : ?><option value="<?php echo esc_attr( $k ); ?>" <?php selected( $k, $t['status'] ); ?>><?php echo esc_html( $label ); ?></option><?php endforeach; ?><?php if ( 'review' === $t['status'] ) : ?><option value="review" selected><?php echo esc_html( sap_task_statuses()['review'] ); ?></option><?php endif; ?></select></label>
 						<label>مسئول<select name="assignee"><option value="0">—</option><?php foreach ( sap_team_users() as $u ) : ?><option value="<?php echo esc_attr( $u->ID ); ?>" <?php selected( (int) $u->ID, $t['assignee'] ); ?>><?php echo esc_html( $u->display_name ); ?></option><?php endforeach; ?></select></label>
 						<label>ددلاین<input type="date" name="due_date" value="<?php echo esc_attr( (string) $t['due_date'] ); ?>"></label>
 						<?php sap_view( 'repeat-field', array( 'value' => $t['repeat_every'] ) ); ?>

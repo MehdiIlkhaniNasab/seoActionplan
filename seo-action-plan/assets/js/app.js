@@ -3497,4 +3497,238 @@
 		document.addEventListener('click', function () { setTimeout(queue, 50); });
 		queue();
 	})();
+	/* ---- Task card: status, person and deadline are staged and saved together, in place ---- */
+	(function () {
+		var snap = function (f) {
+			return JSON.stringify(Array.prototype.map.call(f.querySelectorAll('[name]'), function (el) { return [el.name, el.value]; }));
+		};
+		var init = function (f) { if (!f._snap) { f._snap = snap(f); } };
+		var dirty = function (f) {
+			var bar = f.querySelector('.sap-tquick-save');
+			bar.hidden = snap(f) === f._snap;
+			f.classList.toggle('is-dirty', !bar.hidden);
+		};
+		var stage = function (f, v) {
+			f.status.value = v;
+			f.querySelectorAll('[data-v]').forEach(function (b) { var on = b.getAttribute('data-v') === v; b.classList.toggle('is-active', on); b.setAttribute('aria-checked', on ? 'true' : 'false'); });
+			var task = f.closest('.sap-task');
+			var ed = task && task.querySelector('[data-sap-tedit-status]');
+			if (ed) { ed.value = v; }
+		};
+		document.addEventListener('click', function (ev) {
+			var b = ev.target.closest('[data-sap-tquick] [data-v]');
+			if (b) { var f = b.closest('form'); init(f); stage(f, b.getAttribute('data-v')); dirty(f); return; }
+			var u = ev.target.closest('[data-sap-tquick-undo]');
+			if (u) {
+				var fu = u.closest('form');
+				JSON.parse(fu._snap).forEach(function (p) { var el = fu.querySelector('[name="' + p[0] + '"]'); if (el) { el.value = p[1]; } });
+				stage(fu, fu.status.value);
+				dirty(fu);
+			}
+		});
+		document.addEventListener('focusin', function (ev) { var f = ev.target.closest('[data-sap-tquick]'); if (f) { init(f); } });
+		document.addEventListener('change', function (ev) { var f = ev.target.closest('[data-sap-tquick]'); if (f) { init(f); dirty(f); } });
+		document.addEventListener('submit', function (ev) {
+			var f = ev.target.closest('[data-sap-tquick]');
+			if (!f) { return; }
+			ev.preventDefault();
+			var id = f.getAttribute('data-sap-tquick');
+			var d = {};
+			f.querySelectorAll('[name]').forEach(function (el) { d[el.name] = el.value; });
+			var btn = f.querySelector('[type=submit]');
+			busy(btn, '…');
+			post('task/' + id + '/quick', d).then(function (r) {
+				idle(btn);
+				toast(r.msg);
+				var task = f.closest('.sap-task');
+				var set = function (k, html) { var el = task.querySelector('[data-sap-ti="' + k + '"]'); if (el) { el.innerHTML = html; } };
+				set('assignee', r.person); set('avatar', r.avatar); set('status', r.label);
+				var due = task.querySelector('[data-sap-ti="due"]');
+				if (due) { due.textContent = r.due; due.className = 'sap-due ' + r.due_cls; }
+				task.className = task.className.replace(/\bis-(inbox|next|doing|waiting|someday|review|done|dropped|proposed)\b/g, '').trim() + ' is-' + r.status;
+				stage(f, r.status);
+				f.setAttribute('data-status', r.status);
+				f._snap = snap(f);
+				dirty(f);
+				// On the board, the card moves to its new column.
+				var col = task.closest('[data-sap-col]');
+				var to = document.querySelector('[data-sap-col="' + r.status + '"]');
+				if (col && to && col !== to) {
+					var h = to.querySelector('h3');
+					h.parentNode.insertBefore(task, h.nextSibling);
+					[col, to].forEach(function (c) {
+						var n = c.querySelectorAll(':scope > .sap-task').length;
+						var em = c.querySelector('.sap-col-empty'); if (em) { em.hidden = n > 0; }
+						var cnt = c.querySelector('[data-sap-col-n]'); if (cnt && !c.querySelector('[data-sap-done-open]')) { cnt.textContent = String(n).replace(/\d/g, function (x) { return '۰۱۲۳۴۵۶۷۸۹'[x]; }); }
+					});
+				}
+			}).catch(function (e) { idle(btn); toast(e.message, true); });
+		});
+	})();
+
+	/* ---- Done column archive: older finished tasks by week, with search and person filter ---- */
+	(function () {
+		var box = document.querySelector('[data-sap-done-all]');
+		if (!box) { return; }
+		var q = box.querySelector('[data-sap-done-q]');
+		var who = '';
+		var apply = function () {
+			var t = (q.value || '').trim().toLowerCase();
+			box.querySelectorAll('.sap-done-item').forEach(function (it) {
+				it.hidden = (t && it.getAttribute('data-q').indexOf(t) === -1) || (who && it.getAttribute('data-u') !== who);
+			});
+			box.querySelectorAll('[data-sap-done-week]').forEach(function (w) { w.hidden = !w.querySelector('.sap-done-item:not([hidden])'); });
+		};
+		var close = function () { box.hidden = true; document.body.classList.remove('sap-sheet-open'); };
+		document.addEventListener('click', function (ev) {
+			if (ev.target.closest('[data-sap-done-open]')) { box.hidden = false; document.body.classList.add('sap-sheet-open'); q.focus(); return; }
+			if (ev.target.closest('[data-sap-done-close]') || ev.target === box) { close(); return; }
+			var b = ev.target.closest('[data-sap-done-who] button');
+			if (b) { box.querySelectorAll('[data-sap-done-who] button').forEach(function (x) { x.classList.toggle('is-active', x === b); }); who = b.getAttribute('data-u'); apply(); }
+		});
+		q.addEventListener('input', apply);
+		document.addEventListener('keydown', function (ev) { if (ev.key === 'Escape' && !box.hidden && !box.querySelector('.sap-task[open]')) { close(); } });
+	})();
+
+	/* ---- Calendar: person and task status per row, written to the action-plan task ---- */
+	document.addEventListener('change', function (ev) {
+		var sel = ev.target.closest('[data-sap-tk]');
+		if (!sel) { return; }
+		var row = sel.closest('[data-kind]');
+		var cell = sel.closest('[data-sap-tk-cell]');
+		if (sel.value === '' ) { return; }
+		cell.classList.add('is-saving');
+		post('cell/' + row.getAttribute('data-kind') + '/' + row.getAttribute('data-id'), { field: sel.getAttribute('data-sap-tk'), value: sel.value }).then(function (r) {
+			cell.classList.remove('is-saving', 'is-notask');
+			toast(r.msg);
+			if (r.task) {
+				var a = cell.querySelector('[data-sap-tk="task_assignee"]');
+				var s = cell.querySelector('[data-sap-tk="task_status"]');
+				a.value = String(r.task.assignee);
+				if (a.options[0] && a.options[0].value === '0') { a.options[0].textContent = 'بدون مسئول'; }
+				var blank = s.querySelector('option[value=""]'); if (blank) { blank.remove(); }
+				s.value = r.task.status;
+				s.parentNode.className = 'sap-tk is-st is-' + r.task.status;
+			}
+			var chip = row.querySelector('.sap-sc[data-f="status"] .sap-chip');
+			if (chip && r.row_label) {
+				chip.textContent = r.row_label;
+				chip.className = 'sap-chip' + (r.row_status === 'done' || r.row_status === 'published' ? ' is-good' : (r.row_status === 'in_progress' ? ' is-warn' : ''));
+				var stc = row.querySelector('.sap-sc[data-f="status"]'); if (stc) { stc.setAttribute('data-v', r.row_status); }
+			}
+			row.classList.toggle('is-done', r.row_status === 'done' || r.row_status === 'published');
+			cell.classList.add('is-saved'); setTimeout(function () { cell.classList.remove('is-saved'); }, 1200);
+		}).catch(function (e) { cell.classList.remove('is-saving'); toast(e.message, true); });
+	});
+
+	/* ---- Calendar: internal links editor — one row per link: anchor + page (with search) ---- */
+	(function () {
+		var sheet = document.querySelector('[data-sap-sheet]');
+		if (!sheet) { return; }
+		var pid = sheet.getAttribute('data-project');
+		var esc = function (s) { var d = document.createElement('div'); d.textContent = s == null ? '' : String(s); return d.innerHTML; };
+		var pop = null;
+		var parse = function (v) {
+			return (v || '').split(/\n+/).map(function (l) { var p = l.split(/\s*[|｜]\s*/); return { url: (p[0] || '').trim(), anchor: (p[1] || '').trim() }; }).filter(function (x) { return x.url; });
+		};
+		var row = function (l) {
+			var r = document.createElement('div');
+			r.className = 'sap-lk-row';
+			r.innerHTML = '<span class="sap-lk-n"></span><label><span>انکر</span><input type="text" data-a placeholder="متن لینک" value="' + esc(l.anchor) + '"></label><label class="sap-lk-u"><span>صفحه مقصد</span><input type="text" data-u dir="ltr" autocomplete="off" placeholder="جستجوی نام صفحه یا آدرس" value="' + esc(decodeURI(l.url || '')) + '"><ul class="sap-lk-sug" hidden></ul></label><button type="button" class="sap-icon-btn" data-x aria-label="حذف این لینک" title="حذف">✕</button>';
+			return r;
+		};
+		var number = function () { pop.querySelectorAll('.sap-lk-row').forEach(function (r, i) { r.querySelector('.sap-lk-n').textContent = String(i + 1).replace(/\d/g, function (x) { return '۰۱۲۳۴۵۶۷۸۹'[x]; }); }); };
+		var closePop = function () { if (pop) { pop.remove(); pop = null; } };
+		var openLinks = function (cell) {
+			closePop();
+			pop = document.createElement('div');
+			pop.className = 'sap-lk-pop';
+			pop.setAttribute('role', 'dialog');
+			pop.setAttribute('aria-label', 'لینک‌های داخلی و انکر');
+			pop.innerHTML = '<header><b>لینک‌های داخلی و انکر</b><small>برای هر لینک، متن انکر و صفحه مقصد را مشخص کنید.</small></header><div class="sap-lk-rows"></div><button type="button" class="sap-btn is-small is-soft" data-add>+ افزودن لینک</button><footer><button type="button" class="sap-btn is-small is-ghost" data-cancel>انصراف</button><button type="button" class="sap-btn is-small is-primary" data-save>ذخیره لینک‌ها</button></footer>';
+			var rows = pop.querySelector('.sap-lk-rows');
+			var list = parse(cell.getAttribute('data-v'));
+			(list.length ? list : [{ url: '', anchor: '' }]).forEach(function (l) { rows.appendChild(row(l)); });
+			number();
+			document.body.appendChild(pop);
+			var r = cell.getBoundingClientRect();
+			var w = Math.min(560, window.innerWidth - 24);
+			pop.style.width = w + 'px';
+			pop.style.top = (window.scrollY + r.bottom + 6) + 'px';
+			pop.style.left = Math.max(12, Math.min(window.scrollX + r.right - w, window.scrollX + window.innerWidth - w - 12)) + 'px';
+			var first = pop.querySelector('[data-a]'); if (first) { first.focus(); }
+			var timer = null;
+			pop.addEventListener('input', function (ev) {
+				var u = ev.target.closest('[data-u]');
+				if (!u) { return; }
+				var sug = u.parentNode.querySelector('.sap-lk-sug');
+				clearTimeout(timer);
+				var v = u.value.trim();
+				if (v.length < 2 || /^https?:\/\//i.test(v)) { sug.hidden = true; return; }
+				timer = setTimeout(function () {
+					api('cplan/' + pid + '/pages?q=' + encodeURIComponent(v)).then(function (res) {
+						var pages = (res.pages || []).slice(0, 8);
+						sug.innerHTML = pages.length ? pages.map(function (p, i) { return '<li data-i="' + i + '"><b>' + esc(p.title) + '</b><span><em class="sap-ptype is-' + esc(p.type) + '">' + esc(p.type_l) + '</em>' + (p.kw ? '🔑 ' + esc(p.kw) : '') + '</span></li>'; }).join('') : '<li class="is-empty">صفحه‌ای پیدا نشد؛ آدرس کامل را بنویسید.</li>';
+						sug._pages = pages;
+						sug.hidden = false;
+					}).catch(function () { sug.hidden = true; });
+				}, 220);
+			});
+			pop.addEventListener('mousedown', function (ev) {
+				var li = ev.target.closest('.sap-lk-sug li[data-i]');
+				if (!li) { return; }
+				ev.preventDefault();
+				var sug = li.parentNode;
+				var p = sug._pages[+li.getAttribute('data-i')];
+				var rr = li.closest('.sap-lk-row');
+				rr.querySelector('[data-u]').value = decodeURI(p.url);
+				var a = rr.querySelector('[data-a]');
+				if (!a.value.trim()) { a.value = p.kw || p.title; }
+				sug.hidden = true;
+			});
+			pop.addEventListener('focusout', function (ev) { var u = ev.target.closest('[data-u]'); if (u) { setTimeout(function () { var s = u.parentNode.querySelector('.sap-lk-sug'); if (s) { s.hidden = true; } }, 150); } });
+			pop.addEventListener('click', function (ev) {
+				if (ev.target.closest('[data-add]')) { var nr = row({ url: '', anchor: '' }); rows.appendChild(nr); number(); nr.querySelector('[data-a]').focus(); return; }
+				var x = ev.target.closest('[data-x]');
+				if (x) { x.closest('.sap-lk-row').remove(); number(); return; }
+				if (ev.target.closest('[data-cancel]')) { closePop(); cell.focus(); return; }
+				var sv = ev.target.closest('[data-save]');
+				if (!sv) { return; }
+				var lines = [];
+				var bad = false;
+				pop.querySelectorAll('.sap-lk-row').forEach(function (r) {
+					var u = r.querySelector('[data-u]').value.trim();
+					var a = r.querySelector('[data-a]').value.trim();
+					if (!u && !a) { return; }
+					if (!u) { bad = true; r.querySelector('[data-u]').focus(); return; }
+					lines.push(u + (a ? ' | ' + a : ''));
+				});
+				if (bad) { toast('برای هر انکر، صفحه مقصد را مشخص کنید.', true); return; }
+				var val = lines.join('\n');
+				var tr = cell.closest('[data-kind]');
+				busy(sv, '…');
+				post('cell/' + tr.getAttribute('data-kind') + '/' + tr.getAttribute('data-id'), { field: 'links', value: val }).then(function () {
+					cell.setAttribute('data-v', val);
+					var view = cell.querySelector('.sap-sc-v');
+					view.innerHTML = lines.length ? '<ul class="sap-sc-links">' + lines.slice(0, 5).map(function (l) { var p = l.split(/\s*\|\s*/); return '<li><bdi dir="ltr">' + esc(p[0].replace(/^https?:\/\/[^/]+/, '').slice(0, 34)) + '</bdi>' + (p[1] ? '<span>«' + esc(p[1]) + '»</span>' : '') + '</li>'; }).join('') + '</ul>' : '<span class="sap-sc-empty">—</span>';
+					closePop();
+					toast('لینک‌ها ذخیره شد');
+					cell.classList.add('is-saved'); setTimeout(function () { cell.classList.remove('is-saved'); }, 1200);
+				}).catch(function (e) { idle(sv); toast(e.message, true); });
+			});
+			pop.addEventListener('keydown', function (ev) { if (ev.key === 'Escape') { ev.stopPropagation(); closePop(); cell.focus(); } });
+		};
+		// Capture phase: the links cell opens this editor instead of the plain text box.
+		sheet.addEventListener('click', function (ev) {
+			var cell = ev.target.closest('.sap-sc[data-type="links"]');
+			if (!cell || ev.target.closest('a, button')) { return; }
+			ev.stopPropagation();
+			openLinks(cell);
+		}, true);
+		sheet.addEventListener('keydown', function (ev) {
+			var cell = ev.target.closest('.sap-sc[data-type="links"]');
+			if (cell && ev.target === cell && (ev.key === 'Enter' || ev.key === 'F2')) { ev.preventDefault(); ev.stopPropagation(); openLinks(cell); }
+		}, true);
+		document.addEventListener('mousedown', function (ev) { if (pop && !pop.contains(ev.target) && !ev.target.closest('.sap-sc[data-type="links"]')) { closePop(); } });
+	})();
 })();

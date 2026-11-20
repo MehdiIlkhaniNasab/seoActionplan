@@ -79,6 +79,21 @@ $links_html = function ( $links ) use ( $pid ) {
 	}
 	return $out . ( count( $links ) > 5 ? '<li class="sap-muted">+' . esc_html( sap_num( count( $links ) - 5 ) ) . '</li>' : '' ) . '</ul>';
 };
+// Who does the row and where its task stands: the same task as the action plan.
+$tusers   = sap_team_users();
+$tflow    = array( 'next' => 'اقدام بعدی', 'doing' => 'در حال انجام', 'waiting' => 'در انتظار', 'done' => 'انجام شد' );
+$task_ctl = function ( $tid ) use ( $tusers, $tflow ) {
+	$t  = $tid ? sap_task( $tid ) : null;
+	$st = $t ? $t['status'] : '';
+	ob_start();
+	?>
+	<td class="sap-sc is-task<?php echo $t ? '' : ' is-notask'; ?>" data-sap-tk-cell>
+		<label class="sap-tk"><span class="screen-reader-text">مسئول</span><select data-sap-tk="task_assignee"><option value="0"><?php echo $t ? 'بدون مسئول' : 'انتخاب مسئول…'; ?></option><?php foreach ( $tusers as $u ) : ?><option value="<?php echo esc_attr( $u->ID ); ?>" <?php selected( $t ? (int) $t['assignee'] : -1, (int) $u->ID ); ?>><?php echo esc_html( $u->display_name ); ?></option><?php endforeach; ?></select></label>
+		<label class="sap-tk is-st is-<?php echo esc_attr( $st ?: 'none' ); ?>"><span class="screen-reader-text">وضعیت کار</span><select data-sap-tk="task_status"><?php if ( ! $t ) : ?><option value="" selected>بدون کار در اکشن پلن</option><?php endif; ?><?php if ( $t && ! isset( $tflow[ $st ] ) ) : ?><option value="<?php echo esc_attr( $st ); ?>" selected><?php echo esc_html( sap_task_statuses()[ $st ] ?? $st ); ?></option><?php endif; ?><?php foreach ( $tflow as $k => $l ) : ?><option value="<?php echo esc_attr( $k ); ?>" <?php selected( $st, $k ); ?>><?php echo esc_html( $l ); ?></option><?php endforeach; ?></select></label>
+	</td>
+	<?php
+	return ob_get_clean();
+};
 $jd       = function ( $ymd ) {
 	return $ymd ? sap_jdate( substr( (string) $ymd, 0, 10 ), 'short' ) : '';
 };
@@ -149,7 +164,7 @@ $jd       = function ( $ymd ) {
 	</div>
 </section>
 
-<section class="sap-panel sap-ledger-panel" data-sap-sheet>
+<section class="sap-panel sap-ledger-panel" data-sap-sheet data-project="<?php echo esc_attr( $pid ); ?>">
 	<div class="sap-ledger-bar">
 		<div class="sap-seg-mini" role="group" aria-label="فیلتر ردیف‌ها" data-sap-sheet-filter>
 			<button type="button" class="is-active" data-k="">همه <em><?php echo esc_html( sap_num( count( $items ) + count( $updates ) ) ); ?></em></button>
@@ -158,7 +173,7 @@ $jd       = function ( $ymd ) {
 				<?php if ( $groups[ $g ] ) : ?><button type="button" data-k="u-<?php echo esc_attr( $g ); ?>">آپدیت <?php echo esc_html( $kinds[ $g ] ); ?> <em><?php echo esc_html( sap_num( count( $groups[ $g ] ) ) ); ?></em></button><?php endif; ?>
 			<?php endforeach; ?>
 		</div>
-		<p class="sap-small sap-muted">روی هر خانه کلیک کنید تا ویرایش شود؛ Enter ذخیره، Esc انصراف. لینک‌ها هر خط «آدرس | انکر».</p>
+		<p class="sap-small sap-muted">روی هر خانه کلیک کنید تا ویرایش شود؛ Enter ذخیره، Esc انصراف. مسئول و وضعیت کار همان‌جا در اکشن پلن هم ثبت می‌شود.</p>
 	</div>
 	<?php if ( ! $items && ! $updates ) : ?>
 		<div class="sap-empty"><p>این ماه هنوز ردیفی ندارد. صفحه‌های آپدیت را در <a href="<?php echo esc_url( sap_project_url( $pid, 'updates' ) . '#slots' ); ?>">آپدیت محتوا</a> و کلمات محتوای جدید را در <a href="<?php echo esc_url( sap_project_url( $pid, 'ideas' ) . '#slots' ); ?>">ایده‌های محتوا</a> مشخص کنید.</p></div>
@@ -179,13 +194,13 @@ $jd       = function ( $ymd ) {
 					<th scope="col">تاریخ انتشار / انجام</th>
 					<th scope="col">قبل از آپدیت<small>رتبه · کلیک ۲۸ روز</small></th>
 					<th scope="col">نتیجه</th>
-					<th scope="col">مسئول</th>
+					<th scope="col">مسئول و وضعیت کار<small>همان کار اکشن پلن</small></th>
 					<th scope="col"><span class="screen-reader-text">کارها</span></th>
 				</tr>
 			</thead>
 			<?php if ( $items ) : ?>
 			<tbody data-k="new">
-				<tr class="sap-ledger-group is-new"><th colspan="13" scope="rowgroup"><span>محتوای جدید</span><em><?php echo esc_html( sap_num( count( $items ) ) . ' مقاله · ' . sap_num( $pub ) . ' منتشر شده' ); ?></em></th></tr>
+				<tr class="sap-ledger-group is-new"><th colspan="13" scope="rowgroup"><span>محتوای جدید <em><?php echo esc_html( sap_num( count( $items ) ) . ' مقاله · ' . sap_num( $pub ) . ' منتشر شده' ); ?></em></span></th></tr>
 				<?php foreach ( $items as $n => $it ) : ?>
 					<?php $res = sap_track_line( $track[ 'i' . $it['id'] ] ?? null, 'new' ); $sec = sap_idea_secondary( $it ); $is_pub = 'published' === $it['status']; ?>
 					<tr class="sap-sr is-new<?php echo $is_pub ? ' is-done' : ''; ?>" data-kind="idea" data-id="<?php echo esc_attr( $it['id'] ); ?>" data-sap-idea="<?php echo esc_attr( $it['id'] ); ?>">
@@ -200,11 +215,10 @@ $jd       = function ( $ymd ) {
 						<?php $cell( 'published_at', $jd( $it['published_at'] ), $it['published_at'] ? esc_html( $jd( $it['published_at'] ) ) : ( $is_pub ? '<span class="sap-sc-warn">تاریخ ثبت نشده</span>' : '' ), 'date' ); ?>
 						<td class="sap-sc is-ro"><span class="sap-muted sap-small">محتوای جدید</span></td>
 						<td class="sap-sc is-ro"><?php if ( '' !== $res['text'] ) : ?><span class="sap-calx-res <?php echo esc_attr( $res['tone'] ); ?>"><?php echo esc_html( $res['text'] ); ?></span><?php elseif ( $is_pub && ! $it['published_url'] ) : ?><span class="sap-sc-warn">لینک ثبت نشده</span><?php else : ?><span class="sap-muted sap-small">بعد از انتشار</span><?php endif; ?></td>
-						<td class="sap-sc is-ro sap-small"><?php echo $task_l( $it['task_id'] ); // phpcs:ignore ?></td>
+						<?php echo $task_ctl( $it['task_id'] ); // phpcs:ignore ?>
 						<td class="sap-sc-act">
 							<button type="button" class="sap-icon-btn" data-sap-sr-more aria-expanded="false" title="جزئیات"><?php echo sap_icon( 'list', 14 ); // phpcs:ignore ?></button>
-							<?php if ( ! $it['task_id'] ) : ?><button type="button" class="sap-icon-btn" data-sap-idea-do="task" title="ساخت کار در اکشن پلن"><?php echo sap_icon( 'plus', 14 ); // phpcs:ignore ?></button><?php endif; ?>
-							<button type="button" class="sap-icon-btn" data-sap-idea-do="unschedule" title="خارج کردن از تقویم"><?php echo sap_icon( 'x', 14 ); // phpcs:ignore ?></button>
+														<button type="button" class="sap-icon-btn" data-sap-idea-do="unschedule" title="خارج کردن از تقویم"><?php echo sap_icon( 'x', 14 ); // phpcs:ignore ?></button>
 						</td>
 					</tr>
 					<tr class="sap-sr-more" hidden><td colspan="13">
@@ -221,7 +235,7 @@ $jd       = function ( $ymd ) {
 			<?php foreach ( $groups as $g => $list ) : ?>
 				<?php if ( ! $list ) { continue; } ?>
 				<tbody data-k="u-<?php echo esc_attr( $g ); ?>">
-					<tr class="sap-ledger-group is-upd is-<?php echo esc_attr( $g ); ?>"><th colspan="13" scope="rowgroup"><span>آپدیت · <?php echo esc_html( $glabel[ $g ] ); ?></span><em><?php echo esc_html( sap_num( count( $list ) ) . ' صفحه · ' . sap_num( count( array_filter( $list, function ( $x ) { return 'done' === $x['status']; } ) ) ) . ' انجام شد' ); ?></em></th></tr>
+					<tr class="sap-ledger-group is-upd is-<?php echo esc_attr( $g ); ?>"><th colspan="13" scope="rowgroup"><span>آپدیت · <?php echo esc_html( $glabel[ $g ] ); ?> <em><?php echo esc_html( sap_num( count( $list ) ) . ' صفحه · ' . sap_num( count( array_filter( $list, function ( $x ) { return 'done' === $x['status']; } ) ) ) . ' انجام شد' ); ?></em></span></th></tr>
 					<?php foreach ( $list as $n => $u ) : ?>
 						<?php
 						$res  = sap_track_line( $track[ 'u' . $u['id'] ] ?? null, 'upd' );
@@ -256,11 +270,10 @@ $jd       = function ( $ymd ) {
 								<?php if ( null !== $u['impr_before'] ) : ?><small class="sap-muted"><?php echo esc_html( sap_num( $u['impr_before'] ) ); ?> نمایش</small><?php endif; ?>
 							</td>
 							<td class="sap-sc is-ro"><?php if ( '' !== $res['text'] ) : ?><span class="sap-calx-res <?php echo esc_attr( $res['tone'] ); ?>"><?php echo esc_html( $res['text'] ); ?></span><?php else : ?><span class="sap-muted sap-small"><?php echo $done ? 'در حال سنجش' : 'بعد از انجام'; ?></span><?php endif; ?></td>
-							<td class="sap-sc is-ro sap-small"><?php echo $task_l( $u['task_id'] ); // phpcs:ignore ?></td>
+							<?php echo $task_ctl( $u['task_id'] ); // phpcs:ignore ?>
 							<td class="sap-sc-act">
 								<button type="button" class="sap-icon-btn" data-sap-sr-more aria-expanded="false" title="جزئیات و بریف"><?php echo sap_icon( 'list', 14 ); // phpcs:ignore ?></button>
-								<?php if ( ! $u['task_id'] ) : ?><button type="button" class="sap-icon-btn" data-sap-update-do="task" data-id="<?php echo esc_attr( $u['id'] ); ?>" title="ساخت کار در اکشن پلن"><?php echo sap_icon( 'plus', 14 ); // phpcs:ignore ?></button><?php endif; ?>
-								<button type="button" class="sap-icon-btn" data-sap-update-do="delete" data-id="<?php echo esc_attr( $u['id'] ); ?>" title="حذف از تقویم"><?php echo sap_icon( 'trash', 14 ); // phpcs:ignore ?></button>
+																<button type="button" class="sap-icon-btn" data-sap-update-do="delete" data-id="<?php echo esc_attr( $u['id'] ); ?>" title="حذف از تقویم"><?php echo sap_icon( 'trash', 14 ); // phpcs:ignore ?></button>
 							</td>
 						</tr>
 						<tr class="sap-sr-more" hidden><td colspan="13">

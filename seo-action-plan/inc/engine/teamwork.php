@@ -363,6 +363,73 @@ function sap_progress_own( $t ) {
 	} ) );
 }
 
+/**
+ * Save a task's status, person and deadline in one go from the card (no reload).
+ * A member may only move their own task (doing / waiting / done; «done» goes to
+ * the managers' desk for review).
+ *
+ * @return array|WP_Error What the card shows after the save.
+ */
+function sap_task_quick_save( $task, $p ) {
+	$manager = sap_can();
+	$data    = array();
+	$status  = isset( $p['status'] ) ? sanitize_key( (string) $p['status'] ) : $task['status'];
+	if ( $status !== $task['status'] ) {
+		if ( ! array_key_exists( $status, sap_task_statuses() ) || in_array( $status, array( 'proposed', 'review' ), true ) ) {
+			return new WP_Error( 'sap_status', 'وضعیت نامعتبر.', array( 'status' => 400 ) );
+		}
+		if ( ! $manager && ( (int) $task['assignee'] !== get_current_user_id() || ! in_array( $status, array( 'doing', 'waiting', 'done' ), true ) ) ) {
+			return new WP_Error( 'sap_forbidden', 'اجازه این تغییر را ندارید.', array( 'status' => 403 ) );
+		}
+		$data['status'] = $status;
+	}
+	if ( $manager ) {
+		if ( isset( $p['assignee'] ) && (int) $p['assignee'] !== (int) $task['assignee'] ) {
+			$data['assignee'] = absint( $p['assignee'] );
+		}
+		if ( isset( $p['due_date'] ) && (string) $p['due_date'] !== (string) $task['due_date'] ) {
+			$d = (string) $p['due_date'];
+			$data['due_date'] = preg_match( '/^\d{4}-\d{2}-\d{2}$/', $d ) ? $d : null;
+		}
+	}
+	if ( ! $data ) {
+		return array( 'msg' => 'تغییری نبود.' ) + sap_task_quick_view( $task );
+	}
+	$msg = 'ذخیره شد.';
+	if ( ! $manager && 'done' === ( $data['status'] ?? '' ) ) {
+		$r = sap_task_submit( $task, (string) $task['result'], null );
+		if ( is_wp_error( $r ) ) {
+			return $r;
+		}
+		$msg = $r['msg'];
+		unset( $data['status'] );
+	}
+	if ( $data ) {
+		sap_task_save( $data, $task['id'] );
+		if ( isset( $data['status'] ) && 'done' === $data['status'] ) {
+			$msg = 'خسته نباشید! کار ثبت شد و در گزارش می‌آید.';
+		}
+	}
+	return array( 'msg' => $msg ) + sap_task_quick_view( sap_task( $task['id'] ) );
+}
+
+/**
+ * Pieces of a task card that change with status, person or deadline.
+ */
+function sap_task_quick_view( $t ) {
+	$today = current_time( 'Y-m-d' );
+	$late  = $t['due_date'] && $t['due_date'] < $today && ! in_array( $t['status'], array( 'done', 'dropped' ), true );
+	return array(
+		'status'   => $t['status'],
+		'label'    => sap_task_statuses()[ $t['status'] ] ?? $t['status'],
+		'assignee' => (int) $t['assignee'],
+		'person'   => $t['assignee'] ? sap_person( $t['assignee'], 20 ) : '<em class="sap-muted">تعیین نشده</em>',
+		'avatar'   => $t['assignee'] ? sap_avatar( $t['assignee'], 22 ) : '',
+		'due'      => $t['due_date'] ? sap_jdate( $t['due_date'] ) : '—',
+		'due_cls'  => $late ? 'is-late' : ( $t['due_date'] === $today ? 'is-today' : '' ),
+	);
+}
+
 /* ---------------------------------------------------------------------------
  * Managers improve the team's reports
  * ------------------------------------------------------------------------- */
@@ -1041,6 +1108,18 @@ add_action( 'rest_api_init', function () {
 				return $t;
 			}
 			$r = sap_task_progress_add( $t, (string) $req->get_param( 'text' ), sanitize_key( (string) $req->get_param( 'state' ) ), (string) $req->get_param( 'why' ) );
+			return is_wp_error( $r ) ? $r : array_merge( array( 'ok' => true ), $r );
+		},
+	) );
+	register_rest_route( $ns, '/task/(?P<id>\d+)/quick', array(
+		'methods'             => 'POST',
+		'permission_callback' => 'sap_can_work',
+		'callback'            => function ( WP_REST_Request $req ) {
+			$t = sap_task_for_user( $req['id'] );
+			if ( is_wp_error( $t ) ) {
+				return $t;
+			}
+			$r = sap_task_quick_save( $t, (array) $req->get_json_params() );
 			return is_wp_error( $r ) ? $r : array_merge( array( 'ok' => true ), $r );
 		},
 	) );

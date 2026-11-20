@@ -309,22 +309,7 @@ add_action( 'rest_api_init', function () {
 					}
 					return array( 'ok' => true, 'msg' => 'جابه‌جا شد' );
 				case 'task':
-					$tid = sap_task_save( array(
-						'project_id' => $idea['project_id'],
-						'focus_id'   => $idea['focus_id'],
-						'title'      => 'نوشتن محتوای جدید: «' . ( $idea['title'] ?: $idea['keyword'] ) . '»',
-						'notes'      => trim( "کلمه اصلی: {$idea['keyword']}\nکلمات فرعی: " . implode( '، ', array_column( sap_idea_secondary( $idea ), 0 ) ) . "\nهدف: {$idea['goal']}\n\n{$idea['brief']}\n\nساختار:\n• " . implode( "\n• ", $idea['outline'] ) ),
-						'context'    => 'content_new',
-						'status'     => 'next',
-						'period'     => $idea['period'] ?: sap_period_current(),
-						'due_date'   => $idea['planned_date'],
-						'effort'     => 3,
-						'keyword'    => $idea['keyword'],
-						'source'     => 'cycle',
-						'recurring'  => 'cyc_new_' . ( $idea['period'] ?: sap_period_current() ) . '_i' . $idea['id'],
-						'assignee'   => sap_cplan_person( sap_project( $idea['project_id'] ), 'content' ),
-					) );
-					sap_idea_save( array( 'task_id' => $tid ), $idea['id'] );
+					sap_cplan_row_task( 'idea', $idea ); // Same task as the calendar and the weekly builder.
 					return array( 'ok' => true, 'msg' => 'به اکشن پلن اضافه شد' );
 			}
 			return new WP_Error( 'sap_do', 'عملیات نامعتبر.', array( 'status' => 400 ) );
@@ -832,9 +817,8 @@ add_action( 'rest_api_init', function () {
 					}
 					return array( 'ok' => true, 'msg' => 'وضعیت ثبت شد' . sap_calendar_sync_sheet( $project ), 'reload' => true );
 				case 'task':
-					// The update stays «planned» until someone starts the task (no false «در حال انجام»).
-					$tid = sap_task_save( array( 'project_id' => $project['id'], 'title' => 'آپدیت محتوا: «' . $u['title'] . '»', 'notes' => trim( ( $u['keyword'] ? 'کلمه اصلی: ' . $u['keyword'] . "\n" : '' ) . $u['reason'] . ( '' !== $u['my_view'] ? "\n\nدیدگاه مدیر سئو:\n" . $u['my_view'] : '' ) . ( $u['brief'] ? "\n\nبریف در تقویم محتوا › آپدیت محتوا." : '' ) ), 'context' => 'content_update', 'status' => 'next', 'period' => $u['period'], 'effort' => 'product' === $u['content_type'] ? 1.5 : 3, 'url' => $u['url'], 'keyword' => $u['keyword'], 'focus_id' => $u['focus_id'], 'assignee' => sap_cplan_person( $project, 'update' ), 'source' => 'cycle', 'recurring' => 'cyc_upd_' . $u['period'] . '_u' . $u['id'] ) );
-					sap_update_save( array( 'task_id' => $tid ), $u['id'] );
+					// Same task as the calendar and the weekly builder; the update stays «planned» until the task starts.
+					sap_cplan_row_task( 'update', $u );
 					return array( 'ok' => true, 'msg' => 'به اکشن پلن ' . sap_period_label( $u['period'] ) . ' اضافه شد.', 'reload' => true );
 				case 'delete':
 					sap_update_delete( $u['id'] );

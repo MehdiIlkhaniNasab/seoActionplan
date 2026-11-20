@@ -569,6 +569,81 @@ function sap_cplan_links_text( $links ) {
 }
 
 /**
+ * The action-plan task of a calendar row, made when missing (same task the
+ * weekly builder would make, so nothing is duplicated).
+ *
+ * @param string $kind idea|update.
+ * @return array|null Task.
+ */
+function sap_cplan_row_task( $kind, $row, $create = true ) {
+	$t = $row['task_id'] ? sap_task( $row['task_id'] ) : null;
+	if ( $t || ! $create ) {
+		return $t;
+	}
+	$project = sap_project( $row['project_id'] );
+	if ( 'update' === $kind ) {
+		$tid = sap_task_save( array(
+			'project_id' => $row['project_id'],
+			'focus_id'   => $row['focus_id'],
+			'title'      => 'آپدیت محتوا: «' . $row['title'] . '»',
+			'notes'      => trim( ( $row['keyword'] ? 'کلمه اصلی: ' . $row['keyword'] . "\n" : '' ) . $row['reason'] . ( '' !== $row['my_view'] ? "\n\nدیدگاه مدیر سئو:\n" . $row['my_view'] : '' ) ),
+			'url'        => $row['url'],
+			'keyword'    => $row['keyword'],
+			'context'    => 'content_update',
+			'status'     => 'next',
+			'period'     => $row['period'],
+			'effort'     => 'product' === sap_update_kind( $row ) ? 1.5 : 3,
+			'assignee'   => sap_cplan_person( $project, 'update' ),
+			'source'     => 'cycle',
+			'recurring'  => 'cyc_upd_' . $row['period'] . '_u' . $row['id'],
+		) );
+		sap_update_save( array( 'task_id' => $tid ), $row['id'] );
+	} else {
+		$sec = array_column( sap_idea_secondary( $row ), 0 );
+		$tid = sap_task_save( array(
+			'project_id' => $row['project_id'],
+			'focus_id'   => $row['focus_id'],
+			'title'      => 'نوشتن محتوای جدید: «' . ( $row['title'] ?: $row['keyword'] ) . '»',
+			'notes'      => trim( 'کلمه اصلی: ' . $row['keyword'] . ( $sec ? "\nکلمات فرعی: " . implode( '، ', $sec ) : '' ) . ( '' !== $row['goal'] ? "\nهدف: " . $row['goal'] : '' ) . "\n\n" . $row['brief'] . ( $row['outline'] ? "\n\nسرفصل‌ها:\n- " . implode( "\n- ", (array) $row['outline'] ) : '' ) ),
+			'keyword'    => $row['keyword'],
+			'context'    => 'content_new',
+			'status'     => 'next',
+			'period'     => $row['period'] ?: sap_period_current( $row['project_id'] ),
+			'due_date'   => $row['planned_date'] ?: null,
+			'effort'     => 3,
+			'assignee'   => sap_cplan_person( $project, 'content' ),
+			'source'     => 'cycle',
+			'recurring'  => 'cyc_new_' . ( $row['period'] ?: sap_period_current( $row['project_id'] ) ) . '_i' . $row['id'],
+		) );
+		sap_idea_save( array( 'task_id' => $tid ), $row['id'] );
+	}
+	return sap_task( $tid );
+}
+
+/**
+ * Who does a calendar row and where its task stands — set from the calendar,
+ * written to the action-plan task (the same task, nothing to set twice).
+ *
+ * @return array|WP_Error {task view, row status}
+ */
+function sap_cplan_row_task_set( $kind, $row, $field, $value ) {
+	$t = sap_cplan_row_task( $kind, $row );
+	if ( ! $t ) {
+		return new WP_Error( 'sap_cell', 'کار ساخته نشد.' );
+	}
+	if ( 'task_assignee' === $field ) {
+		sap_task_save( array( 'assignee' => absint( $value ) ), $t['id'] );
+	} else {
+		$st = sanitize_key( (string) $value );
+		if ( ! in_array( $st, array( 'next', 'doing', 'waiting', 'done' ), true ) ) {
+			return new WP_Error( 'sap_cell', 'وضعیت نامعتبر است.' );
+		}
+		sap_task_save( array( 'status' => $st ), $t['id'] );
+	}
+	return sap_task( $t['id'] );
+}
+
+/**
  * Edit one field of a calendar row.
  *
  * @param string $kind idea|update.
@@ -576,6 +651,18 @@ function sap_cplan_links_text( $links ) {
  */
 function sap_cplan_cell( $kind, $id, $field, $value ) {
 	$value = is_string( $value ) ? trim( $value ) : $value;
+	if ( in_array( $field, array( 'task_assignee', 'task_status' ), true ) ) {
+		$row = 'idea' === $kind ? sap_idea( $id ) : sap_update( $id );
+		if ( ! $row ) {
+			return new WP_Error( 'sap_cell', 'ردیف پیدا نشد.', array( 'status' => 404 ) );
+		}
+		$t = sap_cplan_row_task_set( $kind, $row, $field, $value );
+		if ( is_wp_error( $t ) ) {
+			return $t;
+		}
+		$row = 'idea' === $kind ? sap_idea( $id ) : sap_update( $id );
+		return array( 'ok' => true, 'row' => $row, 'task' => sap_task_quick_view( $t ) );
+	}
 	if ( 'idea' === $kind ) {
 		$it = sap_idea( $id );
 		if ( ! $it ) {
@@ -776,7 +863,14 @@ add_action( 'rest_api_init', function () {
 			if ( ! wp_next_scheduled( 'sap_cal_sheet_push', array( (int) $pid ) ) ) {
 				wp_schedule_single_event( time() + 60, 'sap_cal_sheet_push', array( (int) $pid ) );
 			}
-			return array( 'ok' => true, 'msg' => 'ذخیره شد' );
+			$row = $r['row'];
+			$out = array( 'ok' => true, 'msg' => isset( $r['task'] ) ? 'در اکشن پلن هم ثبت شد' : 'ذخیره شد' );
+			if ( isset( $r['task'] ) ) {
+				$out['task'] = $r['task'];
+			}
+			$out['row_status'] = (string) $row['status'];
+			$out['row_label']  = 'idea' === $req['kind'] ? ( 'published' === $row['status'] ? 'منتشر شد' : 'در تقویم' ) : ( sap_update_statuses()[ $row['status'] ] ?? $row['status'] );
+			return $out;
 		},
 	) );
 } );

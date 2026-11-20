@@ -251,8 +251,22 @@ endif;
 			continue;
 		}
 		?>
-		<section class="sap-col is-<?php echo esc_attr( $status ); ?>">
-			<h3><?php echo esc_html( sap_task_statuses()[ $status ] ); ?><small><?php echo esc_html( sap_num( count( $items ) ) ); ?></small></h3>
+		<?php
+		// Done: newest first, compact; past 15 the column keeps the latest 8 and the
+		// rest open in a searchable archive grouped by week.
+		$archive = array();
+		if ( 'done' === $status ) {
+			usort( $items, function ( $a, $b ) {
+				return strcmp( (string) ( $b['done_at'] ?: $b['updated_at'] ?? '' ), (string) ( $a['done_at'] ?: $a['updated_at'] ?? '' ) );
+			} );
+			if ( count( $items ) > 15 ) {
+				$archive = array_slice( $items, 8 ); // Older ones; the newest 8 stay in the column.
+				$items   = array_slice( $items, 0, 8 );
+			}
+		}
+		?>
+		<section class="sap-col is-<?php echo esc_attr( $status ); ?>" data-sap-col="<?php echo esc_attr( $status ); ?>">
+			<h3><?php echo esc_html( sap_task_statuses()[ $status ] ); ?><small data-sap-col-n><?php echo esc_html( sap_num( count( $archive ) + count( $items ) ) ); ?></small></h3>
 			<?php
 			foreach ( $items as $t ) {
 				sap_view( 'task-card', array_merge( $args, array( 't' => $t ) ) );
@@ -261,7 +275,53 @@ endif;
 				echo '<p class="sap-muted sap-col-empty">—</p>';
 			}
 			?>
+			<?php if ( $archive ) : ?>
+				<button type="button" class="sap-done-more" data-sap-done-open>
+					<b><?php echo esc_html( sprintf( '%s کار قدیمی‌تر', sap_num( count( $archive ) ) ) ); ?></b>
+					<small>دسته‌بندی‌شده بر اساس هفته، با جستجو</small>
+				</button>
+			<?php endif; ?>
 		</section>
+		<?php if ( $archive ) : ?>
+			<?php
+			$weeks = array();
+			$now   = strtotime( current_time( 'Y-m-d' ) );
+			foreach ( $archive as $t ) {
+				$d    = substr( (string) ( $t['done_at'] ?: $t['updated_at'] ?? '' ), 0, 10 );
+				$ago  = $d ? (int) floor( ( $now - strtotime( $d ) ) / ( 7 * DAY_IN_SECONDS ) ) : 99;
+				$key  = 0 === $ago ? 'این هفته' : ( 1 === $ago ? 'هفته قبل' : ( $ago < 5 ? sap_num( $ago ) . ' هفته پیش' : 'قدیمی‌تر' ) );
+				$weeks[ $key ][] = $t;
+			}
+			$people = array_filter( array_unique( array_map( 'intval', array_column( $archive, 'assignee' ) ) ) );
+			?>
+			<div class="sap-done-all" data-sap-done-all hidden role="dialog" aria-modal="true" aria-label="کارهای انجام‌شده">
+				<div class="sap-done-box">
+					<header>
+						<div><h2>کارهای انجام‌شده</h2><p class="sap-muted sap-small"><?php echo esc_html( sprintf( '%s کار قدیمی‌تر از ۸ کار آخر ستون · %s', sap_num( count( $archive ) ), sap_period_label( $period ) ) ); ?></p></div>
+						<button type="button" class="sap-icon-btn" data-sap-done-close aria-label="بستن"><?php echo sap_icon( 'x', 16 ); // phpcs:ignore ?></button>
+					</header>
+					<div class="sap-done-tools">
+						<input type="search" placeholder="جستجو در عنوان کارها…" data-sap-done-q>
+						<div class="sap-seg-mini" data-sap-done-who>
+							<button type="button" class="is-active" data-u="">همه</button>
+							<?php foreach ( $people as $uid ) : ?><button type="button" data-u="<?php echo esc_attr( $uid ); ?>"><?php echo esc_html( sap_first_name( sap_user_name( $uid ) ) ); ?></button><?php endforeach; ?>
+						</div>
+					</div>
+					<div class="sap-done-weeks">
+						<?php foreach ( $weeks as $label => $list ) : ?>
+							<section class="sap-done-week" data-sap-done-week>
+								<h3><?php echo esc_html( $label ); ?> <small><?php echo esc_html( sap_num( count( $list ) ) ); ?></small></h3>
+								<div class="sap-stack">
+									<?php foreach ( $list as $t ) : ?>
+										<div class="sap-done-item" data-u="<?php echo esc_attr( (int) $t['assignee'] ); ?>" data-q="<?php echo esc_attr( mb_strtolower( $t['title'] ) ); ?>"><?php sap_view( 'task-card', array_merge( $args, array( 't' => $t ) ) ); ?></div>
+									<?php endforeach; ?>
+								</div>
+							</section>
+						<?php endforeach; ?>
+					</div>
+				</div>
+			</div>
+		<?php endif; ?>
 	<?php endforeach; ?>
 </div></div>
 

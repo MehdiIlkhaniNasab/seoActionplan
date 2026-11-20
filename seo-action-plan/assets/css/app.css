@@ -3075,3 +3075,84 @@ textarea.sap-sc-input { min-height: 120px; }
 .sap-xbar::-webkit-scrollbar-track { background: transparent; }
 .sap-xbar::-webkit-scrollbar-thumb { background: #B6C2D6; border-radius: 8px; border: 3px solid rgba(255,255,255,.94); }
 .sap-xbar::-webkit-scrollbar-thumb:hover { background: #8D9BB4; }
+
+/* ==========================================================================
+   0.33 — Staged task save, compact done column, calendar task controls,
+   internal-links editor
+   ========================================================================== */
+
+/* ---------- Task card: staged status / person / deadline ---------- */
+.sap-tquick { display: grid; gap: 10px; padding: 12px; border: 1px solid var(--line); border-radius: 14px; background: var(--soft); transition: border-color .15s, box-shadow .15s; }
+.sap-tquick.is-dirty { border-color: var(--accent); background: #fff; box-shadow: var(--ring); }
+.sap-tquick-row { display: flex; gap: 10px 14px; align-items: center; flex-wrap: wrap; }
+.sap-tquick .sap-seg-mini button[aria-checked="true"] { background: #fff; color: var(--accent-ink); font-weight: 700; box-shadow: 0 1px 3px rgba(15,23,42,.08); }
+.sap-tquick-f { display: inline-flex !important; flex-direction: row !important; align-items: center; gap: 8px; margin: 0 !important; font-size: 12.5px; color: var(--ink-2); font-weight: 600; }
+.sap-tquick-f select, .sap-tquick-f input { min-width: 150px; padding: 5px 8px; font-size: 13px; }
+.sap-tquick-save { display: flex; align-items: center; gap: 8px; justify-content: flex-end; padding-top: 8px; border-top: 1px dashed var(--line-2); }
+.sap-tquick-save > span { margin-inline-end: auto; color: var(--accent-ink); font-weight: 600; }
+.sap-tquick-save[hidden] { display: none !important; }
+
+/* ---------- Done column: compact rows ---------- */
+.sap-col.is-done .sap-task:not([open]) { margin-bottom: 4px; border-radius: 10px; background: rgba(255,255,255,.78); border-color: transparent; }
+.sap-col.is-done .sap-task:not([open]):hover { background: #fff; border-color: var(--line); }
+.sap-col.is-done .sap-task:not([open]) > summary { flex-direction: row; align-items: center; gap: 8px; padding: 7px 10px; }
+.sap-col.is-done .sap-task:not([open]) > summary::before { content: '✓'; flex: none; width: 18px; height: 18px; border-radius: 50%; background: var(--new); color: #fff; font-size: 11px; display: grid; place-items: center; }
+.sap-col.is-done .sap-task:not([open]) .sap-task-title { flex: 1; min-width: 0; font-size: 12.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-decoration: none; color: var(--ink-2); }
+.sap-col.is-done .sap-task:not([open]) .sap-task-checks, .sap-col.is-done .sap-task:not([open]) .sap-task-checks-more, .sap-col.is-done .sap-task:not([open]) .sap-task-meta > :not([data-sap-ti="avatar"]) { display: none; }
+.sap-col.is-done .sap-task:not([open]) .sap-task-meta { flex: none; }
+.sap-col.is-done .sap-task:not([open]) .sap-task-pick { flex: none; }
+.sap-done-more { width: 100%; display: flex; flex-direction: column; align-items: center; gap: 0; margin-top: 6px; padding: 10px; border: 1px dashed #A7D7B8; border-radius: 12px; background: rgba(255,255,255,.6); font: inherit; cursor: pointer; color: var(--new); }
+.sap-done-more:hover { background: #fff; border-style: solid; }
+.sap-done-more b { font-size: 13px; }
+.sap-done-more small { font-size: 11.5px; color: var(--muted); }
+.sap-done-all { position: fixed; inset: 0; z-index: 75; background: rgba(15,27,51,.42); display: flex; justify-content: center; align-items: flex-start; padding: 5vh 12px; }
+.sap-done-all[hidden] { display: none; }
+.sap-done-box { width: min(720px, 100%); max-height: 90vh; overflow: auto; background: var(--paper); border-radius: 20px; box-shadow: 0 30px 80px rgba(15,23,42,.35); }
+.sap-done-box > header { position: sticky; top: 0; z-index: 2; display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; padding: 16px 18px 10px; background: var(--paper); }
+.sap-done-box h2 { margin: 0; font-size: 17px; }
+.sap-done-box h2 + p { margin: 2px 0 0; }
+.sap-done-tools { position: sticky; top: 64px; z-index: 2; display: grid; gap: 8px; padding: 0 18px 12px; background: var(--paper); border-bottom: 1px solid var(--line); }
+.sap-done-tools input { width: 100%; }
+.sap-done-weeks { padding: 8px 18px 18px; }
+.sap-done-week h3 { font-size: 13px; color: var(--ink-2); margin: 14px 2px 6px; display: flex; gap: 6px; align-items: baseline; }
+.sap-done-week h3 small { color: var(--muted); font-weight: 500; }
+.sap-done-item .sap-task:not([open]) > summary { flex-direction: row; align-items: center; gap: 8px; padding: 8px 12px; }
+.sap-done-item .sap-task:not([open]) .sap-task-title { flex: 1; min-width: 0; font-size: 13px; text-decoration: none; color: var(--ink-2); }
+.sap-done-item .sap-task:not([open]) .sap-task-checks, .sap-done-item .sap-task:not([open]) .sap-task-checks-more { display: none; }
+.sap-done-item .sap-task { margin-bottom: 4px; }
+
+/* ---------- Calendar: person and task status ---------- */
+.sap-ledger col.c-who { width: 190px; }
+.sap-sc.is-task { display: table-cell; }
+.sap-tk { display: block; margin: 0 0 4px !important; }
+.sap-tk select { width: 100%; padding: 4px 8px; font-size: 12px; border-radius: 8px; border: 1px solid var(--line); background: #fff; color: var(--ink); }
+.sap-tk.is-st select { font-weight: 700; }
+.sap-tk.is-st.is-next select { color: var(--ink-2); }
+.sap-tk.is-st.is-doing select { background: #E0EDFF; border-color: #C7DBFB; color: var(--accent-ink); }
+.sap-tk.is-st.is-waiting select { background: #FDF3E3; border-color: #F3D9AE; color: #8A5300; }
+.sap-tk.is-st.is-done select { background: var(--new-soft); border-color: var(--new-line); color: var(--new); }
+.sap-tk.is-st.is-none select { color: var(--muted); font-weight: 500; border-style: dashed; }
+.sap-sc.is-task.is-notask [data-sap-tk="task_assignee"] { border-style: dashed; color: var(--muted); }
+.sap-sc.is-task.is-saving { opacity: .6; }
+
+/* ---------- Internal links editor ---------- */
+.sap-lk-pop { position: absolute; z-index: 90; background: #fff; border: 1px solid var(--line); border-radius: 16px; box-shadow: 0 24px 60px rgba(15,27,51,.22); padding: 14px; display: grid; gap: 10px; }
+.sap-lk-pop > header { display: flex; flex-direction: column; }
+.sap-lk-pop > header b { font-size: 14px; }
+.sap-lk-pop > header small { font-size: 12px; color: var(--muted); }
+.sap-lk-rows { display: grid; gap: 8px; padding: 2px; }
+.sap-lk-row { display: grid; grid-template-columns: 22px minmax(0, 1fr) minmax(0, 1.4fr) 30px; gap: 8px; align-items: end; padding: 8px; border-radius: 12px; background: var(--soft); }
+.sap-lk-n { width: 22px; height: 22px; margin-bottom: 7px; border-radius: 50%; background: #fff; border: 1px solid var(--line); display: grid; place-items: center; font-size: 11.5px; font-weight: 800; color: var(--ink-2); }
+.sap-lk-row label { display: flex; flex-direction: column; gap: 2px; margin: 0; position: relative; min-width: 0; }
+.sap-lk-row label > span { font-size: 11.5px; font-weight: 700; color: var(--ink-2); }
+.sap-lk-row input { width: 100%; padding: 6px 8px; font-size: 12.5px; border-radius: 8px; }
+.sap-lk-row [data-u] { text-align: left; }
+.sap-lk-row .sap-icon-btn { margin-bottom: 4px; }
+.sap-lk-sug { position: absolute; z-index: 3; top: 100%; inset-inline: 0; margin: 4px 0 0; padding: 4px; list-style: none; background: #fff; border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 14px 34px rgba(15,27,51,.16); max-height: 240px; overflow: auto; direction: rtl; }
+.sap-lk-sug li { display: flex; flex-direction: column; padding: 6px 8px; border-radius: 8px; cursor: pointer; font-size: 12.5px; }
+.sap-lk-sug li span { font-size: 11px; color: var(--muted); display: flex; gap: 6px; align-items: center; }
+.sap-lk-sug li:hover { background: var(--accent-soft); }
+.sap-lk-sug li.is-empty { cursor: default; color: var(--muted); }
+.sap-lk-pop > footer { display: flex; justify-content: flex-end; gap: 8px; border-top: 1px solid var(--line); padding-top: 10px; }
+.sap-lk-pop > .sap-btn { justify-self: start; }
+@media (max-width: 560px) { .sap-lk-row { grid-template-columns: 22px minmax(0, 1fr) 30px; } .sap-lk-row .sap-lk-u { grid-column: 2 / 3; } }
