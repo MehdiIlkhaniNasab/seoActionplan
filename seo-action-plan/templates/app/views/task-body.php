@@ -1,0 +1,171 @@
+<?php
+/**
+ * Body of a task card: the essentials, description, checklist, daily reports,
+ * report, status / person / deadline (saved in place) and the edit form.
+ * Rendered with the card, or on demand when the card is opened (the board
+ * keeps only summaries, so a month with many tasks stays light).
+ *
+ * @package SeoActionPlan
+ * @var array  $t
+ * @var array  $focuses
+ * @var string $here
+ */
+
+defined( 'ABSPATH' ) || exit;
+
+$manager = sap_can();
+$today   = current_time( 'Y-m-d' );
+$closed  = in_array( $t['status'], array( 'done', 'dropped' ), true );
+$overdue = $t['due_date'] && $t['due_date'] < $today && ! $closed;
+$due_cls = $overdue ? 'is-late' : ( $t['due_date'] === $today ? 'is-today' : '' );
+$post    = esc_url( admin_url( 'admin-post.php' ) );
+$ret     = $here . '#task-' . $t['id'];
+$prog    = $t['checklist'] ? sap_checklist_progress( $t ) : null;
+$psum    = sap_progress_summary( $t );
+$odays   = $closed || 'review' === $t['status'] ? null : sap_task_open_days( $t );
+$flow    = array( 'next' => 'اقدام بعدی', 'doing' => 'در حال انجام', 'waiting' => 'در انتظار', 'done' => 'انجام شد' );
+?>
+	<div class="sap-task-body">
+		<div class="sap-tinfo">
+			<div><span>مسئول</span><b data-sap-ti="assignee"><?php echo $t['assignee'] ? sap_person( $t['assignee'], 20 ) : '<em class="sap-muted">تعیین نشده</em>'; // phpcs:ignore ?></b></div>
+			<div><span>ددلاین</span><b class="sap-due <?php echo esc_attr( $due_cls ); ?>" data-sap-ti="due"><?php echo esc_html( $t['due_date'] ? sap_jdate( $t['due_date'] ) : '—' ); ?></b></div>
+			<div><span>نوع کار</span><b><?php echo esc_html( sap_context_label( $t['context'] ) ); ?></b></div>
+			<div><span>وضعیت</span><b data-sap-ti="status"><?php echo esc_html( sap_task_statuses()[ $t['status'] ] ?? $t['status'] ); ?></b></div>
+			<?php if ( $t['url'] ) : ?><div class="is-wide"><span>صفحه</span><b><?php echo sap_page_link( $t['url'], sap_page_title( $t['project_id'], $t['url'] ) ?: sap_short_url( $t['url'], 60 ) ); // phpcs:ignore ?></b></div><?php endif; ?>
+		</div>
+
+		<?php if ( '' !== $t['review_note'] ) : ?>
+			<p class="sap-tnote"><b>🔁 بازخورد شما:</b> <?php echo esc_html( $t['review_note'] ); ?></p>
+		<?php endif; ?>
+
+		<?php if ( $t['needs_client'] || '' !== $t['client_status'] || '' !== $t['client_link'] ) : ?>
+			<?php $cs = sap_client_statuses()[ $t['client_status'] ] ?? sap_client_statuses()['']; ?>
+			<p class="sap-tnote sap-tclient">
+				<?php if ( $t['needs_client'] || '' !== $t['client_status'] ) : ?><b><?php echo esc_html( $cs[2] . ' تأیید کارفرما: ' . $cs[0] ); ?></b><?php echo 'changes' === $t['client_status'] && '' !== $t['client_note'] ? ' — «' . esc_html( $t['client_note'] ) . '»' : ''; ?><?php endif; ?>
+				<?php if ( '' !== $t['client_link'] ) : ?> <a href="<?php echo esc_url( $t['client_link'] ); ?>" target="_blank" rel="noopener">نمای کارفرما در پایلوت</a><?php endif; ?>
+			</p>
+		<?php endif; ?>
+
+		<?php if ( sap_is_client_request( $t ) || $t['needs_client'] || sap_comments( 'client', $t['id'] ) ) : ?>
+			<?php sap_view( 'client-thread', array( 't' => $t ) ); ?>
+		<?php endif; ?>
+
+		<div class="sap-tdesc">
+			<div class="sap-tdesc-head">
+				<span>توضیحات برای مسئول</span>
+				<?php if ( $manager && sap_ai_connected() && ! $closed ) : ?>
+					<button type="button" class="sap-btn is-ghost is-small" data-sap-brief-task="<?php echo esc_attr( $t['id'] ); ?>" data-project="<?php echo esc_attr( $t['project_id'] ); ?>" title="هدف، مراحل، خروجی و اینکه در گزارش دقیقاً چه بنویسد"><?php echo sap_icon( 'spark', 13 ); // phpcs:ignore ?>شفاف‌سازی با هوش مصنوعی</button>
+				<?php endif; ?>
+			</div>
+			<div class="sap-notes" data-sap-task-notes><?php echo '' !== trim( $t['notes'] ) ? sap_rich_text( $t['notes'], sap_task_site_base( $t ) ) : '<em class="sap-muted">توضیحی ندارد.</em>'; // phpcs:ignore ?></div>
+			<?php if ( '' !== $t['outcome'] ) : ?><p class="sap-task-outcome"><b>خروجی مطلوب:</b> <?php echo esc_html( $t['outcome'] ); ?></p><?php endif; ?>
+		</div>
+
+		<?php if ( $prog ) : ?>
+			<div class="sap-checklist<?php echo $prog['done'] === $prog['total'] ? ' is-complete' : ''; ?>" data-sap-checklist="<?php echo esc_attr( $t['id'] ); ?>">
+				<div class="sap-checklist-head"><b>✅ چک‌لیست</b><span data-sap-check-count><?php echo esc_html( sap_num( $prog['done'] ) . ' از ' . sap_num( $prog['total'] ) ); ?></span></div>
+				<div class="sap-checklist-bar"><i data-sap-check-bar style="width:<?php echo esc_attr( $prog['pct'] ); ?>%"></i><em data-sap-check-pct><?php echo esc_html( sap_num( $prog['pct'] ) ); ?>٪</em></div>
+				<ul>
+					<?php foreach ( $t['checklist'] as $ci => $it ) : ?>
+						<li class="<?php echo $it['d'] ? 'is-done' : ''; ?>"><label><input type="checkbox" data-sap-check="<?php echo esc_attr( $ci ); ?>" <?php checked( $it['d'] ); ?> <?php disabled( $closed || 'review' === $t['status'] ); ?>><span><?php echo esc_html( $it['t'] ); ?></span></label><?php echo sap_checklist_due_tag( $it ); // phpcs:ignore ?><?php if ( $it['d'] && $it['by'] ) : ?><small class="sap-muted"><?php echo esc_html( sap_first_name( sap_user_name( $it['by'] ) ) . ( $it['at'] ? ' · ' . sap_jdate( substr( $it['at'], 0, 10 ), 'day' ) : '' ) ); ?></small><?php endif; ?></li>
+					<?php endforeach; ?>
+				</ul>
+			</div>
+		<?php endif; ?>
+
+		<?php sap_view( 'progress-log', array( 't' => $t, 'form' => true ) ); ?>
+
+		<?php if ( '' !== $t['result'] || $t['attachments'] ) : ?>
+			<div class="sap-treport" data-sap-report="<?php echo esc_attr( $t['id'] ); ?>">
+				<span>گزارش کار<?php echo $t['spent'] ? ' · ' . esc_html( sap_num( $t['spent'], 1 ) ) . ' ساعت' : ''; ?><?php if ( sap_can_review( $t ) && '' !== $t['result'] ) : ?> <button type="button" class="sap-linkbtn" data-sap-report-edit data-ai="<?php echo sap_ai_connected() ? '1' : ''; ?>">ویرایش گزارش</button><?php endif; ?></span>
+				<?php if ( '' !== $t['result'] ) : ?><div data-sap-report-html><?php echo sap_rich_text( $t['result'], sap_task_site_base( $t ) ); // phpcs:ignore ?></div><textarea hidden data-sap-report-raw><?php echo esc_textarea( $t['result'] ); ?></textarea><?php endif; ?>
+				<?php if ( $t['attachments'] ) : ?>
+					<div class="sap-att-list">
+						<?php foreach ( $t['attachments'] as $a ) : ?>
+							<?php if ( 'image' === ( $a['type'] ?? '' ) ) : ?>
+								<a class="sap-att is-img" href="<?php echo esc_url( $a['url'] ); ?>" target="_blank" rel="noopener"><img src="<?php echo esc_url( $a['url'] ); ?>" alt="" loading="lazy"></a>
+							<?php else : ?>
+								<a class="sap-att" href="<?php echo esc_url( $a['url'] ); ?>" target="_blank" rel="noopener"><?php echo sap_icon( 'link', 13 ); // phpcs:ignore ?><bdi dir="ltr"><?php echo esc_html( '' !== ( $a['name'] ?? '' ) ? $a['name'] : sap_short_url( $a['url'], 40 ) ); ?></bdi></a>
+							<?php endif; ?>
+						<?php endforeach; ?>
+					</div>
+				<?php endif; ?>
+			</div>
+		<?php endif; ?>
+
+		<?php if ( 'review' === $t['status'] && $manager ) : ?>
+			<div class="sap-tactions is-review">
+				<button type="button" class="sap-btn is-primary is-small" data-sap-review="approve" data-id="<?php echo esc_attr( $t['id'] ); ?>"><?php echo sap_icon( 'check', 14 ); // phpcs:ignore ?>تأیید گزارش</button>
+				<button type="button" class="sap-btn is-ghost is-small" data-sap-review="feedback" data-id="<?php echo esc_attr( $t['id'] ); ?>">🔁 بازخورد</button>
+				<form class="sap-desk-fb" data-sap-desk-feedback hidden><textarea name="note" rows="2" placeholder="چه چیزی باید اصلاح شود؟"></textarea></form>
+			</div>
+		<?php elseif ( 'proposed' !== $t['status'] ) : ?>
+			<?php /* Staged: picking a status or a person changes nothing until «ذخیره» — saved in place, no reload. */ ?>
+			<form class="sap-tactions sap-tquick" data-sap-tquick="<?php echo esc_attr( $t['id'] ); ?>" data-status="<?php echo esc_attr( $t['status'] ); ?>">
+				<input type="hidden" name="status" value="<?php echo esc_attr( $t['status'] ); ?>">
+				<div class="sap-tquick-row">
+					<span class="sap-tactions-label">وضعیت</span>
+					<div class="sap-seg-mini" role="radiogroup" aria-label="وضعیت کار">
+						<?php foreach ( $flow as $k => $label ) : ?>
+							<button type="button" role="radio" aria-checked="<?php echo $k === $t['status'] ? 'true' : 'false'; ?>" class="<?php echo $k === $t['status'] ? 'is-active' : ''; ?>" data-v="<?php echo esc_attr( $k ); ?>"><?php echo esc_html( $label ); ?></button>
+						<?php endforeach; ?>
+						<?php if ( $manager ) : ?>
+							<button type="button" role="radio" aria-checked="<?php echo 'someday' === $t['status'] ? 'true' : 'false'; ?>" class="<?php echo 'someday' === $t['status'] ? 'is-active' : ''; ?>" data-v="someday" title="به فهرست «شاید بعداً»">شاید بعداً</button>
+						<?php endif; ?>
+					</div>
+				</div>
+				<?php if ( $manager ) : ?>
+					<div class="sap-tquick-row">
+						<label class="sap-tquick-f"><span>مسئول</span><select name="assignee"><option value="0">— تعیین نشده —</option><?php foreach ( sap_team_users() as $u ) : ?><option value="<?php echo esc_attr( $u->ID ); ?>" <?php selected( (int) $u->ID, $t['assignee'] ); ?>><?php echo esc_html( $u->display_name ); ?></option><?php endforeach; ?></select></label>
+						<label class="sap-tquick-f"><span>ددلاین</span><input type="date" name="due_date" value="<?php echo esc_attr( (string) $t['due_date'] ); ?>"></label>
+					</div>
+				<?php endif; ?>
+				<div class="sap-tquick-save" hidden>
+					<span class="sap-small">تغییرات ذخیره نشده</span>
+					<button type="button" class="sap-btn is-ghost is-small" data-sap-tquick-undo>انصراف</button>
+					<button type="submit" class="sap-btn is-primary is-small"><?php echo sap_icon( 'check', 14 ); // phpcs:ignore ?>ذخیره</button>
+				</div>
+			</form>
+		<?php endif; ?>
+
+		<?php if ( sap_can_nudge( $t ) ) : ?><div class="sap-tnudge"><?php sap_view( 'nudge-btn', array( 't' => $t ) ); ?></div><?php endif; ?>
+
+		<?php sap_view( 'comments', array( 'type' => 'task', 'object_id' => $t['id'], 'project_id' => $t['project_id'] ) ); ?>
+
+		<?php if ( $manager ) : ?>
+			<details class="sap-more sap-tedit">
+				<summary><?php echo sap_icon( 'settings', 14 ); // phpcs:ignore ?>ویرایش کار</summary>
+				<form method="post" action="<?php echo $post; // phpcs:ignore ?>" class="sap-form">
+					<?php sap_form_fields( 'sap_task_save', array( 'task_id' => $t['id'], '_return' => $ret ) ); ?>
+					<label>عنوان<input type="text" name="title" value="<?php echo esc_attr( $t['title'] ); ?>"></label>
+					<div class="sap-grid-3">
+						<label>وضعیت<select name="status" data-sap-tedit-status><?php foreach ( array_diff_key( sap_task_statuses(), array( 'proposed' => 1, 'review' => 1 ) ) as $k => $label ) : ?><option value="<?php echo esc_attr( $k ); ?>" <?php selected( $k, $t['status'] ); ?>><?php echo esc_html( $label ); ?></option><?php endforeach; ?><?php if ( 'review' === $t['status'] ) : ?><option value="review" selected><?php echo esc_html( sap_task_statuses()['review'] ); ?></option><?php endif; ?></select></label>
+						<label>مسئول<select name="assignee"><option value="0">—</option><?php foreach ( sap_team_users() as $u ) : ?><option value="<?php echo esc_attr( $u->ID ); ?>" <?php selected( (int) $u->ID, $t['assignee'] ); ?>><?php echo esc_html( $u->display_name ); ?></option><?php endforeach; ?></select></label>
+						<label>ددلاین<input type="date" name="due_date" value="<?php echo esc_attr( (string) $t['due_date'] ); ?>"></label>
+						<?php sap_view( 'repeat-field', array( 'value' => $t['repeat_every'] ) ); ?>
+						<label>نوع کار<select name="context"><?php foreach ( sap_contexts() as $k => $label ) : ?><option value="<?php echo esc_attr( $k ); ?>" <?php selected( $k, $t['context'] ); ?>><?php echo esc_html( $label ); ?></option><?php endforeach; ?></select></label>
+					</div>
+					<label>آدرس صفحه<input type="url" name="url" dir="ltr" value="<?php echo esc_attr( $t['url'] ); ?>"></label>
+					<input type="hidden" name="needs_client" value="0">
+					<label class="sap-check sap-client-tick"><input type="checkbox" name="needs_client" value="1" <?php checked( (bool) $t['needs_client'] ); ?>> 🛡 نیاز به تأیید کارفرما <small class="sap-muted">— پیش از اجرا در پورتال پایلوت برای کارفرما فرستاده می‌شود؛ بدون تیک نیازی به تأیید نیست</small></label>
+					<label>توضیحات<textarea name="notes" rows="6" data-sap-task-notes-input><?php echo esc_textarea( $t['notes'] ); ?></textarea></label>
+					<?php sap_view( 'checklist-field', array( 'items' => $t['checklist'] ) ); ?>
+					<details class="sap-more">
+						<summary>بیشتر <small>ماه، Focus، ساعت، خروجی مطلوب، گزارش</small></summary>
+						<div class="sap-grid-3">
+							<label>ماه<select name="period"><option value="">بدون ماه</option><?php foreach ( sap_period_options( 6, 6 ) as $k => $label ) : ?><option value="<?php echo esc_attr( $k ); ?>" <?php selected( $k, $t['period'] ); ?>><?php echo esc_html( $label ); ?></option><?php endforeach; ?></select></label>
+							<label>Focus<select name="focus_id"><option value="0">—</option><?php foreach ( (array) $focuses as $f ) : ?><option value="<?php echo esc_attr( $f['id'] ); ?>" <?php selected( $f['id'], $t['focus_id'] ); ?>><?php echo esc_html( $f['name'] ); ?></option><?php endforeach; ?></select></label>
+							<label>زمان (ساعت)<input type="number" name="effort" min="0.25" step="0.25" value="<?php echo esc_attr( $t['effort'] ); ?>"></label>
+						</div>
+						<label>خروجی مطلوب<textarea name="outcome" rows="2"><?php echo esc_textarea( $t['outcome'] ); ?></textarea></label>
+						<label>گزارش کار<textarea name="result" rows="2"><?php echo esc_textarea( $t['result'] ); ?></textarea></label>
+					</details>
+					<div class="sap-form-foot sap-tedit-foot">
+						<button class="sap-btn is-small is-primary" type="submit">ذخیره تغییرات</button>
+						<?php if ( 0 === strpos( (string) $t['recurring'], 'p' ) ) : ?><button type="button" class="sap-btn is-small is-ghost<?php echo 0 === strpos( (string) $t['recurring'], 'p' ) ? ' is-on' : ''; ?>" data-sap-task-repeat="<?php echo esc_attr( $t['id'] ); ?>" title="هر ماه خودکار به اکشن پلن اضافه شود"><?php echo sap_icon( 'refresh', 13 ); // phpcs:ignore ?>تکرار ماهانه</button><?php endif; ?>
+						<button type="button" class="sap-btn is-small is-ghost is-danger" data-sap-task-del="<?php echo esc_attr( $t['id'] ); ?>"><?php echo sap_icon( 'trash', 13 ); // phpcs:ignore ?>حذف</button>
+					</div>
+				</form>
+			</details>
+		<?php endif; ?>
+	</div>

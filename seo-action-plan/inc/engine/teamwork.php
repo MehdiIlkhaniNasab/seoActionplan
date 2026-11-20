@@ -1111,6 +1111,23 @@ add_action( 'rest_api_init', function () {
 			return is_wp_error( $r ) ? $r : array_merge( array( 'ok' => true ), $r );
 		},
 	) );
+	// The body of a task card, rendered when the card is opened on the board.
+	register_rest_route( $ns, '/task/(?P<id>\d+)/body', array(
+		'methods'             => 'GET',
+		'permission_callback' => 'sap_can_work',
+		'callback'            => function ( WP_REST_Request $req ) {
+			$t = sap_task_for_user( $req['id'] );
+			if ( is_wp_error( $t ) ) {
+				return $t;
+			}
+			sap_period_project( $t['project_id'] );
+			$here = (string) $req->get_param( 'here' );
+			$here = '' !== $here && 0 === strpos( $here, home_url() ) ? esc_url_raw( $here ) : sap_project_url( $t['project_id'], 'plan' );
+			ob_start();
+			sap_view( 'task-body', array( 't' => $t, 'focuses' => sap_focuses( $t['project_id'] ), 'fnames' => array(), 'here' => $here ) );
+			return array( 'ok' => true, 'html' => (string) ob_get_clean() );
+		},
+	) );
 	register_rest_route( $ns, '/task/(?P<id>\d+)/quick', array(
 		'methods'             => 'POST',
 		'permission_callback' => 'sap_can_work',

@@ -75,7 +75,8 @@ foreach ( $tasks as $t ) {
 $cap  = (float) $project['capacity_hours'];
 $live = array_sum( array_map( 'count', $cols ) );
 $here = sap_project_url( $pid, 'plan', array_filter( array( 'period' => $all_p ? 'all' : $period, 'context' => $ctx, 'who' => $who, 'due' => $due, 'on' => $due_on ), 'strlen' ) );
-$args = array( 'fnames' => $fnames, 'here' => $here, 'focuses' => $focuses, 'open_id' => $open ? $open['id'] : 0 );
+// Cards carry only their summary; the body loads when a card is opened (fast with many tasks).
+$args = array( 'fnames' => $fnames, 'here' => $here, 'focuses' => $focuses, 'open_id' => $open ? $open['id'] : 0, 'lazy' => true );
 ?>
 <div class="sap-toolbar">
 	<?php $fbase = sap_project_url( $pid, 'plan' ); ?>

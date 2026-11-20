@@ -682,6 +682,20 @@
 		document.body.classList.add('drawer-open');
 		drawer.setAttribute('aria-hidden', 'false');
 		drawer.querySelector('.sap-drawer-body').scrollTop = 0;
+		// Cards on the board carry only their summary: load the body now.
+		var lazy = body.getAttribute('data-sap-lazy');
+		if (lazy) {
+			var mine = current;
+			api('task/' + lazy + '/body?here=' + encodeURIComponent(location.href.split('#')[0])).then(function (r) {
+				var tmp = document.createElement('div');
+				tmp.innerHTML = r.html;
+				var fresh = tmp.querySelector('.sap-task-body');
+				if (!fresh) { throw new Error('بدنه کار خوانده نشد.'); }
+				body.replaceWith(fresh);
+				if (mine) { mine.body = fresh; }
+				document.dispatchEvent(new CustomEvent('sap:content', { detail: fresh }));
+			}).catch(function (e) { body.innerHTML = '<p class="sap-warn">' + e.message + '</p>'; });
+		}
 	}
 	document.addEventListener('click', function (ev) {
 		var sum = ev.target.closest('.sap-task > summary');
@@ -2512,6 +2526,7 @@
 			fl.querySelector('[data-sap-check-text]').disabled = !on;
 		};
 		document.querySelectorAll('[data-sap-check-field]').forEach(render);
+		document.addEventListener('sap:content', function (ev) { ev.detail.querySelectorAll('[data-sap-check-field]').forEach(render); });
 		document.addEventListener('change', function (ev) {
 			var tg = ev.target.closest('[data-sap-check-toggle]');
 			if (tg) {
@@ -3494,7 +3509,7 @@
 		window.addEventListener('scroll', queue, { passive: true });
 		window.addEventListener('resize', queue);
 		document.addEventListener('toggle', queue, true);
-		document.addEventListener('click', function () { setTimeout(queue, 50); });
+		if (window.ResizeObserver) { var ro = new ResizeObserver(queue); wraps.forEach(function (w) { ro.observe(w); }); }
 		queue();
 	})();
 	/* ---- Task card: status, person and deadline are staged and saved together, in place ---- */
@@ -3511,8 +3526,8 @@
 		var stage = function (f, v) {
 			f.status.value = v;
 			f.querySelectorAll('[data-v]').forEach(function (b) { var on = b.getAttribute('data-v') === v; b.classList.toggle('is-active', on); b.setAttribute('aria-checked', on ? 'true' : 'false'); });
-			var task = f.closest('.sap-task');
-			var ed = task && task.querySelector('[data-sap-tedit-status]');
+			var scope = f.closest('.sap-task-body') || f.closest('.sap-task');
+			var ed = scope && scope.querySelector('[data-sap-tedit-status]');
 			if (ed) { ed.value = v; }
 		};
 		document.addEventListener('click', function (ev) {
@@ -3540,22 +3555,27 @@
 			post('task/' + id + '/quick', d).then(function (r) {
 				idle(btn);
 				toast(r.msg);
-				var task = f.closest('.sap-task');
-				var set = function (k, html) { var el = task.querySelector('[data-sap-ti="' + k + '"]'); if (el) { el.innerHTML = html; } };
+				// The body may sit in the drawer, away from its card: look in both.
+				var task = document.getElementById('task-' + id) || f.closest('.sap-task');
+				var scopes = [task, f.closest('.sap-task-body')].filter(Boolean);
+				var find = function (k) { for (var i = 0; i < scopes.length; i++) { var el = scopes[i].querySelector('[data-sap-ti="' + k + '"]'); if (el) { return el; } } return null; };
+				var set = function (k, html) { var el = find(k); if (el) { el.innerHTML = html; } };
 				set('assignee', r.person); set('avatar', r.avatar); set('status', r.label);
-				var due = task.querySelector('[data-sap-ti="due"]');
+				var due = find('due');
 				if (due) { due.textContent = r.due; due.className = 'sap-due ' + r.due_cls; }
-				task.className = task.className.replace(/\bis-(inbox|next|doing|waiting|someday|review|done|dropped|proposed)\b/g, '').trim() + ' is-' + r.status;
+				if (task) { task.className = task.className.replace(/\bis-(inbox|next|doing|waiting|someday|review|done|dropped|proposed)\b/g, '').trim() + ' is-' + r.status; }
 				stage(f, r.status);
 				f.setAttribute('data-status', r.status);
 				f._snap = snap(f);
 				dirty(f);
 				// On the board, the card moves to its new column.
+				if (!task) { return; }
 				var col = task.closest('[data-sap-col]');
 				var to = document.querySelector('[data-sap-col="' + r.status + '"]');
 				if (col && to && col !== to) {
 					var h = to.querySelector('h3');
 					h.parentNode.insertBefore(task, h.nextSibling);
+					document.dispatchEvent(new CustomEvent('sap:task-moved', { detail: task }));
 					[col, to].forEach(function (c) {
 						var n = c.querySelectorAll(':scope > .sap-task').length;
 						var em = c.querySelector('.sap-col-empty'); if (em) { em.hidden = n > 0; }

@@ -3156,3 +3156,23 @@ textarea.sap-sc-input { min-height: 120px; }
 .sap-lk-pop > footer { display: flex; justify-content: flex-end; gap: 8px; border-top: 1px solid var(--line); padding-top: 10px; }
 .sap-lk-pop > .sap-btn { justify-self: start; }
 @media (max-width: 560px) { .sap-lk-row { grid-template-columns: 22px minmax(0, 1fr) 30px; } .sap-lk-row .sap-lk-u { grid-column: 2 / 3; } }
+
+/* ---------- Task opens as a centered modal (was a side drawer) ---------- */
+.sap-drawer { top: 5vh; bottom: auto; left: 50%; width: min(760px, calc(100vw - 24px)); max-height: 90vh; border-radius: 20px; overflow: hidden; box-shadow: 0 30px 80px rgba(15,23,42,.32); opacity: 0; visibility: hidden; transform: translate(-50%, 14px) scale(.985); transition: opacity .18s ease, transform .18s ease, visibility 0s linear .18s; z-index: 61; }
+body.drawer-open .sap-drawer { opacity: 1; visibility: visible; transform: translate(-50%, 0); transition: opacity .18s ease, transform .18s ease; }
+.sap-drawer-shade { background: rgba(15,27,51,.45); }
+.sap-drawer-head { padding: 18px 22px 14px; background: #fff; }
+.sap-drawer-title { font-size: 16.5px; }
+.sap-drawer-head .sap-icon-btn { width: 34px; height: 34px; border-radius: 50%; background: var(--soft); flex: none; }
+.sap-drawer-body { min-height: 0; padding: 6px 22px 26px; }
+.sap-drawer-body .sap-grid-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.sap-drawer-body .sap-tquick { position: sticky; bottom: -26px; z-index: 3; }
+.sap-drawer-body .sap-tquick.is-dirty { box-shadow: var(--ring), 0 -10px 24px rgba(15,27,51,.08); }
+.sap-lazy-wait { display: flex; align-items: center; gap: 10px; color: var(--muted); padding: 30px 0; justify-content: center; }
+@media (max-width: 640px) {
+	.sap-drawer { top: auto; bottom: 0; left: 0; width: 100vw; max-height: 92vh; border-radius: 20px 20px 0 0; transform: translateY(24px); }
+	body.drawer-open .sap-drawer { transform: none; }
+	.sap-drawer-body .sap-grid-3 { grid-template-columns: 1fr; }
+}
+@media (prefers-reduced-motion: reduce) { .sap-drawer, body.drawer-open .sap-drawer { transition: none; } }
+.sap-drawer { z-index: 81; } .sap-drawer-shade { z-index: 79; }
