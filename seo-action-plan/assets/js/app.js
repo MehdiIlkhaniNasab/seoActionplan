@@ -3198,4 +3198,303 @@
 		b.disabled = true;
 		post('track/' + b.getAttribute('data-sap-track'), { period: b.getAttribute('data-period') }).then(function (r) { toast(r.msg); setTimeout(function () { location.reload(); }, 900); }).catch(function (e) { toast(e.message, true); b.disabled = false; });
 	});
+	/* ---- Monthly slots: pick the page / keyword, «my view», AI plan, commit ---- */
+	(function () {
+		var esc = function (s) { var d = document.createElement('div'); d.textContent = s == null ? '' : String(s); return d.innerHTML; };
+		var fa = function (n) { return String(n).replace(/\d/g, function (d) { return '۰۱۲۳۴۵۶۷۸۹'[d]; }); };
+		document.querySelectorAll('[data-sap-slots]').forEach(function (root) {
+			var pid = root.getAttribute('data-sap-slots');
+			var kind = root.getAttribute('data-kind');
+			root.querySelectorAll('[data-sap-pgpick]').forEach(function (pick) {
+				var q = pick.querySelector('[data-sap-pick-q]');
+				var list = pick.querySelector('[data-sap-pgpick-list]');
+				var chosen = pick.querySelector('[data-sap-pgpick-chosen]');
+				var url = pick.querySelector('[data-sap-pick-url]');
+				var form = pick.closest('form');
+				var type = '';
+				var timer = null;
+				var seq = 0;
+				var items = [];
+				var active = -1;
+				var render = function () {
+					if (!items.length) { list.innerHTML = '<li class="is-empty">صفحه‌ای پیدا نشد؛ آدرس کامل را بنویسید و Enter بزنید.</li>'; list.hidden = false; return; }
+					list.innerHTML = items.map(function (p, i) {
+						return '<li role="option" data-i="' + i + '" class="' + (i === active ? 'is-active' : '') + (p.busy ? ' is-busy' : '') + '"><b>' + esc(p.title) + '</b><span><em class="sap-ptype is-' + esc(p.type) + '">' + esc(p.type_l) + '</em>' + (p.kw ? '🔑 ' + esc(p.kw) : '') + (p.impr ? ' · ' + fa(p.impr) + ' نمایش · ' + fa(p.clicks) + ' کلیک' + (p.pos ? ' · رتبه ' + fa(p.pos) : '') : '') + '</span>' + (p.busy ? '<small>' + esc(p.busy) + '</small>' : '') + '</li>';
+					}).join('');
+					list.hidden = false;
+				};
+				var load = function () {
+					var my = ++seq;
+					api('cplan/' + pid + '/pages?q=' + encodeURIComponent(q.value.trim()) + '&t=' + type).then(function (r) {
+						if (my !== seq) { return; }
+						items = r.pages || []; active = -1; render();
+					}).catch(function (e) { toast(e.message, true); });
+				};
+				var choose = function (p) {
+					url.value = p.url;
+					list.hidden = true;
+					q.value = p.title;
+					if (form.keyword && !form.keyword.value) { form.keyword.value = p.kw || ''; }
+					if (form.secondary && !form.secondary.value) { form.secondary.value = p.secondary || ''; }
+					chosen.innerHTML = '<a href="' + esc(p.url) + '" target="_blank" rel="noopener" dir="ltr">' + esc(decodeURI(p.url)) + '</a>' + '<span>' + (p.impr ? fa(p.impr) + ' نمایش و ' + fa(p.clicks) + ' کلیک در ۲۸ روز' + (p.pos ? '، میانگین رتبه ' + fa(p.pos) : '') + ' — ثبت می‌شود به‌عنوان «قبل از آپدیت»' : 'در ۲۸ روز اخیر نمایشی در گوگل نداشته') + '</span>' + (p.busy ? '<strong>⚠️ ' + esc(p.busy) + '</strong>' : '');
+					chosen.hidden = false;
+				};
+				q.addEventListener('input', function () { url.value = ''; chosen.hidden = true; clearTimeout(timer); timer = setTimeout(load, 220); });
+				q.addEventListener('focus', function () { if (!items.length) { load(); } else { list.hidden = false; } });
+				q.addEventListener('keydown', function (ev) {
+					if (ev.key === 'ArrowDown' || ev.key === 'ArrowUp') { ev.preventDefault(); if (!items.length) { return; } active = (active + (ev.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length; render(); }
+					else if (ev.key === 'Enter') {
+						ev.preventDefault();
+						if (active >= 0 && items[active]) { choose(items[active]); }
+						else if (/^https?:\/\//i.test(q.value.trim())) { choose({ url: q.value.trim(), title: q.value.trim(), kw: '', secondary: '' }); }
+					} else if (ev.key === 'Escape') { list.hidden = true; }
+				});
+				list.addEventListener('mousedown', function (ev) { var li = ev.target.closest('li[data-i]'); if (li) { ev.preventDefault(); choose(items[+li.getAttribute('data-i')]); } });
+				q.addEventListener('blur', function () { setTimeout(function () { list.hidden = true; }, 150); });
+				pick.querySelectorAll('.sap-pgpick-type button').forEach(function (b) {
+					b.addEventListener('click', function () {
+						pick.querySelectorAll('.sap-pgpick-type button').forEach(function (x) { x.classList.toggle('is-active', x === b); });
+						type = b.getAttribute('data-t'); load(); q.focus();
+					});
+				});
+			});
+			root.addEventListener('click', function (ev) {
+				var ai = ev.target.closest('[data-sap-slot-ai]');
+				if (!ai) { return; }
+				var f = ai.closest('form');
+				var d = { kind: kind, view: f.view.value, keyword: f.keyword.value, secondary: f.secondary.value, url: f.url ? f.url.value : '' };
+				busy(ai, 'هوش مصنوعی دیدگاه شما را مرتب می‌کند…');
+				post('cplan/' + pid + '/ai', d).then(function (r) {
+					idle(ai);
+					var x = r.fields || {};
+					Object.keys(x).forEach(function (k) { if (f[k] && x[k] !== '' && k !== 'warning') { f[k].value = x[k]; } });
+					var plan = f.querySelector('[data-sap-slot-plan]');
+					plan.classList.add('is-filled');
+					if (x.warning) { toast('هشدار: ' + x.warning, true); } else { toast('برنامه آماده شد؛ بخوانید، ویرایش کنید و ثبت کنید.'); }
+					(f.plan || f.brief).focus();
+				}).catch(function (e) { idle(ai); toast(e.message, true); });
+			});
+			root.addEventListener('submit', function (ev) {
+				var f = ev.target.closest('[data-sap-slot-form]');
+				if (!f) { return; }
+				ev.preventDefault();
+				if (f.url && !f.url.value) { toast('اول صفحه را از فهرست انتخاب کنید.', true); f.querySelector('[data-sap-pick-q]').focus(); return; }
+				if (kind === 'new' && !f.keyword.value.trim()) { toast('کلمه کلیدی اصلی را بنویسید.', true); f.keyword.focus(); return; }
+				var d = { kind: kind };
+				Array.prototype.forEach.call(f.elements, function (el) { if (el.name) { d[el.name] = el.value; } });
+				var b = f.querySelector('[type=submit]');
+				busy(b, 'در حال ثبت…');
+				post('cplan/' + pid + '/commit', d).then(function (r) { toast(r.msg); setTimeout(function () { location.reload(); }, 1100); }).catch(function (e) { toast(e.message, true); idle(b); });
+			});
+		});
+	})();
+
+	/* ---- Calendar sheet: filter rows, edit cells in place, row details ---- */
+	(function () {
+		var sheet = document.querySelector('[data-sap-sheet]');
+		if (!sheet) { return; }
+		var fbar = sheet.querySelector('[data-sap-sheet-filter]');
+		if (fbar) {
+			fbar.addEventListener('click', function (ev) {
+				var b = ev.target.closest('button');
+				if (!b) { return; }
+				fbar.querySelectorAll('button').forEach(function (x) { x.classList.toggle('is-active', x === b); });
+				var k = b.getAttribute('data-k');
+				sheet.querySelectorAll('tbody[data-k]').forEach(function (tb) { tb.hidden = !!k && tb.getAttribute('data-k') !== k; });
+			});
+		}
+		var editing = null;
+		var esc = function (s) { var d = document.createElement('div'); d.textContent = s == null ? '' : String(s); return d.innerHTML; };
+		var close = function (save) {
+			if (!editing) { return; }
+			var ed = editing;
+			editing = null;
+			var el = ed.cell;
+			var input = ed.input;
+			var val = input.value;
+			if (!save || val === el.getAttribute('data-v')) { el.classList.remove('is-editing'); input.remove(); ed.view.hidden = false; return; }
+			var row = el.closest('[data-kind]');
+			el.classList.add('is-saving');
+			post('cell/' + row.getAttribute('data-kind') + '/' + row.getAttribute('data-id'), { field: el.getAttribute('data-f'), value: val }).then(function () {
+				el.setAttribute('data-v', val);
+				el.classList.remove('is-editing', 'is-saving');
+				input.remove();
+				ed.view.hidden = false;
+				var type = el.getAttribute('data-type');
+				if (type === 'select') {
+					var opts = JSON.parse(el.getAttribute('data-opts') || '{}');
+					var chip = ed.view.querySelector('.sap-chip');
+					if (chip) { chip.textContent = opts[val] || val; chip.className = 'sap-chip' + (val === 'done' || val === 'published' ? ' is-good' : (val === 'in_progress' ? ' is-warn' : '')); }
+					var hint = ed.view.querySelector('.sap-sc-hint'); if (hint) { hint.remove(); }
+					row.classList.toggle('is-done', val === 'done' || val === 'published');
+				} else if (type === 'links') {
+					ed.view.innerHTML = val.trim() ? '<ul class="sap-sc-links">' + val.trim().split(/\n+/).slice(0, 5).map(function (l) { var p = l.split(/\s*\|\s*/); return '<li><bdi dir="ltr">' + esc(p[0].replace(/^https?:\/\/[^/]+/, '').slice(0, 34)) + '</bdi>' + (p[1] ? '<span>«' + esc(p[1]) + '»</span>' : '') + '</li>'; }).join('') + '</ul>' : '<span class="sap-sc-empty">—</span>';
+				} else if (type === 'num') {
+					(ed.view.tagName === 'B' ? ed.view : ed.view.querySelector('b')).textContent = val.trim() ? val.replace(/\d/g, function (d) { return '۰۱۲۳۴۵۶۷۸۹'[d]; }) : '—';
+				} else {
+					var main = ed.view.querySelector('b') && el.getAttribute('data-f') === 'keyword' ? ed.view.querySelector('b') : null;
+					if (main) { main.textContent = val; } else { ed.view.innerHTML = val.trim() ? esc(val.length > 150 ? val.slice(0, 150) + '…' : val) : '<span class="sap-sc-empty">—</span>'; }
+				}
+				el.classList.add('is-saved');
+				setTimeout(function () { el.classList.remove('is-saved'); }, 1200);
+			}).catch(function (e) {
+				toast(e.message, true);
+				el.classList.remove('is-saving');
+				editing = ed; input.focus();
+			});
+		};
+		var open = function (el) {
+			if (editing && editing.cell === el) { return; }
+			close(true);
+			var type = el.getAttribute('data-type');
+			var view = el.querySelector('.sap-sc-v') || el.querySelector('b').parentNode;
+			if (el.classList.contains('sap-bf')) { view = el; }
+			var v = el.getAttribute('data-v') || '';
+			var input;
+			if (type === 'select') {
+				input = document.createElement('select');
+				var opts = JSON.parse(el.getAttribute('data-opts') || '{}');
+				Object.keys(opts).forEach(function (k) { var o = document.createElement('option'); o.value = k; o.textContent = opts[k]; if (k === v) { o.selected = true; } input.appendChild(o); });
+				input.addEventListener('change', function () { close(true); });
+			} else if (type === 'long' || type === 'links') {
+				input = document.createElement('textarea');
+				input.rows = type === 'links' ? 5 : 6;
+				input.value = v;
+				if (type === 'links') { input.dir = 'ltr'; input.placeholder = 'https://site.com/page/ | انکر'; }
+			} else {
+				input = document.createElement('input');
+				input.type = 'text';
+				input.value = v;
+				if (type === 'url') { input.dir = 'ltr'; input.placeholder = 'https://'; }
+				if (type === 'date') { input.placeholder = '۱۴۰۵/۰۸/۱۲'; input.dir = 'ltr'; }
+				if (type === 'num') { input.inputMode = 'decimal'; input.dir = 'ltr'; }
+			}
+			input.className = 'sap-sc-input';
+			if (el.classList.contains('sap-bf')) { el.classList.add('is-editing'); el.appendChild(input); view = el.querySelector('b'); view.hidden = true; }
+			else { el.classList.add('is-editing'); view.hidden = true; el.appendChild(input); }
+			editing = { cell: el, input: input, view: view };
+			input.focus();
+			if (input.tagName === 'INPUT') { input.select(); } else if (input.tagName === 'TEXTAREA') { input.setSelectionRange(input.value.length, input.value.length); }
+			input.addEventListener('keydown', function (ev) {
+				if (ev.key === 'Escape') { ev.preventDefault(); close(false); el.focus(); }
+				else if (ev.key === 'Enter' && (input.tagName !== 'TEXTAREA' || ev.ctrlKey || ev.metaKey)) { ev.preventDefault(); close(true); el.focus(); }
+			});
+			input.addEventListener('blur', function () { setTimeout(function () { if (editing && editing.input === input) { close(true); } }, 120); });
+		};
+		sheet.addEventListener('click', function (ev) {
+			var more = ev.target.closest('[data-sap-sr-more]');
+			if (more) {
+				var tr = more.closest('tr').nextElementSibling;
+				if (tr && tr.classList.contains('sap-sr-more')) { tr.hidden = !tr.hidden; more.setAttribute('aria-expanded', tr.hidden ? 'false' : 'true'); }
+				return;
+			}
+			if (ev.target.closest('a, button, .sap-sc-input')) { return; }
+			var el = ev.target.closest('.sap-sc[data-f], .sap-bf[data-f]');
+			if (el) { open(el); }
+		});
+		sheet.addEventListener('keydown', function (ev) {
+			var el = ev.target.closest('.sap-sc[data-f], .sap-bf[data-f]');
+			if (el && ev.target === el && (ev.key === 'Enter' || ev.key === 'F2')) { ev.preventDefault(); open(el); }
+		});
+	})();
+
+	/* ---- Managers edit the team's reports (daily and final), with AI polish ---- */
+	(function () {
+		var editor = function (host, text, ai, onSave) {
+			var box = document.createElement('div');
+			box.className = 'sap-redit';
+			box.innerHTML = '<textarea rows="5"></textarea><div class="sap-redit-bar"><button type="button" class="sap-btn is-small is-primary" data-s>ذخیره</button>' + (ai ? '<button type="button" class="sap-btn is-small is-soft" data-p>بهتر کردن با هوش مصنوعی</button>' : '') + '<button type="button" class="sap-btn is-small is-ghost" data-c>انصراف</button><small class="sap-muted">متن اصلی عضو نگه داشته می‌شود.</small></div>';
+			var ta = box.querySelector('textarea');
+			ta.value = text;
+			host.hidden = true;
+			host.parentNode.insertBefore(box, host.nextSibling);
+			ta.focus();
+			var done = function () { box.remove(); host.hidden = false; };
+			box.addEventListener('click', function (ev) {
+				var b = ev.target.closest('button');
+				if (!b) { return; }
+				if (b.hasAttribute('data-c')) { done(); }
+				if (b.hasAttribute('data-p')) {
+					busy(b, 'در حال بازنویسی…');
+					onSave('polish', ta.value).then(function (r) { idle(b); ta.value = r.text; toast('پیشنهاد هوش مصنوعی آماده است؛ بخوانید و ذخیره کنید.'); }).catch(function (e) { idle(b); toast(e.message, true); });
+				}
+				if (b.hasAttribute('data-s')) {
+					busy(b, '…');
+					onSave('save', ta.value).then(function (r) { toast(r.msg); done(); }).catch(function (e) { idle(b); toast(e.message, true); });
+				}
+			});
+		};
+		document.addEventListener('click', function (ev) {
+			var pe = ev.target.closest('[data-sap-pedit]');
+			if (pe) {
+				var li = pe.closest('[data-sap-pentry]');
+				var log = pe.closest('[data-sap-plog]');
+				var p = li.querySelector('[data-sap-ptext]');
+				if (li.querySelector('.sap-redit')) { return; }
+				editor(p, p.innerText.trim(), log.getAttribute('data-ai') === '1', function (what, text) {
+					return post('task/' + log.getAttribute('data-sap-plog') + '/report-edit', what === 'polish' ? { what: 'polish', text: text } : { what: 'progress', i: li.getAttribute('data-sap-pentry'), text: text }).then(function (r) {
+						if (what === 'save') { p.textContent = r.text; }
+						return r;
+					});
+				});
+				return;
+			}
+			var re = ev.target.closest('[data-sap-report-edit]');
+			if (re) {
+				var rep = re.closest('[data-sap-report]');
+				var html = rep.querySelector('[data-sap-report-html]');
+				var raw = rep.querySelector('[data-sap-report-raw]');
+				if (!html || rep.querySelector('.sap-redit')) { return; }
+				editor(html, raw.value, re.getAttribute('data-ai') === '1', function (what, text) {
+					return post('task/' + rep.getAttribute('data-sap-report') + '/report-edit', what === 'polish' ? { what: 'polish', text: text } : { what: 'report', text: text }).then(function (r) {
+						if (what === 'save') { html.innerHTML = r.html; raw.value = text; }
+						return r;
+					});
+				});
+			}
+		});
+	})();
+
+	/* ---- Wide tables and boards: a horizontal scrollbar pinned to the bottom of the
+	   window while the table is on screen, so nobody scrolls down to find it ---- */
+	(function () {
+		var wraps = Array.prototype.slice.call(document.querySelectorAll('[data-sap-xscroll], .sap-table-wrap, .sap-board-wrap'));
+		if (!wraps.length) { return; }
+		var bar = document.createElement('div');
+		bar.className = 'sap-xbar';
+		bar.setAttribute('aria-hidden', 'true');
+		bar.innerHTML = '<div></div>';
+		document.body.appendChild(bar);
+		var inner = bar.firstChild;
+		var cur = null;
+		var lock = false;
+		var pick = function () {
+			var vh = window.innerHeight;
+			var best = null;
+			wraps.forEach(function (w) {
+				if (w.scrollWidth <= w.clientWidth + 2 || !w.offsetParent) { return; }
+				var r = w.getBoundingClientRect();
+				// On screen, and its own scrollbar (bottom edge) is below the window.
+				if (r.top < vh - 60 && r.bottom > vh && r.bottom > 0) { if (!best || r.top < best.r.top) { best = { w: w, r: r }; } }
+			});
+			if (!best) { bar.classList.remove('is-on'); cur = null; return; }
+			cur = best.w;
+			bar.style.left = Math.max(0, best.r.left) + 'px';
+			bar.style.width = Math.min(best.r.width, window.innerWidth - Math.max(0, best.r.left)) + 'px';
+			inner.style.width = cur.scrollWidth + 'px';
+			lock = true;
+			bar.scrollLeft = cur.scrollLeft;
+			lock = false;
+			bar.classList.add('is-on');
+		};
+		bar.addEventListener('scroll', function () { if (cur && !lock) { lock = true; cur.scrollLeft = bar.scrollLeft; lock = false; } });
+		wraps.forEach(function (w) { w.addEventListener('scroll', function () { if (w === cur && !lock) { lock = true; bar.scrollLeft = w.scrollLeft; lock = false; } }, { passive: true }); });
+		var raf = 0;
+		var queue = function () { if (!raf) { raf = requestAnimationFrame(function () { raf = 0; pick(); }); } };
+		window.addEventListener('scroll', queue, { passive: true });
+		window.addEventListener('resize', queue);
+		document.addEventListener('toggle', queue, true);
+		document.addEventListener('click', function () { setTimeout(queue, 50); });
+		queue();
+	})();
 })();

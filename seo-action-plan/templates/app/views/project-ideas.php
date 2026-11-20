@@ -42,7 +42,9 @@ $base     = sap_project_url( $pid, 'ideas' );
 	</div>
 </section>
 
-<details class="sap-panel sap-kwidea" open>
+<?php sap_view( 'content-slots', array( 'project' => $project, 'kind' => 'new' ) ); ?>
+
+<details class="sap-panel sap-kwidea">
 	<summary><?php echo sap_icon( 'plus', 16 ); // phpcs:ignore ?><b>ایده دستی با کلمه کلیدی خودتان</b><small class="sap-muted">کلمه اصلی و فرعی را بدهید؛ هوش مصنوعی عنوان، بریف، تیترها و لینک‌های داخلی را می‌سازد و ایده در فهرست زیر منتظر تأیید شما می‌ماند</small></summary>
 	<form data-sap-kwidea="<?php echo esc_attr( $pid ); ?>" data-period="<?php echo esc_attr( sap_period_current( $pid ) ); ?>" data-as-idea="1">
 		<label class="sap-field"><span>کلمه کلیدی اصلی</span><input type="text" name="keyword" required placeholder="مثلاً روش بستن بند کفش"></label>

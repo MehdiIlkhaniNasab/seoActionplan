@@ -47,7 +47,12 @@ function sap_activity_add( $project_id, $data ) {
 		'meta'         => wp_json_encode( $data['meta'] ?? array() ),
 	);
 	$wpdb->insert( sap_table( 'activity' ), $fields );
-	return (int) $wpdb->insert_id;
+	$id = (int) $wpdb->insert_id;
+	if ( $id ) {
+		/** A change was recorded (e.g. it finishes the page's open content update). */
+		do_action( 'sap_activity_added', (int) $project_id, $fields );
+	}
+	return $id;
 }
 
 /**

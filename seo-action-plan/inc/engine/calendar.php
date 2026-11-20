@@ -227,6 +227,18 @@ function sap_gs_fmt( $sid, $r1, $r2, $c1, $c2, $bg = '', $fg = '', $bold = false
 	) );
 }
 
+/**
+ * Keep long text inside its cell (no spill over the next empty columns) and
+ * align it to the start, for data rows.
+ */
+function sap_gs_clip( $sid, $r1, $r2, $c1, $c2, $align = 'RIGHT' ) {
+	return array( 'repeatCell' => array(
+		'range'  => array( 'sheetId' => $sid, 'startRowIndex' => $r1, 'endRowIndex' => $r2, 'startColumnIndex' => $c1, 'endColumnIndex' => $c2 ),
+		'cell'   => array( 'userEnteredFormat' => array( 'wrapStrategy' => 'CLIP', 'horizontalAlignment' => $align, 'verticalAlignment' => 'MIDDLE' ) ),
+		'fields' => 'userEnteredFormat(wrapStrategy,horizontalAlignment,verticalAlignment)',
+	) );
+}
+
 function sap_gs_merge( $sid, $r1, $r2, $c1, $c2 ) {
 	return array( 'mergeCells' => array( 'range' => array( 'sheetId' => $sid, 'startRowIndex' => $r1, 'endRowIndex' => $r2, 'startColumnIndex' => $c1, 'endColumnIndex' => $c2 ), 'mergeType' => 'MERGE_ALL' ) );
 }
@@ -261,7 +273,7 @@ function sap_blog_parse( $values ) {
 	$m     = 0;
 	$cols  = array();
 	$kind  = 'idea';
-	$names = array( 'main idea' => 'keyword', 'update page' => 'keyword', 'kp' => 'kp', 'title' => 'title', 'title (پیشنهادی)' => 'title', 'desc' => 'desc', 'هدف و بریف آپدیت' => 'desc', 'content source' => 'source', 'status' => 'status', 'publish date' => 'publish', 'done date' => 'publish', 'link' => 'link', 'تاریخ برنامه' => 'planned', 'id' => 'id' );
+	$names = array( 'main idea' => 'keyword', 'update page' => 'keyword', 'kp' => 'kp', 'title' => 'title', 'title (پیشنهادی)' => 'title', 'desc' => 'desc', 'هدف و بریف آپدیت' => 'desc', 'content source' => 'source', 'status' => 'status', 'publish date' => 'publish', 'done date' => 'publish', 'link' => 'link', 'تاریخ برنامه' => 'planned', 'id' => 'id', 'تایتل پیشنهادی' => 'title', 'هدف آپدیت' => 'desc', 'رتبه قبل' => 'rank', 'کلیک ۲۸ روز قبل' => 'clicks' );
 	foreach ( (array) $values as $i => $row ) {
 		$a = trim( (string) ( $row[0] ?? '' ) );
 		if ( preg_match( '/^m\s*(\d+)$/i', $a, $mm ) ) {
@@ -316,7 +328,10 @@ function sap_blog_parse( $values ) {
 			'publish' => $get( 'publish' ),
 			'link'    => $get( 'link' ),
 			'planned' => $get( 'planned' ),
+			'rank'    => $get( 'rank' ),
+			'clicks'  => $get( 'clicks' ),
 			'has_id'  => isset( $cols['id'] ),
+			'has'     => array_keys( $cols ),
 		);
 	}
 	return $out;
@@ -428,7 +443,10 @@ function sap_calendar_import_sheet( $project, $items ) {
 	foreach ( $items as $it ) {
 		$period = $months[ 'M' . $it['m'] ] ?? sap_period_shift( sap_period_current(), $it['m'] - $max_m );
 		if ( 'update' === $it['kind'] ) {
-			// Content updates: the team edits title, brief and «done» in the sheet.
+			// Content updates: what the team edits in the sheet wins — keyword, suggested
+			// title, goal, links and anchors, source, position / clicks before the update,
+			// the «done» tick and the month block. Blocks written by versions before 0.32
+			// (no «رتبه قبل» column) only bring back the tick and the month.
 			$u = $it['id'] ? sap_update( $it['id'] ) : null;
 			if ( ! $u || (int) $u['project_id'] !== (int) $pid ) {
 				continue;
@@ -436,18 +454,40 @@ function sap_calendar_import_sheet( $project, $items ) {
 			$seen['update'][ (int) $u['id'] ] = true;
 			$b   = (array) $u['brief'];
 			$upd = array();
-			if ( '' !== $it['title'] && $it['title'] !== ( ( $b['title'] ?? '' ) ?: $u['title'] ) ) {
-				$b['title'] = $it['title'];
-				$upd['brief'] = $b;
-			}
-			if ( $it['desc'] !== trim( (string) ( $b['summary'] ?? '' ) ?: (string) $u['reason'] ) ) {
-				$b['summary'] = $it['desc'];
-				$upd['brief'] = $b;
+			$has = array_flip( (array) ( $it['has'] ?? array() ) );
+			if ( isset( $has['rank'] ) ) {
+				if ( '' !== $it['keyword'] && $it['keyword'] !== $u['keyword'] && $it['keyword'] !== $u['title'] ) {
+					$upd['keyword'] = $it['keyword'];
+				}
+				if ( '' !== $it['title'] && $it['title'] !== ( ( $b['title'] ?? '' ) ?: $u['title'] ) ) {
+					$b['title']   = $it['title'];
+					$upd['brief'] = $b;
+				}
+				if ( $it['desc'] !== sap_update_goal( $u ) ) {
+					$b['goal']    = $it['desc'];
+					$upd['brief'] = $b;
+				}
+				$norm = function ( $l ) {
+					return array( 'url' => rawurldecode( (string) ( $l['url'] ?? '' ) ), 'anchor' => (string) ( $l['anchor'] ?? '' ) );
+				};
+				if ( array_map( $norm, $it['links'] ) !== array_map( $norm, array_slice( (array) $u['links'], 0, 3 ) ) ) {
+					$upd['links'] = array_merge( $it['links'], array_slice( (array) $u['links'], 3 ) );
+				}
+				if ( $it['source'] !== $u['source_note'] ) {
+					$upd['source_note'] = $it['source'];
+				}
+				foreach ( array( 'rank' => 'rank_before', 'clicks' => 'clicks_before' ) as $ik => $uk ) {
+					$v   = (string) sap_cplan_number( $it[ $ik ], 'rank' === $ik );
+					$cur = null === $u[ $uk ] ? '' : (string) ( 'rank' === $ik ? round( (float) $u[ $uk ], 1 ) : $u[ $uk ] );
+					if ( ( '' === $v || is_numeric( $v ) ) && ( '' === $v ? '' !== $cur : '' === $cur || (float) $v !== (float) $cur ) ) {
+						$upd[ $uk ] = '' === $v ? null : $v;
+					}
+				}
 			}
 			if ( $it['status'] && 'done' !== $u['status'] ) {
 				$upd['status'] = 'done';
 			} elseif ( ! $it['status'] && 'done' === $u['status'] ) {
-				$upd['status'] = 'planned';
+				$upd['status'] = $u['task_id'] ? 'in_progress' : 'planned';
 			}
 			if ( $period !== $u['period'] ) {
 				$upd['period'] = $period;
@@ -588,11 +628,16 @@ function sap_calendar_write_sheet( $project ) {
 	}
 	$count   = 0;
 	$written = array( 'idea' => array(), 'update' => array() );
-	$fmt[]   = array( 'updateDimensionProperties' => array( 'range' => array( 'sheetId' => $sid, 'dimension' => 'COLUMNS', 'startIndex' => 20, 'endIndex' => 21 ), 'properties' => array( 'pixelSize' => 46 ), 'fields' => 'pixelSize' ) );
+	$ntrack  = function_exists( 'sap_track_all' ) ? sap_track_all( $project['id'] ) : array();
+	$kinds   = sap_update_kinds();
+	$kc      = array( 'cat' => '#EDE7F6', 'product' => '#E0F2F1', 'post' => '#E3F2FD', 'other' => '#F3F3F3' );
+	$fmt[]   = array( 'updateDimensionProperties' => array( 'range' => array( 'sheetId' => $sid, 'dimension' => 'COLUMNS', 'startIndex' => 20, 'endIndex' => 21 ), 'properties' => array( 'pixelSize' => 60 ), 'fields' => 'pixelSize' ) );
+	$fmt[]   = array( 'updateDimensionProperties' => array( 'range' => array( 'sheetId' => $sid, 'dimension' => 'COLUMNS', 'startIndex' => 21, 'endIndex' => 24 ), 'properties' => array( 'pixelSize' => 96 ), 'fields' => 'pixelSize' ) );
 	foreach ( array_reverse( $months, true ) as $period => $label ) {
 		$r0       = count( $values );
 		$values[] = array_merge( array( $label, 'Writing Guide', '', '', '', '  Out Links' ), array_fill( 0, 9, '' ), array( 'Publish', '', '', '', sap_period_label( $period ) ) );
-		$values[] = array( '', 'Main Idea', 'KP', 'Title', 'Desc', 'L1', 'K1', 'L2', 'K2', 'L3', 'K3', 'L4', 'K4', 'L5', 'K5', 'Content Source', 'Status', 'Publish Date', 'Link', 'تاریخ برنامه', 'ID' );
+		// «جدید» marks the new-content block; the results columns after ID are filled by Sokan.
+		$values[] = array( 'جدید', 'Main Idea', 'KP', 'Title', 'Desc', 'L1', 'K1', 'L2', 'K2', 'L3', 'K3', 'L4', 'K4', 'L5', 'K5', 'Content Source', 'Status', 'Publish Date', 'Link', 'تاریخ برنامه', 'ID', 'نمایش از انتشار', 'کلیک از انتشار', 'رتبه کلمه' );
 		$items    = sap_calendar_items( $project['id'], $period );
 		foreach ( $items as $n => $it ) {
 			$row = array( $n + 1, $it['keyword'], $it['kp'] ?: '', $it['title'], $it['brief'] );
@@ -600,39 +645,55 @@ function sap_calendar_write_sheet( $project ) {
 				$row[] = $it['links'][ $l ]['url'] ?? '';
 				$row[] = $it['links'][ $l ]['anchor'] ?? '';
 			}
+			$tr       = (array) ( $ntrack[ 'i' . $it['id'] ] ?? array() );
 			$row[]    = $it['source_note'];
 			$row[]    = 'published' === $it['status'];
-			$row[]    = 'published' === $it['status'] && $it['updated_at'] ? sap_jdate( substr( $it['updated_at'], 0, 10 ), 'day' ) : '';
+			$row[]    = 'published' === $it['status'] && $it['published_at'] ? sap_jdate( $it['published_at'], 'short' ) : '';
 			$row[]    = $it['published_url'];
 			$row[]    = $it['planned_date'] ? sap_jdate( $it['planned_date'], 'day' ) : '';
 			$row[]    = 'i' . (int) $it['id']; // Keeps the row tied to its article when you edit the keyword.
+			$row[]    = isset( $tr['impr'] ) ? $tr['impr'] : '';
+			$row[]    = isset( $tr['clicks'] ) ? $tr['clicks'] : '';
+			$row[]    = isset( $tr['kw_pos'] ) && null !== $tr['kw_pos'] ? $tr['kw_pos'] : '';
 			$values[] = $row;
 			$written['idea'][] = (int) $it['id'];
 			++$count;
 		}
 		$r1 = count( $values );
-		// Content updates of the month: their own block under the new articles.
-		$ups = sap_updates( $project['id'], array( 'period' => $period ) );
-		$u0  = null;
+		// Content updates of the month: their own block under the new articles, with a
+		// banner and their own header — page link, kind of page (coloured), position,
+		// clicks and impressions of the 28 days before the update — grouped by kind, and
+		// every cell clipped so long text never spills over the empty columns.
+		$ups = array_values( array_filter( sap_updates( $project['id'], array( 'period' => $period ) ), function ( $u ) {
+			return 'cancelled' !== $u['status'];
+		} ) );
+		$order = array( 'cat' => 0, 'product' => 1, 'post' => 2, 'other' => 3 );
+		usort( $ups, function ( $a, $b ) use ( $order ) {
+			return array( $order[ sap_update_kind( $a ) ], $a['id'] ) <=> array( $order[ sap_update_kind( $b ) ], $b['id'] );
+		} );
+		$u0    = null;
+		$ukind = array();
 		if ( $ups ) {
+			$values[] = array( 'آپدیت محتوا — ' . sap_num( count( $ups ) ) . ' صفحه (' . sap_period_label( $period ) . ')' ); // Column A only: never read back as an article.
 			$u0       = count( $values );
-			$values[] = array( '', 'Update Page', 'KP', 'Title (پیشنهادی)', 'هدف و بریف آپدیت', 'L1', 'K1', 'L2', 'K2', 'L3', 'K3', 'L4', 'K4', 'L5', 'K5', 'نوع صفحه', 'Status', 'Done Date', 'Link', 'تاریخ برنامه', 'ID' );
-			$ctypes   = sap_content_types();
+			$values[] = array( 'آپدیت', 'Update Page', 'نوع صفحه', 'Title', 'هدف آپدیت', 'Link', 'رتبه قبل', 'کلیک ۲۸ روز قبل', 'نمایش ۲۸ روز قبل', 'L1', 'K1', 'L2', 'K2', 'L3', 'K3', 'Content Source', 'Status', 'Done Date', 'نتیجه بعد از آپدیت', 'وضعیت کار', 'ID' );
 			foreach ( $ups as $n => $u ) {
 				$b   = (array) $u['brief'];
-				$row = array( 'U' . ( $n + 1 ), $b['keyword'] ?? $u['keyword'], '', ( $b['title'] ?? '' ) ?: $u['title'], trim( (string) ( $b['summary'] ?? '' ) ?: (string) $u['reason'] ) );
-				$lo  = array_values( (array) ( $b['links_out'] ?? array() ) );
-				for ( $l = 0; $l < 5; $l++ ) {
+				$res = function_exists( 'sap_track_line' ) ? sap_track_line( $ntrack[ 'u' . $u['id'] ] ?? null, 'upd' ) : array( 'text' => '' );
+				$row = array( 'U' . ( $n + 1 ), $u['keyword'] ?: $u['title'], $kinds[ sap_update_kind( $u ) ], ( $b['title'] ?? '' ) ?: $u['title'], sap_update_goal( $u ), rawurldecode( $u['url'] ), null === $u['rank_before'] ? '' : $u['rank_before'], null === $u['clicks_before'] ? '' : $u['clicks_before'], null === $u['impr_before'] ? '' : $u['impr_before'] );
+				$lo  = array_values( (array) $u['links'] );
+				for ( $l = 0; $l < 3; $l++ ) {
 					$row[] = isset( $lo[ $l ]['url'] ) ? rawurldecode( $lo[ $l ]['url'] ) : '';
 					$row[] = $lo[ $l ]['anchor'] ?? '';
 				}
-				$row[]    = $ctypes[ $u['content_type'] ] ?? $u['content_type'];
+				$row[]    = $u['source_note'];
 				$row[]    = 'done' === $u['status'];
-				$row[]    = $u['done_at'] ? sap_jdate( substr( $u['done_at'], 0, 10 ), 'day' ) : '';
-				$row[]    = rawurldecode( $u['url'] );
+				$row[]    = $u['done_at'] ? sap_jdate( substr( $u['done_at'], 0, 10 ), 'short' ) : '';
+				$row[]    = (string) $res['text'];
 				$row[]    = sap_update_statuses()[ $u['status'] ] ?? $u['status'];
 				$row[]    = 'u' . (int) $u['id'];
 				$values[] = $row;
+				$ukind[]  = sap_update_kind( $u );
 				$written['update'][] = (int) $u['id'];
 			}
 		}
@@ -646,14 +707,24 @@ function sap_calendar_write_sheet( $project ) {
 		$fmt[] = sap_gs_fmt( $sid, $r0, $r0 + 1, 1, 5, '#20124D', '#FFFFFF', true );
 		$fmt[] = sap_gs_fmt( $sid, $r0, $r0 + 1, 5, 15, '#990000', '#FFFFFF', true );
 		$fmt[] = sap_gs_fmt( $sid, $r0, $r0 + 1, 15, 19, '#9900FF', '#FFFFFF', true );
-		$fmt[] = sap_gs_fmt( $sid, $r0 + 1, $r0 + 2, 1, 20, '#D9D2E9', '#000000', true );
+		$fmt[] = sap_gs_fmt( $sid, $r0 + 1, $r0 + 2, 1, 21, '#D9D2E9', '#000000', true );
+		$fmt[] = sap_gs_fmt( $sid, $r0 + 1, $r0 + 2, 21, 24, '#D9EAD3', '#000000', true );
 		if ( $r1 > $r0 + 2 ) {
-			$fmt[] = sap_gs_fmt( $sid, $r0 + 2, $r1, 0, 20 );
+			$fmt[] = sap_gs_fmt( $sid, $r0 + 2, $r1, 0, 24 );
+			$fmt[] = sap_gs_clip( $sid, $r0 + 2, $r1, 1, 16 );
+			$fmt[] = sap_gs_fmt( $sid, $r0 + 2, $r1, 0, 1, '#E8F5E9', '#1B5E20', true );
 			$fmt[] = array( 'setDataValidation' => array( 'range' => array( 'sheetId' => $sid, 'startRowIndex' => $r0 + 2, 'endRowIndex' => $r1, 'startColumnIndex' => 16, 'endColumnIndex' => 17 ), 'rule' => array( 'condition' => array( 'type' => 'BOOLEAN' ) ) ) );
 		}
 		if ( null !== $u0 ) {
-			$fmt[] = sap_gs_fmt( $sid, $u0, $u0 + 1, 1, 20, '#F9CB9C', '#000000', true );
-			$fmt[] = sap_gs_fmt( $sid, $u0 + 1, $r2, 0, 20, '#FFF7EE' );
+			$fmt[] = sap_gs_merge( $sid, $u0 - 1, $u0, 0, 21 );
+			$fmt[] = sap_gs_fmt( $sid, $u0 - 1, $u0, 0, 21, '#E69138', '#FFFFFF', true );
+			$fmt[] = sap_gs_fmt( $sid, $u0, $u0 + 1, 0, 21, '#F9CB9C', '#000000', true );
+			$fmt[] = sap_gs_fmt( $sid, $u0 + 1, $r2, 0, 21, '#FFF7EE' );
+			$fmt[] = sap_gs_clip( $sid, $u0 + 1, $r2, 1, 16 );
+			$fmt[] = sap_gs_clip( $sid, $u0 + 1, $r2, 18, 19 );
+			foreach ( $ukind as $ri => $kk ) {
+				$fmt[] = sap_gs_fmt( $sid, $u0 + 1 + $ri, $u0 + 2 + $ri, 2, 3, $kc[ $kk ], '#000000', true );
+			}
 			$fmt[] = array( 'setDataValidation' => array( 'range' => array( 'sheetId' => $sid, 'startRowIndex' => $u0 + 1, 'endRowIndex' => $r2, 'startColumnIndex' => 16, 'endColumnIndex' => 17 ), 'rule' => array( 'condition' => array( 'type' => 'BOOLEAN' ) ) ) );
 		}
 		$values[] = array();
@@ -910,73 +981,130 @@ function sap_updates_write_sheet( $project ) {
 	if ( is_wp_error( $sid ) ) {
 		return $sid;
 	}
-	$types  = sap_content_types();
+	$pid    = $project['id'];
 	$status = sap_update_statuses();
-	// Read back what the team edited in this tab (page address = row identity): keyword,
-	// goal/brief, suggested title and status win over the copy in Sokan.
+	$kinds  = sap_update_kinds();
+	$head   = array( 'ماه', 'نوع صفحه', 'آدرس', 'صفحه', 'کلمه اصلی', 'کلمات فرعی', 'رتبه قبل', 'کلیک ۲۸ روز قبل', 'نمایش ۲۸ روز قبل', 'هدف آپدیت', 'دیدگاه مدیر سئو', 'برنامه آپدیت', 'تایتل پیشنهادی', 'لینک‌های داخلی و انکر', 'وضعیت', 'تاریخ انجام', 'نتیجه بعد از آپدیت', 'ID' );
+	// What Sokan wrote last time, per update: a cell is taken back only when the team
+	// changed it in this tab (so it never undoes an edit made in the Blog tab or the panel).
+	$snap_key = 'sap_updtab_' . $pid;
+	$snap     = get_option( $snap_key, array() );
+	$snap     = is_array( $snap ) ? $snap : array();
+	$cells    = function ( $u ) use ( $status ) {
+		$b = (array) $u['brief'];
+		return array(
+			'keyword' => (string) $u['keyword'],
+			'goal'    => sap_update_goal( $u ),
+			'reason'  => (string) $u['reason'],
+			'title'   => (string) ( $b['title'] ?? '' ),
+			'links'   => sap_cplan_links_text( $u['links'] ),
+			'status'  => $status[ $u['status'] ] ?? $u['status'],
+		);
+	};
 	$old = sap_sheet_values( $sheet, SAP_TAB_UPDATES );
-	if ( ! is_wp_error( $old ) && count( (array) $old ) > 1 && 'آدرس' === trim( (string) ( $old[0][2] ?? '' ) ) ) {
+	if ( ! is_wp_error( $old ) && count( (array) $old ) > 1 ) {
+		$col = array();
+		foreach ( (array) $old[0] as $ci => $h ) {
+			$col[ trim( (string) $h ) ] = $ci;
+		}
 		$by = array();
-		foreach ( sap_updates( $project['id'] ) as $u ) {
+		foreach ( sap_updates( $pid ) as $u ) {
+			$by[ 'u' . $u['id'] ]                                              = $u;
 			$by[ sap_norm_url( $u['url'] ) . '|' . sap_period_label( $u['period'] ) ] = $u;
 		}
+		$get = function ( $r, $name ) use ( $col ) {
+			return isset( $col[ $name ] ) ? trim( (string) ( $r[ $col[ $name ] ] ?? '' ) ) : null;
+		};
 		$st_back = array_flip( $status );
 		foreach ( array_slice( (array) $old, 1 ) as $r ) {
-			$u = $by[ sap_norm_url( trim( (string) ( $r[2] ?? '' ) ) ) . '|' . trim( (string) ( $r[0] ?? '' ) ) ] ?? null;
+			$id = (string) $get( $r, 'ID' );
+			$u  = $by[ $id ] ?? ( $by[ sap_norm_url( (string) $get( $r, 'آدرس' ) ) . '|' . (string) $get( $r, 'ماه' ) ] ?? null );
 			if ( ! $u ) {
 				continue;
 			}
-			$b   = (array) $u['brief'];
-			$upd = array();
-			foreach ( array( 4 => 'keyword', 6 => 'summary', 7 => 'title' ) as $ci => $bk ) {
-				$v   = trim( (string) ( $r[ $ci ] ?? '' ) );
-				$cur = 'summary' === $bk ? trim( (string) ( $b['summary'] ?? $u['reason'] ) ) : trim( (string) ( $b[ $bk ] ?? ( 'keyword' === $bk ? $u['keyword'] : '' ) ) );
-				if ( $v !== $cur && ( '' !== $v || 'summary' === $bk ) ) {
-					$b[ $bk ]     = $v;
-					$upd['brief'] = $b;
+			$was  = (array) ( $snap[ $u['id'] ] ?? array() );
+			$now  = $cells( $u );
+			$b    = (array) $u['brief'];
+			$upd  = array();
+			$sent = array( 'keyword' => 'کلمه اصلی', 'goal' => 'هدف آپدیت', 'reason' => 'برنامه آپدیت', 'title' => 'تایتل پیشنهادی', 'links' => 'لینک‌های داخلی و انکر', 'status' => 'وضعیت' );
+			foreach ( $sent as $f => $name ) {
+				$v = $get( $r, $name );
+				if ( null === $v || ! array_key_exists( $f, $was ) || $v === (string) $was[ $f ] || $v === $now[ $f ] ) {
+					continue; // Column missing, never written, or not changed by the team.
 				}
-			}
-			$sv = $st_back[ trim( (string) ( $r[11] ?? '' ) ) ] ?? '';
-			if ( '' !== $sv && $sv !== $u['status'] ) {
-				$upd['status'] = $sv;
+				if ( 'keyword' === $f && '' !== $v ) {
+					$upd['keyword'] = $v;
+				} elseif ( 'reason' === $f ) {
+					$upd['reason'] = $v;
+				} elseif ( in_array( $f, array( 'goal', 'title' ), true ) ) {
+					$b[ $f ]      = $v;
+					$upd['brief'] = $b;
+				} elseif ( 'links' === $f ) {
+					$upd['links'] = sap_cplan_links_parse( $project, $v );
+				} elseif ( 'status' === $f && isset( $st_back[ $v ] ) ) {
+					$upd['status'] = $st_back[ $v ];
+				}
 			}
 			if ( $upd ) {
 				sap_update_save( $upd, $u['id'] );
 			}
 		}
 	}
-	$values = array( array( 'ماه', 'صفحه', 'آدرس', 'نوع', 'کلمه اصلی', 'کلمات فرعی', 'دلیل / هدف آپدیت', 'تایتل پیشنهادی', 'بخش‌های جدید', 'ویژگی‌ها', 'FAQ', 'وضعیت', 'تاریخ انجام' ) );
-	foreach ( sap_updates( $project['id'] ) as $u ) {
-		$b        = $u['brief'];
+	$track  = function_exists( 'sap_track_all' ) ? sap_track_all( $pid ) : array();
+	$values = array( $head );
+	$kind_r = array();
+	$snap   = array();
+	$ups    = array_values( array_filter( sap_updates( $pid ), function ( $u ) {
+		return 'cancelled' !== $u['status'];
+	} ) );
+	$order  = array( 'cat' => 0, 'product' => 1, 'post' => 2, 'other' => 3 );
+	usort( $ups, function ( $a, $b ) use ( $order ) {
+		return array( $b['period'], $order[ sap_update_kind( $a ) ], $a['id'] ) <=> array( $a['period'], $order[ sap_update_kind( $b ) ], $b['id'] );
+	} );
+	foreach ( $ups as $u ) {
+		$c        = $cells( $u );
+		$res      = function_exists( 'sap_track_line' ) ? sap_track_line( $track[ 'u' . $u['id'] ] ?? null, 'upd' ) : array( 'text' => '' );
 		$values[] = array(
 			sap_period_label( $u['period'] ),
-			$u['title'],
+			$kinds[ sap_update_kind( $u ) ],
 			rawurldecode( $u['url'] ),
-			$types[ $u['content_type'] ] ?? $u['content_type'],
-			$b['keyword'] ?? $u['keyword'],
-			implode( '، ', (array) ( $b['secondary'] ?? $u['secondary'] ) ),
-			$b['summary'] ?? $u['reason'],
-			$b['title'] ?? '',
-			implode( "\n", array_map( function ( $o ) {
-				return ( $o['heading'] ?? '' );
-			}, (array) ( $b['outline'] ?? array() ) ) ),
-			implode( "\n", array_map( function ( $a ) {
-				return ( $a['name'] ?? '' ) . ': ' . ( $a['hint'] ?? '' );
-			}, (array) ( $b['attributes'] ?? array() ) ) ),
-			implode( "\n", (array) ( $b['faq'] ?? array() ) ),
-			$status[ $u['status'] ] ?? $u['status'],
+			$u['title'],
+			$c['keyword'],
+			implode( '، ', (array) $u['secondary'] ),
+			null === $u['rank_before'] ? '' : $u['rank_before'],
+			null === $u['clicks_before'] ? '' : $u['clicks_before'],
+			null === $u['impr_before'] ? '' : $u['impr_before'],
+			$c['goal'],
+			$u['my_view'],
+			$c['reason'],
+			$c['title'],
+			$c['links'],
+			$c['status'],
 			$u['done_at'] ? sap_jdate( substr( $u['done_at'], 0, 10 ), 'short' ) : '',
+			(string) $res['text'],
+			'u' . (int) $u['id'],
 		);
+		$kind_r[]          = sap_update_kind( $u );
+		$snap[ $u['id'] ] = $c;
 	}
 	$res = sap_gs_put_tab( $sheet, SAP_TAB_UPDATES, $values );
 	if ( is_wp_error( $res ) ) {
 		return $res;
 	}
-	$fmt   = sap_gs_reset( $sid, array( 0 => 100, 1 => 200, 2 => 260, 3 => 100, 4 => 160, 5 => 220, 6 => 300, 7 => 240, 8 => 240, 9 => 220, 10 => 240, 11 => 100, 12 => 100 ) );
-	$fmt[] = sap_gs_fmt( $sid, 0, 1, 0, 13, '#1D4ED8', '#FFFFFF', true );
+	update_option( $snap_key, $snap, false );
+	$n     = count( $values );
+	$kc    = array( 'cat' => '#EDE7F6', 'product' => '#E0F2F1', 'post' => '#E3F2FD', 'other' => '#F3F3F3' );
+	$fmt   = sap_gs_reset( $sid, array( 0 => 90, 1 => 90, 2 => 240, 3 => 180, 4 => 150, 5 => 200, 6 => 70, 7 => 90, 8 => 90, 9 => 240, 10 => 240, 11 => 300, 12 => 220, 13 => 260, 14 => 100, 15 => 90, 16 => 260, 17 => 60 ) );
+	$fmt[] = sap_gs_fmt( $sid, 0, 1, 0, 18, '#E69138', '#FFFFFF', true );
+	if ( $n > 1 ) {
+		$fmt[] = sap_gs_clip( $sid, 1, $n, 0, 18 );
+		foreach ( $kind_r as $ri => $kk ) {
+			$fmt[] = sap_gs_fmt( $sid, $ri + 1, $ri + 2, 1, 2, $kc[ $kk ], '#000000', true );
+		}
+	}
 	$fmt[] = array( 'updateSheetProperties' => array( 'properties' => array( 'sheetId' => $sid, 'gridProperties' => array( 'frozenRowCount' => 1 ) ), 'fields' => 'gridProperties.frozenRowCount' ) );
 	sap_gs_batch( $sheet, $fmt );
-	return sprintf( 'آپدیت محتوا (%s صفحه)', sap_num( count( $values ) - 1 ) );
+	return sprintf( 'آپدیت محتوا (%s صفحه)', sap_num( $n - 1 ) );
 }
 
 /**

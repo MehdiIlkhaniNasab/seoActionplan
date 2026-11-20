@@ -43,6 +43,8 @@ function sap_idea_hydrate( $row ) {
 	foreach ( array( 'brief', 'goal', 'source_note', 'published_url' ) as $k ) {
 		$row[ $k ] = (string) $row[ $k ];
 	}
+	$row['my_view']      = (string) ( $row['my_view'] ?? '' );
+	$row['published_at'] = (string) ( $row['published_at'] ?? '' );
 	return $row;
 }
 
@@ -90,9 +92,18 @@ function sap_idea_save( $data, $id = 0 ) {
 			$fields[ $k ] = mb_substr( sanitize_text_field( (string) $data[ $k ] ), 0, $max );
 		}
 	}
-	foreach ( array( 'brief', 'goal', 'source_note' ) as $k ) {
+	foreach ( array( 'brief', 'goal', 'source_note', 'my_view' ) as $k ) {
 		if ( isset( $data[ $k ] ) ) {
 			$fields[ $k ] = sanitize_textarea_field( (string) $data[ $k ] );
+		}
+	}
+	if ( array_key_exists( 'published_at', $data ) ) {
+		$fields['published_at'] = $data['published_at'] ?: null;
+	} elseif ( isset( $data['status'] ) && 'published' === $data['status'] && $id ) {
+		// The day it was published is kept for result tracking (set once).
+		$cur = sap_idea( $id );
+		if ( $cur && '' === $cur['published_at'] ) {
+			$fields['published_at'] = current_time( 'Y-m-d' );
 		}
 	}
 	if ( isset( $data['published_url'] ) ) {

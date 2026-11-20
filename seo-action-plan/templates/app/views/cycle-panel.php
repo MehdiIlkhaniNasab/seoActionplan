@@ -73,8 +73,8 @@ $who = function ( $name, $label ) use ( $c, $users ) {
 		<?php $short = (array) ( $project['options'][ 'cycle_short_' . $P ] ?? array() ); ?>
 		<?php if ( ! empty( $short['new'] ) || ! empty( $short['upd'] ) ) : ?>
 			<p class="sap-alert is-warn sap-small">
-				<?php if ( ! empty( $short['new'] ) ) : ?><?php echo esc_html( sprintf( '%s محتوای جدید از سهم تا این هفته در تقویم نیست؛ ', sap_num( $short['new'] ) ) ); ?><a href="<?php echo esc_url( sap_project_url( $pid, 'ideas' ) ); ?>">از ایده‌های محتوا تأیید کنید</a>. <?php endif; ?>
-				<?php if ( ! empty( $short['upd'] ) ) : ?><?php echo esc_html( sprintf( '%s آپدیت از سهم تا این هفته در تقویم نیست؛ ', sap_num( $short['upd'] ) ) ); ?><a href="<?php echo esc_url( sap_project_url( $pid, 'updates' ) ); ?>">از تب آپدیت محتوا تأیید کنید</a>.<?php endif; ?>
+				<?php if ( ! empty( $short['new'] ) ) : ?><?php echo esc_html( sprintf( '%s محتوای جدید از سهم تا این هفته در تقویم نیست؛ ', sap_num( $short['new'] ) ) ); ?><a href="<?php echo esc_url( sap_project_url( $pid, 'ideas' ) . '#slots' ); ?>">کلمه‌اش را مشخص کنید</a>. <?php endif; ?>
+				<?php if ( ! empty( $short['upd'] ) ) : ?><?php echo esc_html( sprintf( '%s آپدیت از سهم تا این هفته در تقویم نیست؛ ', sap_num( $short['upd'] ) ) ); ?><a href="<?php echo esc_url( sap_project_url( $pid, 'updates' ) . '#slots' ); ?>">صفحه‌اش را مشخص کنید</a>.<?php endif; ?>
 			</p>
 		<?php endif; ?>
 		<div class="sap-cycle-week">
@@ -109,8 +109,8 @@ $who = function ( $name, $label ) use ( $c, $users ) {
 			<?php sap_form_fields( 'sap_commit_save', array( 'project_id' => $pid ) ); ?>
 			<div class="sap-grid-3">
 				<label>روز شروع دوره گزارش<input type="number" name="cycle_day" min="1" max="28" value="<?php echo esc_attr( $day ); ?>"><small>۱ = اول تا آخر ماه؛ ۱۸ = هجدهم تا هفدهم ماه بعد.</small></label>
-				<label>محتوای جدید در ماه<input type="number" name="content_new" min="0" max="100" value="<?php echo esc_attr( $c['content_new'] ); ?>"><small>از مقاله‌های تقویم محتوای همان دوره.</small></label>
-				<label>آپدیت محتوا در ماه<input type="number" name="content_upd" min="0" max="100" value="<?php echo esc_attr( $c['content_upd'] ); ?>"><small>از آپدیت‌های برنامه‌ریزی‌شده؛ کم بود، بهترین‌ها از تب آپدیت محتوا.</small></label>
+				<label>محتوای جدید در ماه<input type="number" name="content_new" min="0" max="100" value="<?php echo esc_attr( $c['content_new'] ); ?>"><small>هر مورد یک خانه در ایده‌های محتوا می‌شود که کلمه و دیدگاهش را مشخص می‌کنید.</small></label>
+				<label>آپدیت محتوا در ماه<input type="number" name="content_upd" min="0" max="100" value="<?php echo esc_attr( $c['content_upd'] ); ?>"><small>هر آپدیت یک خانه در تب آپدیت محتوا می‌شود که صفحه و دیدگاهش را مشخص می‌کنید.</small></label>
 			</div>
 			<div class="sap-cycle-checks">
 				<label><input type="checkbox" name="tech_first" value="1" <?php checked( $c['tech_first'] ); ?>>آنالیز کامل تکنیکال در هفته اول</label>

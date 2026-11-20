@@ -359,8 +359,92 @@ function sap_long_tasks() {
  */
 function sap_progress_own( $t ) {
 	return array_values( array_filter( (array) $t['progress'], function ( $p ) {
-		return ! in_array( $p['kind'] ?? '', array( 'delegate', 'follow' ), true );
+		return ! in_array( $p['kind'] ?? '', array( 'delegate', 'follow', 'edit' ), true );
 	} ) );
+}
+
+/* ---------------------------------------------------------------------------
+ * Managers improve the team's reports
+ * ------------------------------------------------------------------------- */
+
+/**
+ * Edit one daily report of a task (by its index in the task's progress list).
+ * The first original text is kept on the entry; who edited and when is shown.
+ *
+ * @return array|WP_Error
+ */
+function sap_progress_edit( $task, $index, $text ) {
+	if ( ! sap_can_review( $task ) ) {
+		return new WP_Error( 'sap_prog', 'فقط مدیر می‌تواند گزارش اعضا را ویرایش کند.', array( 'status' => 403 ) );
+	}
+	$text = trim( sanitize_textarea_field( (string) $text ) );
+	$list = (array) $task['progress'];
+	if ( ! isset( $list[ $index ] ) || in_array( $list[ $index ]['kind'] ?? '', array( 'delegate', 'follow', 'edit' ), true ) ) {
+		return new WP_Error( 'sap_prog', 'این گزارش پیدا نشد.', array( 'status' => 404 ) );
+	}
+	if ( '' === $text ) {
+		return new WP_Error( 'sap_prog', 'متن گزارش خالی نمی‌ماند.' );
+	}
+	if ( $text === $list[ $index ]['text'] ) {
+		return array( 'msg' => 'تغییری نکرد.', 'text' => $text );
+	}
+	if ( ! isset( $list[ $index ]['orig'] ) ) {
+		$list[ $index ]['orig'] = $list[ $index ]['text'];
+	}
+	$list[ $index ]['text'] = mb_substr( $text, 0, 3000 );
+	$list[ $index ]['eu']   = get_current_user_id();
+	$list[ $index ]['eat']  = sap_now();
+	sap_task_save( array( 'progress' => $list ), $task['id'] );
+	return array( 'msg' => 'گزارش ویرایش شد.', 'text' => $list[ $index ]['text'] );
+}
+
+/**
+ * Edit the final work report of a task (also while it waits for approval or after
+ * it is done). The previous text is kept as a hidden «edit» note on the task.
+ *
+ * @return array|WP_Error
+ */
+function sap_report_edit( $task, $text ) {
+	if ( ! sap_can_review( $task ) ) {
+		return new WP_Error( 'sap_prog', 'فقط مدیر می‌تواند گزارش اعضا را ویرایش کند.', array( 'status' => 403 ) );
+	}
+	$text = trim( sanitize_textarea_field( (string) $text ) );
+	if ( $text === trim( (string) $task['result'] ) ) {
+		return array( 'msg' => 'تغییری نکرد.', 'html' => sap_rich_text( $text, sap_task_site_base( $task ) ) );
+	}
+	$list   = (array) $task['progress'];
+	$list[] = array( 'u' => get_current_user_id(), 'at' => sap_now(), 'kind' => 'edit', 'state' => 'progress', 'text' => mb_substr( (string) $task['result'], 0, 3000 ), 'why' => '' );
+	sap_task_save( array( 'result' => $text, 'progress' => array_slice( $list, -200 ) ), $task['id'] );
+	return array( 'msg' => 'گزارش کار ویرایش شد.', 'html' => sap_rich_text( $text, sap_task_site_base( $task ) ) );
+}
+
+/**
+ * Make a report clearer and more professional with the cheap AI model, keeping
+ * every fact, number and link; the manager reviews the text before saving.
+ *
+ * @return string|WP_Error
+ */
+function sap_report_polish( $task, $text ) {
+	if ( ! sap_ai_connected() ) {
+		return new WP_Error( 'sap_prog', 'هوش مصنوعی در تنظیمات وصل نشده است.' );
+	}
+	$text = trim( (string) $text );
+	if ( '' === $text ) {
+		return new WP_Error( 'sap_prog', 'اول متنی در گزارش باشد.' );
+	}
+	$schema = sap_ai_obj( array( 'text' => array( 'type' => 'string', 'description' => 'گزارش بازنویسی‌شده' ) ) );
+	$system = implode( "\n", array(
+		'تو سرپرست تیم سئو هستی و گزارش کار یکی از اعضا را برای گزارش ماهانه کارفرما مرتب می‌کنی.',
+		'- همه واقعیت‌ها، عددها، آدرس‌ها و لینک‌ها را دقیقاً نگه دار؛ چیزی که انجام نشده اضافه نکن.',
+		'- کوتاه، روشن و حرفه‌ای بنویس: چه کاری، روی کدام صفحه، با چه نتیجه‌ای. اگر چند کار است، هر کدام در یک خط با «-».',
+		'- فارسی روان با نیم‌فاصله درست؛ بدون مقدمه و تعارف.',
+	) );
+	$input  = wp_json_encode( array( 'task' => $task['title'], 'page' => $task['url'], 'report' => $text ), JSON_UNESCAPED_UNICODE );
+	$res    = sap_ai_request( $system, $input, $schema, array( 'purpose' => 'help', 'max_tokens' => 1200, 'effort' => 'low' ) );
+	if ( is_wp_error( $res ) ) {
+		return $res;
+	}
+	return trim( (string) ( $res['text'] ?? '' ) ) ?: $text;
 }
 
 /**
@@ -957,6 +1041,26 @@ add_action( 'rest_api_init', function () {
 				return $t;
 			}
 			$r = sap_task_progress_add( $t, (string) $req->get_param( 'text' ), sanitize_key( (string) $req->get_param( 'state' ) ), (string) $req->get_param( 'why' ) );
+			return is_wp_error( $r ) ? $r : array_merge( array( 'ok' => true ), $r );
+		},
+	) );
+	register_rest_route( $ns, '/task/(?P<id>\d+)/report-edit', array(
+		'methods'             => 'POST',
+		'permission_callback' => 'sap_can_work',
+		'callback'            => function ( WP_REST_Request $req ) {
+			$t = sap_task( (int) $req['id'] );
+			if ( ! $t ) {
+				return new WP_Error( 'sap_task', 'کار پیدا نشد.', array( 'status' => 404 ) );
+			}
+			$what = sanitize_key( (string) $req->get_param( 'what' ) );
+			if ( 'polish' === $what ) {
+				if ( ! sap_can_review( $t ) ) {
+					return new WP_Error( 'sap_prog', 'فقط مدیر می‌تواند گزارش اعضا را ویرایش کند.', array( 'status' => 403 ) );
+				}
+				$r = sap_report_polish( $t, (string) $req->get_param( 'text' ) );
+				return is_wp_error( $r ) ? $r : array( 'ok' => true, 'text' => $r );
+			}
+			$r = 'progress' === $what ? sap_progress_edit( $t, (int) $req->get_param( 'i' ), (string) $req->get_param( 'text' ) ) : sap_report_edit( $t, (string) $req->get_param( 'text' ) );
 			return is_wp_error( $r ) ? $r : array_merge( array( 'ok' => true ), $r );
 		},
 	) );

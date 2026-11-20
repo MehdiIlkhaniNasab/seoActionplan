@@ -43,7 +43,7 @@ function sap_track_last_day() {
  * Measure one new article.
  */
 function sap_track_new( $project, $idea, $prev = array() ) {
-	$pub  = (string) ( $prev['pub'] ?? '' ) ?: ( $idea['planned_date'] ?: substr( (string) $idea['updated_at'], 0, 10 ) );
+	$pub  = (string) ( $idea['published_at'] ?? '' ) ?: ( (string) ( $prev['pub'] ?? '' ) ?: ( $idea['planned_date'] ?: substr( (string) $idea['updated_at'], 0, 10 ) ) );
 	$last = sap_track_last_day();
 	$out  = array( 'pub' => $pub, 'at' => sap_now() );
 	if ( $pub > $last ) {

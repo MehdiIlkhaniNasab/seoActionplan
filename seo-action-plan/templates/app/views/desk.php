@@ -75,9 +75,10 @@ $att   = function ( $list ) {
 					</header>
 					<h3><?php echo esc_html( $t['title'] ); ?></h3>
 					<?php if ( $t['created_by'] && 'pm' === sap_user_role( $t['created_by'] ) ) : ?><p class="sap-small sap-muted">📋 ثبت‌شده توسط مدیر پروژه <?php echo esc_html( sap_user_name( $t['created_by'] ) ); ?> — او هم می‌تواند این گزارش را تأیید کند.</p><?php endif; ?>
-					<div class="sap-desk-report">
-						<span>گزارش کار</span>
-						<div><?php echo sap_rich_text( $t['result'], sap_task_site_base( $t ) ); // phpcs:ignore ?></div>
+					<div class="sap-desk-report" data-sap-report="<?php echo esc_attr( $t['id'] ); ?>">
+						<span>گزارش کار <button type="button" class="sap-linkbtn" data-sap-report-edit data-ai="<?php echo sap_ai_connected() ? '1' : ''; ?>">ویرایش و بهتر کردن گزارش</button></span>
+						<div data-sap-report-html><?php echo sap_rich_text( $t['result'], sap_task_site_base( $t ) ); // phpcs:ignore ?></div>
+						<textarea hidden data-sap-report-raw><?php echo esc_textarea( $t['result'] ); ?></textarea>
 						<?php if ( $t['spent'] ) : ?><small class="sap-muted"><?php echo esc_html( sap_num( $t['spent'], 1 ) ); ?> ساعت کار</small><?php endif; ?>
 					</div>
 					<?php echo $att( $t['attachments'] ); // phpcs:ignore ?>

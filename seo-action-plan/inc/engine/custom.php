@@ -331,8 +331,11 @@ function sap_idea_from_keyword( $project, $keyword, $secondary, $notes, $period 
 }
 
 /**
- * A content rewrite is a content update of the month: create / advance the
- * update row so the calendar lists it.
+ * A content rewrite advances the page's update in the calendar. Opening the
+ * rewrite tool alone never adds a calendar row (that filled the calendar with
+ * duplicate «بازنویسی» updates): an open update of the page moves to «در حال
+ * انجام» and is finished when the rewrite is published; a rewrite published on a
+ * page without an update is recorded as one done update of the month.
  *
  * @param string $state started|approved|published
  */
@@ -341,24 +344,22 @@ function sap_update_from_revision( $rev, $state ) {
 	if ( ! $project || empty( $rev['url'] ) ) {
 		return;
 	}
-	$k  = sap_norm_url( $rev['url'] );
-	$id = 0;
-	foreach ( sap_updates( $project['id'] ) as $u ) {
-		if ( sap_norm_url( $u['url'] ) === $k && 'done' !== $u['status'] && 'cancelled' !== $u['status'] ) {
-			$id = $u['id'];
-		}
-	}
-	if ( ! $id ) {
-		if ( 'started' !== $state && 'approved' !== $state ) {
+	$open = sap_update_open_for( $project['id'], $rev['url'] );
+	if ( ! $open ) {
+		if ( 'published' !== $state || sap_update_recent_done( $project['id'], $rev['url'], 20 ) ) {
 			return;
 		}
-		$id = sap_update_plan( $project, $rev['url'], sap_period_current(), array( 'source' => 'rewrite', 'reason' => 'بازنویسی و آپدیت محتوا با سکان (پیشنهاد تغییرات با هایلایت).' ) );
+		$id = sap_update_plan( $project, $rev['url'], sap_period_current( $project['id'] ), array( 'source' => 'rewrite', 'reason' => 'بازنویسی محتوا با سکان و انتشار روی سایت.' ) );
+		sap_update_save( array( 'status' => 'done' ), $id );
+		sap_calendar_sync_sheet( $project );
+		return;
 	}
 	$set = array( 'status' => 'published' === $state ? 'done' : 'in_progress' );
-	if ( 'approved' === $state && ! empty( $rev['audit']['summary'] ) ) {
-		$u            = sap_update( $id );
-		$set['reason'] = trim( ( $u['reason'] ?? '' ) . "\nنتیجه ممیزی: " . $rev['audit']['summary'] );
+	if ( 'approved' === $state && ! empty( $rev['audit']['summary'] ) && false === mb_strpos( $open['reason'], 'نتیجه ممیزی:' ) ) {
+		$set['reason'] = trim( $open['reason'] . "\nنتیجه ممیزی: " . $rev['audit']['summary'] );
 	}
-	sap_update_save( $set, $id );
-	sap_calendar_sync_sheet( $project );
+	if ( $set['status'] !== $open['status'] || isset( $set['reason'] ) ) {
+		sap_update_save( $set, $open['id'] );
+		sap_calendar_sync_sheet( $project );
+	}
 }

@@ -42,6 +42,18 @@ foreach ( sap_updates( $pid, array( 'period' => $period ) ) as $u ) {
 		$planned[ sap_norm_url( $u['url'] ) ] = $u;
 	}
 }
+// Pages handled recently (open update in any month, updated in the last 90 days,
+// or title / content changed on the site in the last 60 days) are not suggested
+// again; they are listed apart so you can see why.
+sap_update_reconcile( $pid );
+$handled = sap_cplan_handled( $pid );
+$resting = array();
+foreach ( $list as $k => $x ) {
+	if ( isset( $handled[ $k ] ) && ! isset( $planned[ $k ] ) ) {
+		$resting[ $k ] = $x + array( 'handled' => $handled[ $k ] );
+		unset( $list[ $k ] );
+	}
+}
 $ai      = (array) get_option( 'sap_upd_ai_' . $pid, array() );
 $c       = sap_commit( $project );
 $fit_l   = array( 'own' => array( 'کلمه خود صفحه', 'is-good' ), 'fit' => array( 'مرتبط', 'is-info' ), 'other' => array( 'مال صفحه دیگر', 'is-warn' ), 'brand' => array( 'برند', '' ), 'info' => array( 'اطلاعاتی → مقاله', 'is-warn' ), 'buy' => array( 'خرید → دسته', 'is-warn' ) );
@@ -92,6 +104,10 @@ $base    = sap_project_url( $pid, 'updates' );
 	</details>
 </section>
 
+<?php sap_view( 'content-slots', array( 'project' => $project, 'kind' => 'upd' ) ); ?>
+
+
+<h2 class="sap-section-title">پیشنهادهای آپدیت از داده سرچ کنسول <small class="sap-muted">برای انتخاب صفحه‌های بالا کمکتان می‌کند</small></h2>
 <?php if ( ! $ds ) : ?>
 	<div class="sap-empty"><p>«تحلیل صفحات» را بزنید. سکان داده سرچ کنسول (۲۸ و ۹۰ روزه)، متن صفحات پربازدید و وضعیت ایندکس صفحات مهم را می‌خواند (۳۰ تا ۹۰ ثانیه).</p></div>
 	<?php return; ?>
@@ -174,4 +190,14 @@ $base    = sap_project_url( $pid, 'updates' );
 			</div>
 		</article>
 	<?php endforeach; ?>
+	<?php if ( $resting ) : ?>
+		<details class="sap-upd-rest">
+			<summary><?php echo esc_html( sprintf( '%s صفحه به‌تازگی آپدیت یا برنامه‌ریزی شده و دوباره پیشنهاد نمی‌شود', sap_num( count( $resting ) ) ) ); ?></summary>
+			<ul>
+				<?php foreach ( $resting as $x ) : ?>
+					<li><a href="<?php echo esc_url( $x['url'] ); ?>" target="_blank" rel="noopener"><?php echo esc_html( $x['title'] ); ?></a> <small class="sap-muted"><?php echo esc_html( $x['handled']['label'] ); ?></small></li>
+				<?php endforeach; ?>
+			</ul>
+		</details>
+	<?php endif; ?>
 </section>

@@ -110,9 +110,9 @@ $flow    = array( 'next' => 'اقدام بعدی', 'doing' => 'در حال ان�
 		<?php sap_view( 'progress-log', array( 't' => $t, 'form' => true ) ); ?>
 
 		<?php if ( '' !== $t['result'] || $t['attachments'] ) : ?>
-			<div class="sap-treport">
-				<span>گزارش کار<?php echo $t['spent'] ? ' · ' . esc_html( sap_num( $t['spent'], 1 ) ) . ' ساعت' : ''; ?></span>
-				<?php if ( '' !== $t['result'] ) : ?><div><?php echo sap_rich_text( $t['result'], sap_task_site_base( $t ) ); // phpcs:ignore ?></div><?php endif; ?>
+			<div class="sap-treport" data-sap-report="<?php echo esc_attr( $t['id'] ); ?>">
+				<span>گزارش کار<?php echo $t['spent'] ? ' · ' . esc_html( sap_num( $t['spent'], 1 ) ) . ' ساعت' : ''; ?><?php if ( sap_can_review( $t ) && '' !== $t['result'] ) : ?> <button type="button" class="sap-linkbtn" data-sap-report-edit data-ai="<?php echo sap_ai_connected() ? '1' : ''; ?>">ویرایش گزارش</button><?php endif; ?></span>
+				<?php if ( '' !== $t['result'] ) : ?><div data-sap-report-html><?php echo sap_rich_text( $t['result'], sap_task_site_base( $t ) ); // phpcs:ignore ?></div><textarea hidden data-sap-report-raw><?php echo esc_textarea( $t['result'] ); ?></textarea><?php endif; ?>
 				<?php if ( $t['attachments'] ) : ?>
 					<div class="sap-att-list">
 						<?php foreach ( $t['attachments'] as $a ) : ?>

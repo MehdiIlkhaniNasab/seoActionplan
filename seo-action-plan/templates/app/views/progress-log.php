@@ -11,14 +11,15 @@
 defined( 'ABSPATH' ) || exit;
 
 $form  = ! empty( $form ) && ! in_array( $t['status'], array( 'done', 'dropped', 'review' ), true );
-$list  = array_reverse( $t['progress'] );
+$list  = array_reverse( (array) $t['progress'], true ); // Keys = index in the task (for editing).
+$can_e = sap_can_review( $t );
 $days  = sap_task_open_days( $t );
 $sum   = sap_progress_summary( $t );
 if ( ! $list && ! $form ) {
 	return;
 }
 ?>
-<div class="sap-plog<?php echo $sum['blocked'] ? ' is-blocked' : ''; ?>" data-sap-plog="<?php echo esc_attr( $t['id'] ); ?>">
+<div class="sap-plog<?php echo $sum['blocked'] ? ' is-blocked' : ''; ?>" data-sap-plog="<?php echo esc_attr( $t['id'] ); ?>" data-ai="<?php echo sap_ai_connected() ? '1' : ''; ?>">
 	<div class="sap-plog-head">
 		<b>🗒️ گزارش‌های روزانه</b>
 		<span class="sap-plog-meta">
@@ -43,11 +44,19 @@ if ( ! $list && ! $form ) {
 	<?php if ( $list ) : ?>
 		<ol class="sap-plog-list<?php echo count( $list ) > 3 ? ' is-collapsed' : ''; ?>">
 			<?php foreach ( $list as $i => $p ) : ?>
-				<li class="is-<?php echo esc_attr( $p['state'] ?? 'progress' ); ?>">
+				<?php if ( 'edit' === ( $p['kind'] ?? '' ) ) : ?>
+					<li class="is-edit"><span class="sap-plog-dot"></span><div><span class="sap-plog-when">✎ <?php echo esc_html( sap_first_name( sap_user_name( (int) $p['u'] ) ) . ' گزارش کار را ویرایش کرد · ' . sap_jdate( substr( $p['at'], 0, 10 ), 'day' ) ); ?></span><?php if ( $can_e && '' !== trim( (string) $p['text'] ) ) : ?><details class="sap-plog-orig"><summary>متن قبلی</summary><p><?php echo nl2br( esc_html( $p['text'] ) ); ?></p></details><?php endif; ?></div></li>
+					<?php continue; ?>
+				<?php endif; ?>
+				<?php $own = ! in_array( $p['kind'] ?? '', array( 'delegate', 'follow' ), true ); ?>
+				<li class="is-<?php echo esc_attr( $p['state'] ?? 'progress' ); ?>" data-sap-pentry="<?php echo esc_attr( $i ); ?>">
 					<span class="sap-plog-dot"></span>
 					<div>
-						<span class="sap-plog-when"><?php echo esc_html( sap_weekday_fa( substr( $p['at'], 0, 10 ) ) . ' ' . sap_jdate( substr( $p['at'], 0, 10 ), 'day' ) . ' · ' . sap_fa( substr( $p['at'], 11, 5 ) ) ); ?> · <?php echo esc_html( sap_first_name( sap_user_name( (int) $p['u'] ) ) ); ?></span>
-						<p><?php echo nl2br( esc_html( $p['text'] ) ); ?></p>
+						<span class="sap-plog-when"><?php echo esc_html( sap_weekday_fa( substr( $p['at'], 0, 10 ) ) . ' ' . sap_jdate( substr( $p['at'], 0, 10 ), 'day' ) . ' · ' . sap_fa( substr( $p['at'], 11, 5 ) ) ); ?> · <?php echo esc_html( sap_first_name( sap_user_name( (int) $p['u'] ) ) ); ?><?php if ( ! empty( $p['eu'] ) ) : ?> <em class="sap-plog-ed" title="<?php echo esc_attr( 'ویرایش ' . sap_jdate( substr( (string) $p['eat'], 0, 10 ), 'day' ) ); ?>">✎ ویرایش <?php echo esc_html( sap_first_name( sap_user_name( (int) $p['eu'] ) ) ); ?></em><?php endif; ?>
+							<?php if ( $can_e && $own ) : ?><button type="button" class="sap-linkbtn sap-plog-edit" data-sap-pedit aria-label="ویرایش این گزارش">ویرایش</button><?php endif; ?>
+						</span>
+						<p data-sap-ptext><?php echo nl2br( esc_html( $p['text'] ) ); ?></p>
+						<?php if ( $can_e && ! empty( $p['orig'] ) ) : ?><details class="sap-plog-orig"><summary>متن اصلی عضو</summary><p><?php echo nl2br( esc_html( $p['orig'] ) ); ?></p></details><?php endif; ?>
 						<?php if ( 'blocked' === ( $p['state'] ?? '' ) ) : ?><p class="sap-plog-why">⚠️ گیر کرده: <?php echo esc_html( $p['why'] ); ?></p><?php endif; ?>
 					</div>
 				</li>
