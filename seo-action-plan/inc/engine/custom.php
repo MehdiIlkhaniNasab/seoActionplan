@@ -346,7 +346,9 @@ function sap_update_from_revision( $rev, $state ) {
 	}
 	$open = sap_update_open_for( $project['id'], $rev['url'] );
 	if ( ! $open ) {
-		if ( 'published' !== $state || sap_update_recent_done( $project['id'], $rev['url'], 20 ) ) {
+		// A new article of the calendar (or its writing task) polished with the rewrite tool
+		// is new content, not an update.
+		if ( 'published' !== $state || sap_update_recent_done( $project['id'], $rev['url'], 20 ) || '' !== sap_url_new_content( $project['id'], $rev['url'], (int) ( $rev['task_id'] ?? 0 ) ) ) {
 			return;
 		}
 		$id = sap_update_plan( $project, $rev['url'], sap_period_current( $project['id'] ), array( 'source' => 'rewrite', 'reason' => 'بازنویسی محتوا با سکان و انتشار روی سایت.' ) );

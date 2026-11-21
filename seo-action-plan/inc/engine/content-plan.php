@@ -388,6 +388,12 @@ function sap_cplan_handled( $project_id ) {
 			$set( $u['url'], 'done', 'آپدیت شد ' . sap_jdate( substr( $u['done_at'], 0, 10 ), 'short' ), $u['done_at'] );
 		}
 	}
+	foreach ( sap_ideas( $project_id, array( 'status' => array( 'published' ) ) ) as $i ) {
+		$when = $i['published_at'] ?: substr( (string) $i['updated_at'], 0, 10 );
+		if ( '' !== $i['published_url'] && $when >= substr( $since90, 0, 10 ) ) {
+			$set( $i['published_url'], 'site', 'محتوای جدید تقویم، منتشر شده ' . sap_jdate( $when, 'short' ), $when );
+		}
+	}
 	$rows = $wpdb->get_results( $wpdb->prepare( 'SELECT title, url, happened_at FROM ' . sap_table( 'activity' ) . " WHERE project_id = %d AND url <> '' AND category IN ('content_update','onpage','content') AND happened_at >= %s ORDER BY happened_at ASC", $project_id, gmdate( 'Y-m-d H:i:s', time() - 60 * DAY_IN_SECONDS ) ) ); // phpcs:ignore
 	foreach ( (array) $rows as $r ) {
 		$set( $r->url, 'site', 'تغییر روی سایت ' . sap_jdate( substr( $r->happened_at, 0, 10 ), 'short' ) . ': ' . mb_strimwidth( (string) $r->title, 0, 70, '…' ), $r->happened_at );
@@ -409,6 +415,49 @@ function sap_cplan_site_changes( $project_id, $url, $since ) {
 }
 
 /**
+ * Is this page new content rather than a page to update? Its article in the
+ * calendar, a new-content task, or published on the site in the last 45 days.
+ *
+ * @return string Why ('' = not new content).
+ */
+function sap_url_new_content( $project_id, $url, $task_id = 0 ) {
+	$k = sap_norm_url( $url );
+	if ( '' === $k ) {
+		return '';
+	}
+	foreach ( sap_ideas( $project_id, array( 'status' => array( 'scheduled', 'published' ) ) ) as $i ) {
+		if ( '' !== $i['published_url'] && sap_norm_url( $i['published_url'] ) === $k ) {
+			return 'محتوای جدید تقویم «' . ( $i['title'] ?: $i['keyword'] ) . '»';
+		}
+	}
+	$t = $task_id ? sap_task( $task_id ) : null;
+	if ( $t && ( 'content_new' === $t['context'] || 0 === strpos( (string) $t['recurring'], 'cyc_new_' ) ) ) {
+		return 'کار تولید محتوای جدید';
+	}
+	$it = function_exists( 'sap_site_item' ) ? sap_site_item( $project_id, $url ) : null;
+	if ( $it && '' !== (string) $it['date'] && strtotime( (string) $it['date'] ) > time() - 45 * DAY_IN_SECONDS ) {
+		return 'تازه منتشر شده (' . sap_jdate( substr( (string) $it['date'], 0, 10 ), 'short' ) . ')';
+	}
+	return '';
+}
+
+/**
+ * «Done» updates the rewrite tool recorded for what was really a new article of
+ * the calendar leave the updates (checked on every reconcile: the article's link
+ * may be entered after the rewrite was published).
+ */
+function sap_cplan_repair2( $project_id ) {
+	$n = 0;
+	foreach ( sap_updates( $project_id, array( 'status' => array( 'done' ) ) ) as $u ) {
+		if ( 'rewrite' === $u['source'] && ! $u['task_id'] && '' !== sap_url_new_content( $project_id, $u['url'] ) ) {
+			sap_update_save( array( 'status' => 'cancelled' ), $u['id'] );
+			++$n;
+		}
+	}
+	return $n;
+}
+
+/**
  * One-time repair of what the earlier sheet sync got wrong:
  *  - ideas the sync made from update rows (the page is in the updates, the
  *    «article» is not real) leave the calendar;
@@ -418,9 +467,10 @@ function sap_cplan_site_changes( $project_id, $url, $since ) {
  * @return int Ideas changed.
  */
 function sap_cplan_repair( $project_id ) {
-	$flag = 'sap_cplan_repair1_' . (int) $project_id;
+	$fixed = sap_cplan_repair2( $project_id );
+	$flag  = 'sap_cplan_repair1_' . (int) $project_id;
 	if ( get_option( $flag ) ) {
-		return 0;
+		return $fixed;
 	}
 	update_option( $flag, sap_now(), false );
 	$pages = array();

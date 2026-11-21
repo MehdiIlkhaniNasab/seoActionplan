@@ -601,7 +601,7 @@ function sap_content_site_action( $rev, $do, $extra = array() ) {
 			sap_activity_add( $rev['project_id'], array(
 				'focus_id'     => $task['focus_id'] ?? 0,
 				'task_id'      => $rev['task_id'],
-				'category'     => 'content_update',
+				'category'     => '' !== sap_url_new_content( $rev['project_id'], $url, (int) $rev['task_id'] ) ? 'content_new' : 'content_update',
 				'action'       => 'content_publish',
 				'title'        => sprintf( 'انتشار بروزرسانی محتوای «%s» روی سایت', $rev['title'] ),
 				'url'          => $url,
