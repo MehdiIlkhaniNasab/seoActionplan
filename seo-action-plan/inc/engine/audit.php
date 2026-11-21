@@ -1042,8 +1042,8 @@ function sap_update_brief( $project, $update ) {
 	$money = array();
 	$posts = array();
 	foreach ( $ctx['keymap'] as $mk => $m ) {
-		if ( $mk === $k || '' === $m['primary_kw'] ) {
-			continue;
+		if ( $mk === $k || '' === $m['primary_kw'] || ! sap_link_ok( $project['id'], $m['url'] ) ) {
+			continue; // Pruned / redirected pages never become link targets.
 		}
 		$row = array( sap_short_url( $m['url'], 80 ), $m['primary_kw'] );
 		if ( in_array( $m['page_type'], array( 'category', 'product' ), true ) ) {
@@ -1074,16 +1074,22 @@ function sap_update_brief( $project, $update ) {
 	$task   = implode( "\n", array(
 		'تو سرپرست محتوای سئو هستی. برای آپدیت کامل و حرفه‌ای این صفحه یک بریف دقیق و قابل اجرا برای نویسنده بنویس.',
 		sap_audit_lens( $group ),
-		'کلمه اصلی و فرعی‌ها را از نقشه کلمات و کوئری‌های واقعی بگیر و جای دقیقشان را مشخص کن (تایتل، H1، پاراگراف اول، تیترها). بخش‌های موجود خوب را نگه دار و فقط کمبودها را اضافه کن.',
-		'لینک‌های داخلی فقط از money_pages و posts آمده باشند با انکر طبیعی؛ links_in از مقالات مرتبط به این صفحه باشد.',
+		'هدف بریف، کلمه کلیدی اصلی (target_keyword) است: keyword خروجی همان باشد؛ تایتل، H1 و پاراگراف اول حتماً آن را داشته باشند و همه تیترها در خدمت همان نیت جستجو باشند. کلمات فرعی فقط از secondary و کوئری‌های واقعی همین صفحه.',
+		'دیدگاه مدیر سئو (manager_view) و هدف آپدیت (goal) اصل است؛ بریف را بر اساس آن‌ها بنویس. تحلیل قدیمی (audit) و reason فقط وقتی به کار می‌آیند که با کلمه هدف و دیدگاه مدیر هم‌راستا باشند؛ در تعارض، آن‌ها را کنار بگذار.',
+		'بخش‌های موجود خوب را نگه دار و فقط کمبودها را اضافه کن.',
+		'لینک‌های داخلی فقط از money_pages و posts (همه صفحه‌های زنده‌اند) با انکری که موضوع صفحه مقصد را بگوید؛ هیچ آدرس دیگری نساز. links_in از مقالات مرتبط به این صفحه باشد.',
 		'برای محصول، attributes را کامل بنویس (نام ویژگی و راهنمای مقدار). برای مقاله، منبع معتبر خارجی پیشنهاد بده.',
 	) );
+	// Boilerplate of older rewrite rows is not a reason to write anything.
+	$reason = trim( preg_replace( '/^بازنویسی (و آپدیت )?محتوا با سکان[^\n]*$/mu', '', (string) $update['reason'] ) );
 	$input  = array(
 		'page'        => $facts,
 		'type'        => sap_content_types()[ $update['content_type'] ] ?? $update['content_type'],
-		'keyword'     => $update['keyword'],
+		'target_keyword' => $update['keyword'],
 		'secondary'   => $update['secondary'],
-		'reason'      => $update['reason'],
+		'manager_view' => (string) ( $update['my_view'] ?? '' ),
+		'goal'        => sap_update_goal( $update ),
+		'reason'      => $reason,
 		'audit'       => $audit ? array( 'diagnosis' => $audit['diagnosis'], 'actions' => array_column( $audit['actions'], 'title' ), 'brief' => $audit['update_brief'] ) : null,
 		'focuses'     => array_map( function ( $f ) {
 			return array( 'name' => $f['name'], 'goal' => $f['goal'] );
@@ -1105,6 +1111,18 @@ function sap_update_brief( $project, $update ) {
 	foreach ( array( 'links_out', 'links_in' ) as $lk ) {
 		foreach ( (array) ( $res[ $lk ] ?? array() ) as $i => $l ) {
 			$res[ $lk ][ $i ]['url'] = sap_full_url( $project, (string) ( $l['url'] ?? '' ) );
+		}
+		$res[ $lk ] = sap_links_live( $project['id'], (array) ( $res[ $lk ] ?? array() ) ); // Never a removed / redirected page.
+	}
+	// The brief must serve the target keyword: say so when the title / H1 miss it.
+	$res['warnings'] = array();
+	if ( '' !== (string) $update['keyword'] ) {
+		$need = sap_tokens( sap_kw_core( $update['keyword'] ) );
+		foreach ( array( 'title' => 'تایتل', 'h1' => 'H1' ) as $f => $l ) {
+			$have = sap_tokens( sap_kw_core( (string) ( $res[ $f ] ?? '' ) ) );
+			if ( $need && count( array_intersect( $need, $have ) ) < count( $need ) ) {
+				$res['warnings'][] = sprintf( '%s پیشنهادی کلمه هدف «%s» را کامل ندارد؛ قبل از اجرا اصلاح شود.', $l, $update['keyword'] );
+			}
 		}
 	}
 	$res['at'] = sap_now();

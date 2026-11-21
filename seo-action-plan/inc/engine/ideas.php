@@ -46,8 +46,12 @@ function sap_ideas_input( $project, $count, $source = 'all' ) {
 	$articles = array();
 	$money    = array();
 	foreach ( $map as $k => $m ) {
-		if ( '' !== $m['core'] ) {
-			$have[ $m['core'] ] = true;
+		$tgt = sap_link_target( $pid, $m['url'] );
+		if ( '' !== $m['core'] && 'gone' !== $tgt['state'] ) {
+			$have[ $m['core'] ] = true; // A pruned (410) page's topic is free again.
+		}
+		if ( 'ok' !== $tgt['state'] ) {
+			continue; // Pruned / redirected pages are not offered to the AI as pages or links.
 		}
 		$row = array( 'url' => $m['url'], 'title' => $m['title'], 'keyword' => $m['primary_kw'] );
 		if ( 'article' === $m['page_type'] ) {
@@ -304,6 +308,7 @@ function sap_ideas_generate( $project, $count = 10, $period = '', $source = 'all
  * keyword shares words with the idea, money pages first.
  */
 function sap_idea_fill_links( $project, $keyword, $links ) {
+	$links = sap_links_live( $project['id'], $links ); // No links to pruned / redirected pages.
 	if ( count( $links ) >= 5 ) {
 		return array_slice( $links, 0, 5 );
 	}
@@ -314,7 +319,7 @@ function sap_idea_fill_links( $project, $keyword, $links ) {
 	$words = array_flip( sap_tokens( $keyword ) );
 	$cands = array();
 	foreach ( sap_keymap( $project['id'] ) as $k => $m ) {
-		if ( isset( $have[ $k ] ) || '' === $m['primary_kw'] || 'home' === $m['page_type'] ) {
+		if ( isset( $have[ $k ] ) || '' === $m['primary_kw'] || 'home' === $m['page_type'] || ! sap_link_ok( $project['id'], $m['url'] ) ) {
 			continue;
 		}
 		$hit = count( array_intersect_key( array_flip( sap_tokens( $m['primary_kw'] . ' ' . $m['title'] ) ), $words ) );

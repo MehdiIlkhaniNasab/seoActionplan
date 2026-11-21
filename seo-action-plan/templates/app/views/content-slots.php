@@ -14,6 +14,7 @@
 defined( 'ABSPATH' ) || exit;
 
 $pid    = $project['id'];
+sap_cplan_repair( $pid );
 $period = sap_period_current( $pid );
 $is_upd = 'upd' === $kind;
 $slots  = $is_upd ? sap_cplan_upd_slots( $project, $period ) : sap_cplan_new_slots( $project, $period );

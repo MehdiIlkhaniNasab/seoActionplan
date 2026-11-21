@@ -327,8 +327,14 @@ add_action( 'rest_api_init', function () {
 				$res = sap_project_sheet_create( $project, (string) $req->get_param( 'existing' ) );
 				return is_wp_error( $res ) ? $res : array( 'ok' => true ) + $res;
 			}
+			// Both halves of the calendar: Blog (articles + updates) and the «آپدیت محتوا» tab.
+			sap_period_project( $project['id'] );
 			$res = sap_calendar_write_sheet( $project );
-			return is_wp_error( $res ) ? $res : array( 'ok' => true, 'msg' => $res );
+			if ( is_wp_error( $res ) ) {
+				return $res;
+			}
+			$up = sap_updates_write_sheet( sap_project( $project['id'] ) );
+			return array( 'ok' => true, 'msg' => $res . ( is_wp_error( $up ) ? '؛ تب آپدیت محتوا: ' . $up->get_error_message() : ' · ' . $up ) );
 		},
 	) );
 

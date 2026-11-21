@@ -409,6 +409,46 @@ function sap_cplan_site_changes( $project_id, $url, $since ) {
 }
 
 /**
+ * One-time repair of what the earlier sheet sync got wrong:
+ *  - ideas the sync made from update rows (the page is in the updates, the
+ *    «article» is not real) leave the calendar;
+ *  - articles the sync dropped as «deleted from the sheet» while their task is
+ *    still open in the action plan come back to their month.
+ *
+ * @return int Ideas changed.
+ */
+function sap_cplan_repair( $project_id ) {
+	$flag = 'sap_cplan_repair1_' . (int) $project_id;
+	if ( get_option( $flag ) ) {
+		return 0;
+	}
+	update_option( $flag, sap_now(), false );
+	$pages = array();
+	foreach ( sap_updates( $project_id ) as $u ) {
+		if ( 'cancelled' !== $u['status'] ) {
+			$pages[ sap_kw_key( $u['keyword'] ) ] = true;
+			$pages[ sap_kw_key( $u['title'] ) ]   = true;
+			$pages[ sap_norm_url( $u['url'] ) ]   = true;
+		}
+	}
+	unset( $pages[''] );
+	$n = 0;
+	foreach ( sap_ideas( $project_id ) as $i ) {
+		$t    = $i['task_id'] ? sap_task( $i['task_id'] ) : null;
+		$live = $t && ! in_array( $t['status'], array( 'dropped' ), true );
+		if ( 'sheet' === $i['origin'] && ! $live && in_array( $i['status'], array( 'scheduled', 'approved', 'new' ), true )
+			&& ( isset( $pages[ sap_kw_key( $i['keyword'] ) ] ) || ( '' !== $i['published_url'] && isset( $pages[ sap_norm_url( $i['published_url'] ) ] ) ) ) ) {
+			sap_idea_save( array( 'status' => 'rejected', 'source_note' => trim( $i['source_note'] . ' | تکراری: این صفحه در آپدیت‌های محتواست، نه مقاله جدید.', ' |' ) ), $i['id'] );
+			++$n;
+		} elseif ( 'rejected' === $i['status'] && $live ) {
+			sap_idea_save( array( 'status' => 'done' === $t['status'] && '' !== $i['published_url'] ? 'published' : 'scheduled', 'period' => $i['period'] ?: (string) $t['period'] ), $i['id'] );
+			++$n;
+		}
+	}
+	return $n;
+}
+
+/**
  * Bring the month's updates in line with what really happened:
  *  - duplicates of one page (older versions made one per rewrite) are merged
  *    into the oldest one that has a task, the rest are cancelled;
@@ -419,7 +459,7 @@ function sap_cplan_site_changes( $project_id, $url, $since ) {
  * @return int Updates changed.
  */
 function sap_update_reconcile( $project_id ) {
-	$n    = 0;
+	$n    = sap_cplan_repair( $project_id );
 	$open = sap_updates( $project_id, array( 'status' => array( 'planned', 'in_progress' ) ) );
 	$by   = array();
 	foreach ( $open as $u ) {

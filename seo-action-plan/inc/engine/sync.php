@@ -257,20 +257,28 @@ function sap_step_sheets( $project ) {
 	$msgs   = array();
 	$errors = array();
 	// The agency's «Blog» layout (monthly blocks) or the standard one-row-per-article table.
-	$raw = sap_sheet_values( $project['sheet_id'], $project['sheet_calendar_tab'] );
+	// Sokan writes its calendar to the «Blog» tab, so that is the tab read back into the
+	// calendar; another configured tab is only read (it never adds or removes articles).
+	$tab = $project['sheet_calendar_tab'];
+	$raw = sap_sheet_values( $project['sheet_id'], SAP_TAB_BLOG );
+	if ( ! is_wp_error( $raw ) && sap_is_blog_layout( $raw ) ) {
+		$tab = SAP_TAB_BLOG;
+	} else {
+		$raw = sap_sheet_values( $project['sheet_id'], $tab );
+	}
 	if ( ! is_wp_error( $raw ) && sap_is_blog_layout( $raw ) ) {
 		$items    = sap_blog_parse( $raw );
 		$kw_vals  = sap_sheet_values( $project['sheet_id'], SAP_TAB_BKEYWORD );
 		$related  = is_wp_error( $kw_vals ) ? array() : sap_bkeyword_parse( $kw_vals );
-		$imported = sap_calendar_import_sheet( $project, $items );
-		$cal      = array( 'rows' => sap_blog_calendar_rows( $items, $related ), 'header' => array(), 'map' => array(), 'tab' => $project['sheet_calendar_tab'], 'layout' => 'blog' );
+		$imported = SAP_TAB_BLOG === $tab ? sap_calendar_import_sheet( $project, $items, $tab ) : 0;
+		$cal      = array( 'rows' => sap_blog_calendar_rows( $items, $related ), 'header' => array(), 'map' => array(), 'tab' => $tab, 'layout' => 'blog' );
 	} else {
 		$cal = sap_sheet_read( $project['sheet_id'], $project['sheet_calendar_tab'], 'calendar' );
 	}
 	if ( is_wp_error( $cal ) ) {
 		$errors[] = $cal->get_error_message();
 	} else {
-		$logged = sap_log_published_content( $project, $cal['rows'] );
+		$logged = sap_log_published_content( $project, $cal['rows'], (string) ( $cal['tab'] ?? '' ) );
 		sap_dataset_put( $project['id'], 'sheet_calendar', $cal, array( 'count' => count( $cal['rows'] ) ) );
 		$msgs[] = sprintf( 'تقویم محتوا: %s ردیف', sap_num( count( $cal['rows'] ) ) ) . ( $logged ? sprintf( ' (%s انتشار جدید در لاگ ثبت شد)', sap_num( $logged ) ) : '' ) . ( ! empty( $imported ) ? sprintf( ' · %s مقاله از شیت وارد تقویم ابزار شد', sap_num( $imported ) ) : '' );
 	}
@@ -294,10 +302,11 @@ function sap_step_sheets( $project ) {
  *
  * @return int Entries added.
  */
-function sap_log_published_content( $project, $rows ) {
+function sap_log_published_content( $project, $rows, $tab = '' ) {
 	$prev     = sap_dataset_payload( $project['id'], 'sheet_calendar' );
 	$had      = array();
-	$first    = empty( $prev );
+	// First read, or read from another tab than last time: only this month's articles.
+	$first    = empty( $prev ) || ( '' !== $tab && $tab !== (string) ( $prev['tab'] ?? '' ) );
 	foreach ( (array) ( $prev['rows'] ?? array() ) as $r ) {
 		if ( '' !== $r['url'] ) {
 			$had[ sap_norm_url( $r['url'] ) ] = true;

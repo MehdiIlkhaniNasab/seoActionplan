@@ -357,6 +357,9 @@ function sap_is_blog_layout( $values ) {
 function sap_blog_calendar_rows( $items, $keywords = array() ) {
 	$rows = array();
 	foreach ( $items as $it ) {
+		if ( 'update' === ( $it['kind'] ?? 'idea' ) ) {
+			continue; // Update rows are existing pages, not articles of the calendar.
+		}
 		$rel    = $keywords[ sap_kw_key( $it['keyword'] ) ] ?? array();
 		$rows[] = array(
 			'_row'           => $it['row'],
@@ -418,78 +421,186 @@ function sap_bkeyword_parse( $values ) {
 }
 
 /**
- * Bring what the team typed in the sheet back into the calendar: status,
- * publish date, link, content source; and import articles the tool does not know.
+ * One sheet cell in a comparable form (spaces, Persian digits / separators,
+ * link lists), so what Sokan wrote and what the sheet returns can be compared.
+ */
+function sap_blog_norm( $field, $v ) {
+	if ( 'links' === $field ) {
+		return implode( "\n", array_map( function ( $l ) {
+			return trim( rawurldecode( (string) ( $l['url'] ?? '' ) ) ) . '|' . trim( preg_replace( '/\s+/u', ' ', (string) ( $l['anchor'] ?? '' ) ) );
+		}, array_values( array_filter( (array) $v, function ( $l ) {
+			return '' !== trim( (string) ( $l['url'] ?? '' ) );
+		} ) ) ) );
+	}
+	if ( 'status' === $field ) {
+		return $v ? '1' : '0';
+	}
+	if ( in_array( $field, array( 'kp', 'rank', 'clicks' ), true ) ) {
+		$n = sap_cplan_number( (string) $v, 'rank' === $field );
+		return null === $n || ! is_numeric( $n ) ? '' : rtrim( rtrim( number_format( (float) $n, 1, '.', '' ), '0' ), '.' );
+	}
+	return trim( preg_replace( '/\s+/u', ' ', sap_norm_text( (string) $v ) ) );
+}
+
+/**
+ * The cells of a calendar row as Sokan writes them to the Blog tab (the snapshot
+ * that tells later which cells the team changed in the sheet).
+ */
+function sap_blog_snap_row( $kind, $row, $period ) {
+	if ( 'update' === $kind ) {
+		$b = (array) $row['brief'];
+		return array(
+			'keyword' => sap_blog_norm( 'keyword', $row['keyword'] ?: $row['title'] ),
+			'title'   => sap_blog_norm( 'title', ( $b['title'] ?? '' ) ?: $row['title'] ),
+			'desc'    => sap_blog_norm( 'desc', sap_update_goal( $row ) ),
+			'links'   => sap_blog_norm( 'links', array_slice( (array) $row['links'], 0, 3 ) ),
+			'source'  => sap_blog_norm( 'source', $row['source_note'] ),
+			'status'  => sap_blog_norm( 'status', 'done' === $row['status'] ),
+			'rank'    => sap_blog_norm( 'rank', null === $row['rank_before'] ? '' : $row['rank_before'] ),
+			'clicks'  => sap_blog_norm( 'clicks', null === $row['clicks_before'] ? '' : $row['clicks_before'] ),
+			'period'  => $period,
+		);
+	}
+	return array(
+		'keyword' => sap_blog_norm( 'keyword', $row['keyword'] ),
+		'kp'      => sap_blog_norm( 'kp', $row['kp'] ?: '' ),
+		'title'   => sap_blog_norm( 'title', $row['title'] ),
+		'desc'    => sap_blog_norm( 'desc', $row['brief'] ),
+		'links'   => sap_blog_norm( 'links', array_slice( (array) $row['links'], 0, 5 ) ),
+		'source'  => sap_blog_norm( 'source', $row['source_note'] ),
+		'status'  => sap_blog_norm( 'status', 'published' === $row['status'] ),
+		'link'    => sap_blog_norm( 'link', $row['published_url'] ),
+		'period'  => $period,
+	);
+}
+
+/**
+ * Snapshot of the Blog tab as Sokan last wrote it: «i{id}» / «u{id}» => cells.
+ */
+function sap_blog_snap( $project ) {
+	$s = get_option( 'sap_blog_snap_' . (int) $project['id'] . '_' . md5( (string) $project['sheet_id'] ), array() );
+	return is_array( $s ) ? $s : array();
+}
+
+/**
+ * Bring back what the team changed in the Blog tab, and only that.
  *
+ *  - A cell comes back only when it differs from what Sokan wrote there last
+ *    time (the snapshot): an edit made in the panel since then is never undone
+ *    by the older copy still in the sheet.
+ *  - Rows are matched by their ID column only (i12 / u5). A row whose item no
+ *    longer exists in Sokan is ignored (never re-created).
+ *  - A row the team added without an ID becomes a new article — unless its
+ *    keyword or link is already an article, an idea or a page in the updates.
+ *  - A row Sokan wrote that is missing now leaves the calendar only when the
+ *    read is clearly complete (its month block is there and most rows are) and
+ *    nobody is working on it (no live task in the action plan).
+ *
+ * @param string $tab The tab read (deletions are trusted only for the Blog tab).
  * @return int Articles imported.
  */
-function sap_calendar_import_sheet( $project, $items ) {
+function sap_calendar_import_sheet( $project, $items, $tab = SAP_TAB_BLOG ) {
 	if ( ! $items ) {
 		return 0;
 	}
 	$pid    = $project['id'];
-	$by_kw  = array();
+	$snap   = sap_blog_snap( $project );
 	$by_id  = array();
+	$known  = array(); // Keyword keys and URLs that already have a place.
 	foreach ( sap_ideas( $pid ) as $i ) {
-		$by_kw[ sap_kw_key( $i['keyword'] ) ] = $i;
-		$by_id[ (int) $i['id'] ]              = $i;
+		$by_id[ (int) $i['id'] ] = $i;
+		if ( 'rejected' !== $i['status'] ) {
+			$known[ sap_kw_key( $i['keyword'] ) ] = true;
+			if ( '' !== $i['published_url'] ) {
+				$known[ sap_norm_url( $i['published_url'] ) ] = true;
+			}
+		}
 	}
-	// M-label => period as last written by the tool; for a sheet the tool never
-	// wrote, the newest block is taken to be the current month.
+	foreach ( sap_updates( $pid ) as $u ) {
+		if ( 'cancelled' !== $u['status'] ) {
+			$known[ sap_kw_key( $u['keyword'] ) ] = true;
+			$known[ sap_kw_key( $u['title'] ) ]   = true;
+			$known[ sap_norm_url( $u['url'] ) ]   = true;
+		}
+	}
+	unset( $known[''] );
+	// M-label => period as last written by the tool.
 	$months = (array) ( $project['options']['calendar_labels'][ $project['sheet_id'] ] ?? array() );
 	$max_m  = max( array_column( $items, 'm' ) );
 	$new    = 0;
 	$seen   = array( 'idea' => array(), 'update' => array() );
+	$blocks = array();
+	$get_p  = function ( $m ) use ( $months, $max_m ) {
+		return $months[ 'M' . $m ] ?? sap_period_shift( sap_period_current(), $m - $max_m );
+	};
+	// Cells the team changed: differ from the snapshot. No snapshot for the row (first
+	// read after an upgrade): only the «published» tick and the link are trusted.
+	$changed = function ( $was, $field, $value ) {
+		if ( null === $was ) {
+			return in_array( $field, array( 'status', 'link' ), true ) && '' !== $value && '0' !== $value;
+		}
+		return array_key_exists( $field, $was ) && $value !== (string) $was[ $field ];
+	};
 	foreach ( $items as $it ) {
-		$period = $months[ 'M' . $it['m'] ] ?? sap_period_shift( sap_period_current(), $it['m'] - $max_m );
-		if ( 'update' === $it['kind'] ) {
-			// Content updates: what the team edits in the sheet wins — keyword, suggested
-			// title, goal, links and anchors, source, position / clicks before the update,
-			// the «done» tick and the month block. Blocks written by versions before 0.32
-			// (no «رتبه قبل» column) only bring back the tick and the month.
+		$period             = $get_p( $it['m'] );
+		$blocks[ $period ] = true;
+		$is_upd             = 'update' === $it['kind'];
+		$was                = $it['id'] ? ( $snap[ ( $is_upd ? 'u' : 'i' ) . $it['id'] ] ?? null ) : null;
+		$moved              = $was && isset( $months[ 'M' . $it['m'] ] ) && $period !== (string) ( $was['period'] ?? $period );
+		if ( $is_upd ) {
 			$u = $it['id'] ? sap_update( $it['id'] ) : null;
 			if ( ! $u || (int) $u['project_id'] !== (int) $pid ) {
 				continue;
 			}
 			$seen['update'][ (int) $u['id'] ] = true;
+			$has = array_flip( (array) ( $it['has'] ?? array() ) );
+			if ( ! isset( $has['rank'] ) ) {
+				$was = null; // A block written before 0.32: only the tick comes back.
+			}
 			$b   = (array) $u['brief'];
 			$upd = array();
-			$has = array_flip( (array) ( $it['has'] ?? array() ) );
-			if ( isset( $has['rank'] ) ) {
-				if ( '' !== $it['keyword'] && $it['keyword'] !== $u['keyword'] && $it['keyword'] !== $u['title'] ) {
+			$v   = array(
+				'keyword' => sap_blog_norm( 'keyword', $it['keyword'] ),
+				'title'   => sap_blog_norm( 'title', $it['title'] ),
+				'desc'    => sap_blog_norm( 'desc', $it['desc'] ),
+				'links'   => sap_blog_norm( 'links', $it['links'] ),
+				'source'  => sap_blog_norm( 'source', $it['source'] ),
+				'status'  => sap_blog_norm( 'status', $it['status'] ),
+				'rank'    => sap_blog_norm( 'rank', $it['rank'] ),
+				'clicks'  => sap_blog_norm( 'clicks', $it['clicks'] ),
+			);
+			if ( $was ) {
+				if ( $changed( $was, 'keyword', $v['keyword'] ) && '' !== $v['keyword'] ) {
 					$upd['keyword'] = $it['keyword'];
 				}
-				if ( '' !== $it['title'] && $it['title'] !== ( ( $b['title'] ?? '' ) ?: $u['title'] ) ) {
+				if ( $changed( $was, 'title', $v['title'] ) ) {
 					$b['title']   = $it['title'];
 					$upd['brief'] = $b;
 				}
-				if ( $it['desc'] !== sap_update_goal( $u ) ) {
+				if ( $changed( $was, 'desc', $v['desc'] ) ) {
 					$b['goal']    = $it['desc'];
 					$upd['brief'] = $b;
 				}
-				$norm = function ( $l ) {
-					return array( 'url' => rawurldecode( (string) ( $l['url'] ?? '' ) ), 'anchor' => (string) ( $l['anchor'] ?? '' ) );
-				};
-				if ( array_map( $norm, $it['links'] ) !== array_map( $norm, array_slice( (array) $u['links'], 0, 3 ) ) ) {
+				if ( $changed( $was, 'links', $v['links'] ) ) {
 					$upd['links'] = array_merge( $it['links'], array_slice( (array) $u['links'], 3 ) );
 				}
-				if ( $it['source'] !== $u['source_note'] ) {
+				if ( $changed( $was, 'source', $v['source'] ) ) {
 					$upd['source_note'] = $it['source'];
 				}
 				foreach ( array( 'rank' => 'rank_before', 'clicks' => 'clicks_before' ) as $ik => $uk ) {
-					$v   = (string) sap_cplan_number( $it[ $ik ], 'rank' === $ik );
-					$cur = null === $u[ $uk ] ? '' : (string) ( 'rank' === $ik ? round( (float) $u[ $uk ], 1 ) : $u[ $uk ] );
-					if ( ( '' === $v || is_numeric( $v ) ) && ( '' === $v ? '' !== $cur : '' === $cur || (float) $v !== (float) $cur ) ) {
-						$upd[ $uk ] = '' === $v ? null : $v;
+					if ( $changed( $was, $ik, $v[ $ik ] ) ) {
+						$upd[ $uk ] = '' === $v[ $ik ] ? null : $v[ $ik ];
 					}
 				}
 			}
-			if ( $it['status'] && 'done' !== $u['status'] ) {
-				$upd['status'] = 'done';
-			} elseif ( ! $it['status'] && 'done' === $u['status'] ) {
-				$upd['status'] = $u['task_id'] ? 'in_progress' : 'planned';
+			if ( $changed( $was, 'status', $v['status'] ) || ( null === $was && '1' === $v['status'] ) ) {
+				if ( '1' === $v['status'] && 'done' !== $u['status'] ) {
+					$upd['status'] = 'done';
+				} elseif ( '0' === $v['status'] && 'done' === $u['status'] && $was ) {
+					$upd['status'] = $u['task_id'] ? 'in_progress' : 'planned';
+				}
 			}
-			if ( $period !== $u['period'] ) {
+			if ( $moved ) {
 				$upd['period'] = $period;
 			}
 			if ( $upd ) {
@@ -497,51 +608,53 @@ function sap_calendar_import_sheet( $project, $items ) {
 			}
 			continue;
 		}
-		// Articles: matched by the ID column (keyword edits keep the same article), then by keyword.
-		$idea = ( $it['id'] && isset( $by_id[ $it['id'] ] ) ) ? $by_id[ $it['id'] ] : ( $by_kw[ sap_kw_key( $it['keyword'] ) ] ?? null );
-		$upd  = array();
-		if ( '' !== $it['link'] ) {
-			$upd['published_url'] = $it['link'];
-			$upd['status']        = 'published';
-		} elseif ( $it['status'] ) {
-			$upd['status'] = 'published';
-		}
-		if ( $idea ) {
+		// Articles: by the ID column only.
+		if ( $it['id'] ) {
+			$idea = $by_id[ $it['id'] ] ?? null;
+			if ( ! $idea ) {
+				continue; // Deleted in Sokan: the old sheet row does not bring it back.
+			}
 			$seen['idea'][ (int) $idea['id'] ] = true;
-			// What the team typed wins over the copy in Sokan.
-			if ( $it['keyword'] !== $idea['keyword'] ) {
-				$upd['keyword'] = $it['keyword'];
+			$v   = array(
+				'keyword' => sap_blog_norm( 'keyword', $it['keyword'] ),
+				'kp'      => sap_blog_norm( 'kp', $it['kp'] ?: '' ),
+				'title'   => sap_blog_norm( 'title', $it['title'] ),
+				'desc'    => sap_blog_norm( 'desc', $it['desc'] ),
+				'links'   => sap_blog_norm( 'links', $it['links'] ),
+				'source'  => sap_blog_norm( 'source', $it['source'] ),
+				'status'  => sap_blog_norm( 'status', $it['status'] ),
+				'link'    => sap_blog_norm( 'link', $it['link'] ),
+			);
+			$upd = array();
+			foreach ( array( 'keyword' => 'keyword', 'title' => 'title', 'desc' => 'brief', 'source' => 'source_note' ) as $f => $col ) {
+				if ( $was && $changed( $was, $f, $v[ $f ] ) && ( 'keyword' !== $f || '' !== $v[ $f ] ) ) {
+					$upd[ $col ] = 'desc' === $f ? $it['desc'] : $it[ $f ];
+				}
 			}
-			if ( '' !== $it['title'] && $it['title'] !== $idea['title'] ) {
-				$upd['title'] = $it['title'];
+			if ( $was && $changed( $was, 'kp', $v['kp'] ) ) {
+				$upd['kp'] = (int) $v['kp'];
 			}
-			if ( $it['desc'] !== (string) $idea['brief'] ) {
-				$upd['brief'] = $it['desc'];
-			}
-			if ( $it['kp'] && (int) $it['kp'] !== (int) $idea['kp'] ) {
-				$upd['kp'] = $it['kp'];
-			}
-			if ( $it['source'] !== (string) $idea['source_note'] ) {
-				$upd['source_note'] = $it['source'];
-			}
-			$old_links = array_map( function ( $l ) {
-				return array( 'url' => (string) ( $l['url'] ?? '' ), 'anchor' => (string) ( $l['anchor'] ?? '' ) );
-			}, array_slice( (array) $idea['links'], 0, 5 ) );
-			if ( $it['links'] !== $old_links ) {
+			if ( $was && $changed( $was, 'links', $v['links'] ) ) {
 				$upd['links'] = $it['links'];
 			}
-			$planned = sap_parse_date( $it['planned'] );
-			if ( '' !== $it['planned'] && $planned && $planned !== (string) $idea['planned_date'] ) {
-				$upd['planned_date'] = $planned;
-			} elseif ( '' === $it['planned'] && $idea['planned_date'] ) {
-				$upd['planned_date'] = null;
+			if ( $changed( $was, 'link', $v['link'] ) && '' !== $v['link'] ) {
+				$upd['published_url'] = $it['link'];
+				$upd['status']        = 'published';
+			} elseif ( $changed( $was, 'status', $v['status'] ) ) {
+				if ( '1' === $v['status'] ) {
+					$upd['status'] = 'published';
+				} elseif ( $was && '' === $v['link'] && 'published' === $idea['status'] ) {
+					$upd['status']        = 'scheduled'; // Unticked in the sheet and no link.
+					$upd['published_url'] = '';
+				}
 			}
-			// Unticked in the sheet and no link: back to «in the calendar».
-			if ( ! $it['status'] && '' === $it['link'] && 'published' === $idea['status'] ) {
-				$upd['status']        = 'scheduled';
-				$upd['published_url'] = '';
+			if ( isset( $upd['status'] ) && 'published' === $upd['status'] ) {
+				$pub = sap_parse_date( $it['publish'] );
+				if ( $pub ) {
+					$upd['published_at'] = $pub;
+				}
 			}
-			if ( $period !== $idea['period'] && $it['has_id'] ) {
+			if ( $moved ) {
 				$upd['period'] = $period; // Moved to another month block.
 			}
 			if ( $upd ) {
@@ -549,36 +662,52 @@ function sap_calendar_import_sheet( $project, $items ) {
 			}
 			continue;
 		}
-		$id = sap_idea_save( $upd + array(
-			'project_id'  => $pid,
-			'keyword'     => $it['keyword'],
-			'title'       => $it['title'],
-			'brief'       => $it['desc'],
-			'kp'          => $it['kp'],
-			'volume'      => $it['kp'],
-			'links'       => $it['links'],
-			'source_note' => $it['source'],
-			'origin'      => 'sheet',
-			'status'      => 'scheduled',
-			'period'      => $period,
-			'slot'        => $it['row'],
+		// A row the team added by hand (no ID).
+		if ( isset( $known[ sap_kw_key( $it['keyword'] ) ] ) || ( '' !== $it['link'] && isset( $known[ sap_norm_url( $it['link'] ) ] ) ) ) {
+			continue;
+		}
+		$id = sap_idea_save( array(
+			'project_id'   => $pid,
+			'keyword'      => $it['keyword'],
+			'title'        => $it['title'],
+			'brief'        => $it['desc'],
+			'kp'           => $it['kp'],
+			'volume'       => $it['kp'],
+			'links'        => $it['links'],
+			'source_note'  => $it['source'],
+			'origin'       => 'sheet',
+			'status'       => '' !== $it['link'] || $it['status'] ? 'published' : 'scheduled',
+			'published_url' => $it['link'],
+			'period'       => $period,
+			'slot'         => $it['row'],
 			'planned_date' => sap_parse_date( $it['planned'] ),
 		) );
 		if ( $id ) {
 			$seen['idea'][ (int) $id ] = true;
+			$known[ sap_kw_key( $it['keyword'] ) ] = true;
+			++$new;
 		}
-		++$new;
 	}
-	// Rows the team deleted from the sheet leave the calendar (only articles Sokan wrote
-	// there last time, and only when the sheet carries the ID column — never on a bad read).
-	$written = (array) ( $project['options']['calendar_written'][ $project['sheet_id'] ] ?? array() );
-	$has_id = (bool) array_filter( $items, function ( $x ) {
-		return 'idea' === $x['kind'] && $x['has_id'];
+	// Rows deleted from the sheet: only for the tab Sokan writes, only when the read is
+	// clearly complete, and never for an article someone is working on.
+	$snap_ideas = array_filter( array_keys( $snap ), function ( $k ) {
+		return 'i' === $k[0];
 	} );
-	if ( $written && $has_id ) {
-		foreach ( (array) ( $written['idea'] ?? array() ) as $iid ) {
-			$idea = $by_id[ (int) $iid ] ?? null;
-			if ( $idea && ! isset( $seen['idea'][ (int) $iid ] ) && in_array( $idea['status'], array( 'scheduled', 'approved' ), true ) ) {
+	if ( SAP_TAB_BLOG === $tab && $snap_ideas ) {
+		$seen_n = count( array_intersect( array_map( function ( $k ) {
+			return (int) substr( $k, 1 );
+		}, $snap_ideas ), array_keys( $seen['idea'] ) ) );
+		// A complete read: at most a few rows (2, or 30% of a big month) are missing.
+		if ( count( $snap_ideas ) - $seen_n <= max( 2, (int) ceil( 0.3 * count( $snap_ideas ) ) ) ) {
+			foreach ( $snap_ideas as $k ) {
+				$idea = $by_id[ (int) substr( $k, 1 ) ] ?? null;
+				if ( ! $idea || isset( $seen['idea'][ $idea['id'] ] ) || ! in_array( $idea['status'], array( 'scheduled', 'approved' ), true ) || ! isset( $blocks[ (string) ( $snap[ $k ]['period'] ?? '' ) ] ) ) {
+					continue;
+				}
+				$t = $idea['task_id'] ? sap_task( $idea['task_id'] ) : null;
+				if ( $t && 'dropped' !== $t['status'] ) {
+					continue;
+				}
 				sap_idea_save( array( 'status' => 'rejected' ), $idea['id'] );
 			}
 		}
@@ -628,6 +757,7 @@ function sap_calendar_write_sheet( $project ) {
 	}
 	$count   = 0;
 	$written = array( 'idea' => array(), 'update' => array() );
+	$snapw   = array();
 	$ntrack  = function_exists( 'sap_track_all' ) ? sap_track_all( $project['id'] ) : array();
 	$kinds   = sap_update_kinds();
 	$kc      = array( 'cat' => '#EDE7F6', 'product' => '#E0F2F1', 'post' => '#E3F2FD', 'other' => '#F3F3F3' );
@@ -657,6 +787,7 @@ function sap_calendar_write_sheet( $project ) {
 			$row[]    = isset( $tr['kw_pos'] ) && null !== $tr['kw_pos'] ? $tr['kw_pos'] : '';
 			$values[] = $row;
 			$written['idea'][] = (int) $it['id'];
+			$snapw[ 'i' . (int) $it['id'] ] = sap_blog_snap_row( 'idea', $it, $period );
 			++$count;
 		}
 		$r1 = count( $values );
@@ -695,6 +826,7 @@ function sap_calendar_write_sheet( $project ) {
 				$values[] = $row;
 				$ukind[]  = sap_update_kind( $u );
 				$written['update'][] = (int) $u['id'];
+				$snapw[ 'u' . (int) $u['id'] ] = sap_blog_snap_row( 'update', $u, $period );
 			}
 		}
 		$r2 = count( $values );
@@ -739,6 +871,8 @@ function sap_calendar_write_sheet( $project ) {
 	$wr           = (array) ( $project['options']['calendar_written'] ?? array() );
 	$wr[ $sheet ] = $written;
 	sap_project_set_option( $project['id'], 'calendar_written', $wr );
+	// What the sheet holds now, cell by cell: the next read takes back only what the team changes.
+	update_option( 'sap_blog_snap_' . (int) $project['id'] . '_' . md5( (string) $sheet ), $snapw, false );
 	$res = sap_gs_batch( $sheet, $fmt );
 	if ( is_wp_error( $res ) ) {
 		return $res;

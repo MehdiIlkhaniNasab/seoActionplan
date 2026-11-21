@@ -132,8 +132,8 @@ function sap_upd_universe( $project ) {
 	$out     = array();
 	foreach ( $inv as $k => $it ) {
 		$t = $type_of[ $it['ctype'] ] ?? '';
-		if ( ! $t || '' !== (string) $it['redirect'] || $it['noindex'] || sap_upd_is_junk( $it['url'] ) ) {
-			continue;
+		if ( ! $t || '' !== (string) $it['redirect'] || $it['noindex'] || sap_upd_is_junk( $it['url'] ) || ! sap_link_ok( $pid, $it['url'] ) ) {
+			continue; // Pruned (410 / 301 / noindex) or gone pages are not update candidates.
 		}
 		$m         = $map[ $k ] ?? null;
 		$out[ $k ] = array( 'url' => $it['url'], 'title' => $it['title'], 'type' => $t, 'ctype' => $it['ctype'], 'kw' => $m ? (string) $m['primary_kw'] : (string) ( $it['seo']['focus_keyword'] ?? '' ), 'secondary' => $m ? (array) $m['secondary'] : array(), 'focus' => $fpage[ $k ] ?? '', 'words' => (int) $it['words'] );
@@ -143,7 +143,7 @@ function sap_upd_universe( $project ) {
 		$mt = array( 'category' => 'cat', 'product' => 'product', 'article' => 'post' );
 		foreach ( $map as $k => $m ) {
 			$t = $mt[ $m['page_type'] ] ?? '';
-			if ( $t && ! sap_upd_is_junk( $m['url'] ) && ! in_array( $m['status'], array( 'prune_410', 'prune_301', 'noindex' ), true ) ) {
+			if ( $t && ! sap_upd_is_junk( $m['url'] ) && ! in_array( $m['status'], array( 'prune_410', 'prune_301', 'noindex' ), true ) && sap_link_ok( $pid, $m['url'] ) ) {
 				$out[ $k ] = array( 'url' => $m['url'], 'title' => $m['title'] ?: sap_short_url( $m['url'], 60 ), 'type' => $t, 'ctype' => $m['page_type'], 'kw' => (string) $m['primary_kw'], 'secondary' => (array) $m['secondary'], 'focus' => $fpage[ $k ] ?? '', 'words' => 0 );
 			}
 		}

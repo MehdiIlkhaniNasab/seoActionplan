@@ -69,13 +69,21 @@ $cell     = function ( $field, $value, $shown = null, $type = 'text', $attrs = '
 		$attrs // phpcs:ignore
 	);
 };
-$links_html = function ( $links ) use ( $pid ) {
+$dead_links = 0;
+$links_html = function ( $links ) use ( $pid, &$dead_links ) {
 	if ( ! $links ) {
 		return '';
 	}
 	$out = '<ul class="sap-sc-links">';
 	foreach ( array_slice( (array) $links, 0, 5 ) as $l ) {
-		$out .= '<li><bdi dir="ltr">' . esc_html( sap_short_url( (string) $l['url'], 34 ) ) . '</bdi>' . ( '' !== (string) ( $l['anchor'] ?? '' ) ? '<span>«' . esc_html( $l['anchor'] ) . '»</span>' : '' ) . '</li>';
+		// A link to a pruned / redirected page is flagged so the anchor gets fixed.
+		$tg   = sap_link_target( $pid, (string) $l['url'] );
+		$flag = '';
+		if ( 'ok' !== $tg['state'] ) {
+			++$dead_links;
+			$flag = '<em class="sap-sc-dead" title="' . esc_attr( $tg['why'] . ( 'moved' === $tg['state'] ? ' → ' . rawurldecode( $tg['url'] ) : '' ) ) . '">' . ( 'moved' === $tg['state'] ? 'ریدایرکت شده' : 'صفحه حذف شده' ) . '</em>';
+		}
+		$out .= '<li class="' . ( $flag ? 'is-dead' : '' ) . '"><bdi dir="ltr">' . esc_html( sap_short_url( (string) $l['url'], 34 ) ) . '</bdi>' . ( '' !== (string) ( $l['anchor'] ?? '' ) ? '<span>«' . esc_html( $l['anchor'] ) . '»</span>' : '' ) . $flag . '</li>';
 	}
 	return $out . ( count( $links ) > 5 ? '<li class="sap-muted">+' . esc_html( sap_num( count( $links ) - 5 ) ) . '</li>' : '' ) . '</ul>';
 };
@@ -282,6 +290,7 @@ $jd       = function ( $ymd ) {
 								<?php if ( '' !== trim( $u['reason'] ) ) : ?><div class="is-wide"><b>برنامه آپدیت</b><p><?php echo nl2br( esc_html( $u['reason'] ) ); ?></p></div><?php endif; ?>
 								<?php if ( ! empty( $b['summary'] ) || ! empty( $b['outline'] ) ) : ?>
 									<div class="is-wide"><b>بریف حرفه‌ای<?php echo ! empty( $b['words_target'] ) ? ' · حدود ' . esc_html( sap_num( $b['words_target'] ) ) . ' کلمه' : ''; ?></b>
+										<?php foreach ( (array) ( $b['warnings'] ?? array() ) as $w ) : ?><p class="sap-sc-warn">⚠️ <?php echo esc_html( $w ); ?></p><?php endforeach; ?>
 										<?php if ( ! empty( $b['summary'] ) ) : ?><p><?php echo esc_html( $b['summary'] ); ?></p><?php endif; ?>
 										<?php if ( ! empty( $b['meta'] ) ) : ?><p class="sap-small"><b>متا:</b> <?php echo esc_html( $b['meta'] ); ?></p><?php endif; ?>
 										<?php if ( ! empty( $b['outline'] ) ) : ?><ol class="sap-small"><?php foreach ( (array) $b['outline'] as $o ) : ?><li><b><?php echo esc_html( is_array( $o ) ? ( $o['heading'] ?? '' ) : $o ); ?></b><?php echo is_array( $o ) && ! empty( $o['notes'] ) ? ' — ' . esc_html( $o['notes'] ) : ''; ?></li><?php endforeach; ?></ol><?php endif; ?>
@@ -299,6 +308,9 @@ $jd       = function ( $ymd ) {
 			<?php endforeach; ?>
 		</table>
 	</div>
+	<?php endif; ?>
+	<?php if ( $dead_links ) : ?>
+		<p class="sap-alert is-warn sap-small sap-ledger-note"><?php echo esc_html( sprintf( '%s لینک داخلی در این ماه به صفحه‌ای می‌رود که هرس شده (410 / 301 / noindex) یا ریدایرکت می‌شود؛ با برچسب قرمز مشخص است. روی خانه لینک‌ها کلیک کنید و مقصد را با صفحه زنده عوض کنید (فهرست جستجو فقط صفحه‌های زنده را نشان می‌دهد).', sap_num( $dead_links ) ) ); ?></p>
 	<?php endif; ?>
 	<?php if ( $approved ) : ?>
 		<details class="sap-calx-wait">

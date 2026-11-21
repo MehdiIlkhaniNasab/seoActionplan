@@ -217,6 +217,14 @@ function sap_link_check( $project, $source, $target, $anchor ) {
 	if ( '' === $sk || '' === $tk || $sk === $tk ) {
 		return 'مبدأ و مقصد یکی است';
 	}
+	// Pruned or redirected pages neither give nor take links.
+	$tt = sap_link_target( $project['id'], $target );
+	if ( 'ok' !== $tt['state'] ) {
+		return 'صفحه مقصد دیگر زنده نیست (' . $tt['why'] . ')' . ( 'moved' === $tt['state'] ? '؛ به مقصد ریدایرکت لینک بدهید: ' . sap_short_url( $tt['url'], 50 ) : '' );
+	}
+	if ( ! sap_link_ok( $project['id'], $source ) ) {
+		return 'صفحه مبدأ دیگر زنده نیست (' . sap_link_target( $project['id'], $source )['why'] . ')';
+	}
 	$have = sap_page_outlinks( $project, $source );
 	if ( isset( $have[ $tk ] ) ) {
 		return 'صفحه مبدأ همین الان به مقصد لینک دارد (انکر «' . $have[ $tk ] . '»)';
@@ -240,7 +248,7 @@ function sap_link_check( $project, $source, $target, $anchor ) {
 		return 'انکر به موضوع صفحه مقصد ربطی ندارد';
 	}
 	foreach ( $map as $k => $m ) {
-		if ( $k !== $tk && '' !== $m['primary_kw'] && sap_kw_core( $m['primary_kw'] ) === $a ) {
+		if ( $k !== $tk && '' !== $m['primary_kw'] && sap_kw_core( $m['primary_kw'] ) === $a && sap_link_ok( $project['id'], $m['url'] ) ) {
 			return 'انکر کلمه اصلی صفحه دیگری است (' . ( $m['title'] ?: sap_short_url( $m['url'], 40 ) ) . ')';
 		}
 	}

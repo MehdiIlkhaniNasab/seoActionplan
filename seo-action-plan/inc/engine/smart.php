@@ -421,3 +421,79 @@ function sap_step_ai_triage( $project, $force = false ) {
 	sap_findings_sync( $pid, $run['findings'], $run['ran'] );
 	return array( 'msg' => sprintf( 'بازبینی هوشمند %s مشکل تکنیکال: %s مشکل واقعی، %s جزئی، %s غیرمشکل (کنار گذاشته شد، با دلیل).', sap_num( array_sum( $n ) ), sap_num( $n['real'] ), sap_num( $n['minor'] ), sap_num( $n['not_issue'] ) ) );
 }
+
+/* ---------------------------------------------------------------------------
+ * Link targets: only live pages
+ * ------------------------------------------------------------------------- */
+
+/**
+ * Can a page take internal links, appear in AI page lists or be suggested for an
+ * update? Pruned in the keyword map (410 / 301 / noindex), redirected or gone on
+ * the site (crawl, WordPress list, Rank Math / Redirection rules) → no.
+ *
+ * @return array {state: ok|moved|gone, url: live address ('' when gone), why}
+ */
+function sap_link_target( $project_id, $url ) {
+	static $cache = array();
+	$k = $project_id . '|' . sap_norm_url( $url );
+	if ( isset( $cache[ $k ] ) ) {
+		return $cache[ $k ];
+	}
+	$out = array( 'state' => 'ok', 'url' => $url, 'why' => '' );
+	$m   = sap_keymap( $project_id )[ sap_norm_url( $url ) ] ?? null;
+	if ( $m && in_array( $m['status'], array( 'prune_410', 'prune_301', 'noindex' ), true ) ) {
+		$to  = 'prune_301' === $m['status'] && '' !== (string) $m['redirect_to'] ? (string) $m['redirect_to'] : '';
+		$out = array( 'state' => $to ? 'moved' : 'gone', 'url' => $to, 'why' => 'در نقشه کلمات «' . ( sap_keymap_statuses()[ $m['status'] ] ?? $m['status'] ) . '»' );
+	} else {
+		$dead = sap_url_dead_reason( $project_id, $url );
+		if ( '' !== $dead ) {
+			$live = sap_url_live( $project_id, $url );
+			$out  = array( 'state' => '' !== $live && sap_norm_url( $live ) !== sap_norm_url( $url ) ? 'moved' : 'gone', 'url' => $live, 'why' => $dead );
+		}
+	}
+	if ( 'moved' === $out['state'] && '' !== $out['url'] ) {
+		// The 301 target itself must be a live page too.
+		$t2 = sap_keymap( $project_id )[ sap_norm_url( $out['url'] ) ] ?? null;
+		if ( ( $t2 && in_array( $t2['status'], array( 'prune_410', 'prune_301', 'noindex' ), true ) ) || '' !== sap_url_dead_reason( $project_id, $out['url'] ) ) {
+			$out = array( 'state' => 'gone', 'url' => '', 'why' => $out['why'] );
+		}
+	}
+	$cache[ $k ] = $out;
+	return $out;
+}
+
+/**
+ * Is the page a live link target?
+ */
+function sap_link_ok( $project_id, $url ) {
+	return 'ok' === sap_link_target( $project_id, $url )['state'];
+}
+
+/**
+ * Clean a list of internal links: a redirected page is replaced by its live
+ * target (anchor kept), a removed page is dropped, duplicates go.
+ *
+ * @return array[] {url, anchor}
+ */
+function sap_links_live( $project_id, $links ) {
+	$out  = array();
+	$seen = array();
+	foreach ( (array) $links as $l ) {
+		$url = (string) ( $l['url'] ?? '' );
+		if ( '' === $url ) {
+			continue;
+		}
+		$t = sap_link_target( $project_id, $url );
+		if ( 'gone' === $t['state'] ) {
+			continue;
+		}
+		$url = 'moved' === $t['state'] ? $t['url'] : $url;
+		$key = sap_norm_url( $url );
+		if ( isset( $seen[ $key ] ) ) {
+			continue;
+		}
+		$seen[ $key ] = true;
+		$out[]        = array( 'url' => $url, 'anchor' => (string) ( $l['anchor'] ?? '' ) );
+	}
+	return $out;
+}

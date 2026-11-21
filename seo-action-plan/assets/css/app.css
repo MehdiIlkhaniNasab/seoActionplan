@@ -3176,3 +3176,8 @@ body.drawer-open .sap-drawer { opacity: 1; visibility: visible; transform: trans
 }
 @media (prefers-reduced-motion: reduce) { .sap-drawer, body.drawer-open .sap-drawer { transition: none; } }
 .sap-drawer { z-index: 81; } .sap-drawer-shade { z-index: 79; }
+
+/* ---------- Links to pruned / redirected pages ---------- */
+.sap-sc-links li.is-dead bdi { color: var(--bad); text-decoration: line-through; }
+.sap-sc-dead { font-style: normal; font-size: 10.5px; font-weight: 700; color: #fff; background: var(--bad); border-radius: 6px; padding: 0 6px; justify-self: start; width: max-content; margin-top: 1px; }
+.sap-ledger-note { margin: 10px 16px 0; }
